@@ -1,0 +1,96 @@
+# AnchorPDS .gitignore
+# Practical gitignore for Deno + Val Town + SQLite project
+
+# === Environment & Secrets ===
+.env
+.env.*
+!.env.example
+*.key
+*.pem
+config/secrets.json
+
+# === Deno ===
+# Deno cache and lock files
+.deno/
+deno.lock
+
+# === Val Town ===
+# Val Town CLI cache and temp files
+.valtown/
+.vt/
+valtown-cache/
+
+# === Database ===
+# Local SQLite databases (Val Town uses hosted SQLite)
+*.db
+*.sqlite
+*.sqlite3
+data/
+db/
+
+# === Testing & Coverage ===
+coverage/
+test-results/
+.coverage
+*.lcov
+*.log
+
+# === Development ===
+# IDE and editor files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+
+# === Temporary Files ===
+tmp/
+temp/
+*.tmp
+*.temp
+
+# === Logs ===
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# === Node.js (if any tooling uses it) ===
+node_modules/
+npm-debug.log
+yarn-error.log
+package-lock.json
+yarn.lock
+
+# === Build artifacts ===
+dist/
+build/
+out/
+
+# === Backup files ===
+*.bak
+*.backup
+*.orig
+
+# === OS Generated ===
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# === Documentation builds ===
+docs/build/
+site/
+
+# === Val Town deployment artifacts ===
+.val/
+deployment-logs/
+
+# === LLM Conntext ===
+LLMDocs/
