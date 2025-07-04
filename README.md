@@ -29,7 +29,8 @@ database/
 └── database-schema.sql # SQLite schema and indexes
 
 docs/
-└── deployment-guide.md # Deployment instructions
+├── api-documentation.md # Complete API reference for client development
+└── deployment-guide.md  # Deployment instructions
 
 scripts/
 ├── deploy.sh          # One-click deployment script
@@ -123,6 +124,12 @@ GET https://anchor-feed-generator.val.run/stats
 ```
 
 AppView health metrics and processing statistics.
+
+## 📚 API Documentation
+
+For complete API documentation including examples, data models, and SDK code samples, see:
+
+**[📖 API Documentation](docs/api-documentation.md)**
 
 ## 📊 Database Schema
 
