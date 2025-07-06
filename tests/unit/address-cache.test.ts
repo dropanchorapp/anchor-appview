@@ -2,39 +2,32 @@ import {
   assertEquals,
   assertExists,
 } from "https://deno.land/std@0.208.0/assert/mod.ts";
-import { restore, stub } from "https://deno.land/std@0.208.0/testing/mock.ts";
 
 // Mock blob storage for testing
 const mockBlobStorage = new Map<string, any>();
 
 // Mock the blob import
 const mockBlob = {
-  async getJSON(key: string) {
-    return mockBlobStorage.get(key) || null;
+  getJSON(key: string) {
+    return Promise.resolve(mockBlobStorage.get(key) || null);
   },
-  async setJSON(key: string, value: any) {
+  setJSON(key: string, value: any) {
     mockBlobStorage.set(key, value);
+    return Promise.resolve();
   },
-  async delete(key: string) {
+  delete(key: string) {
     mockBlobStorage.delete(key);
+    return Promise.resolve();
   },
-  async list(prefix: string) {
-    return Array.from(mockBlobStorage.keys()).filter((key) =>
+  list(prefix: string) {
+    return Promise.resolve(Array.from(mockBlobStorage.keys()).filter((key) =>
       key.startsWith(prefix)
-    );
+    ));
   },
 };
 
-// Import and test the address cache functions
-import {
-  getCachedAddress,
-  getCacheStats,
-  setCachedAddress,
-  setCachedAddressFailure,
-} from "../../src/utils/address-cache.ts";
-
-// Mock the blob import in the module
-const originalImport = await import("../../src/utils/address-cache.ts");
+// Import for potential future use
+const _originalImport = await import("../../src/utils/address-cache.ts");
 
 Deno.test("Address Cache - setCachedAddress stores address data", async () => {
   const testUri = "at://did:plc:test/collection/record";

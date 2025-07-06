@@ -36,6 +36,7 @@ docs/
 scripts/
 ├── deploy.sh          # One-click deployment script
 ├── test.sh            # Run complete test suite
+├── debug.ts           # Debug data availability and API status
 └── monitor-api.sh     # Monitor deployed API status
 
 tests/

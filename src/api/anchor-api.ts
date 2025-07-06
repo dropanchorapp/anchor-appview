@@ -149,7 +149,7 @@ async function getGlobalFeed(
 
   const results = await sqlite.execute(query, params);
 
-  const checkins = Array.isArray(results) ? results.map(formatCheckin) : [];
+  const checkins = results.rows ? results.rows.map(formatCheckin) : [];
 
   return new Response(
     JSON.stringify({
@@ -200,8 +200,8 @@ async function getNearbyCheckins(
   ); // Get more to filter by distance
 
   // Calculate distances and filter
-  const nearbyCheckins = Array.isArray(results)
-    ? results
+  const nearbyCheckins = results.rows
+    ? results.rows
       .map((row) => {
         const distance = calculateDistance(
           lat,
@@ -255,7 +255,7 @@ async function getUserCheckins(
     [did, limit],
   );
 
-  const checkins = Array.isArray(results) ? results.map(formatCheckin) : [];
+  const checkins = results.rows ? results.rows.map(formatCheckin) : [];
 
   return new Response(
     JSON.stringify({
@@ -289,7 +289,7 @@ async function getFollowingFeed(
     [userDid],
   );
 
-  if (follows.length === 0) {
+  if (!follows.rows || follows.rows.length === 0) {
     return new Response(
       JSON.stringify({
         checkins: [],
@@ -299,8 +299,8 @@ async function getFollowingFeed(
     );
   }
 
-  const followingDids = Array.isArray(follows)
-    ? follows.map((row) => row.following_did)
+  const followingDids = follows.rows
+    ? follows.rows.map((row) => row.following_did)
     : [];
   const placeholders = followingDids.map(() => "?").join(",");
 
@@ -324,7 +324,7 @@ async function getFollowingFeed(
   params.push(limit);
 
   const results = await sqlite.execute(query, params);
-  const checkins = Array.isArray(results) ? results.map(formatCheckin) : [];
+  const checkins = results.rows ? results.rows.map(formatCheckin) : [];
 
   return new Response(
     JSON.stringify({
@@ -354,10 +354,10 @@ async function getStats(corsHeaders: CorsHeaders): Promise<Response> {
     ]);
 
   const stats = {
-    totalCheckins: totalCheckins[0]?.count || 0,
-    totalUsers: totalUsers[0]?.count || 0,
-    recentActivity: recentActivity[0]?.count || 0,
-    lastProcessingRun: processingStats[0] || null,
+    totalCheckins: totalCheckins.rows?.[0]?.count || 0,
+    totalUsers: totalUsers.rows?.[0]?.count || 0,
+    recentActivity: recentActivity.rows?.[0]?.count || 0,
+    lastProcessingRun: processingStats.rows?.[0] || null,
     timestamp: new Date().toISOString(),
   };
 

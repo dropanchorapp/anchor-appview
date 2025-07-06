@@ -1,6 +1,6 @@
 import {
   assertEquals,
-  assertExists,
+  assertExists as _assertExists,
 } from "https://deno.land/std@0.208.0/assert/mod.ts";
 
 // Mock SQLite implementation for testing
@@ -8,7 +8,7 @@ class MockSQLite {
   private tables = new Map<string, any[]>();
   private tableSchemas = new Map<string, string>();
 
-  async execute(query: string, params: any[] = []): Promise<any[]> {
+  execute(query: string, params: any[] = []): any[] {
     const normalizedQuery = query.trim().toLowerCase();
 
     // Handle CREATE TABLE

@@ -1,6 +1,6 @@
 import {
   assertEquals,
-  assertRejects,
+  assertRejects as _assertRejects,
 } from "https://deno.land/std@0.208.0/assert/mod.ts";
 import { restore, stub } from "https://deno.land/std@0.208.0/testing/mock.ts";
 
@@ -12,7 +12,7 @@ import {
 
 Deno.test("Handle Resolver - resolveHandle success", async () => {
   // Mock fetch to return a successful response
-  const fetchStub = stub(globalThis, "fetch", () => {
+  const _fetchStub = stub(globalThis, "fetch", () => {
     return Promise.resolve(
       new Response(
         JSON.stringify({
@@ -33,7 +33,7 @@ Deno.test("Handle Resolver - resolveHandle success", async () => {
 
 Deno.test("Handle Resolver - resolveHandle fallback to reverse lookup", async () => {
   let callCount = 0;
-  const fetchStub = stub(globalThis, "fetch", () => {
+  const _fetchStub = stub(globalThis, "fetch", () => {
     callCount++;
     if (callCount === 1) {
       // First call fails
@@ -61,7 +61,7 @@ Deno.test("Handle Resolver - resolveHandle fallback to reverse lookup", async ()
 });
 
 Deno.test("Handle Resolver - resolveHandle returns shortened DID on total failure", async () => {
-  const fetchStub = stub(globalThis, "fetch", () => {
+  const _fetchStub = stub(globalThis, "fetch", () => {
     return Promise.resolve(new Response("Error", { status: 500 }));
   });
 
@@ -74,7 +74,7 @@ Deno.test("Handle Resolver - resolveHandle returns shortened DID on total failur
 });
 
 Deno.test("Handle Resolver - batchResolveHandles processes multiple DIDs", async () => {
-  const fetchStub = stub(globalThis, "fetch", (url: string) => {
+  const _fetchStub = stub(globalThis, "fetch", (url: string) => {
     if (url.includes("did:plc:user1")) {
       return Promise.resolve(
         new Response(
@@ -112,7 +112,7 @@ Deno.test("Handle Resolver - batchResolveHandles processes multiple DIDs", async
 Deno.test("Handle Resolver - batchResolveHandles handles rate limiting", async () => {
   const startTime = Date.now();
 
-  const fetchStub = stub(globalThis, "fetch", () => {
+  const _fetchStub = stub(globalThis, "fetch", () => {
     return Promise.resolve(
       new Response(
         JSON.stringify({

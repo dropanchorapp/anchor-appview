@@ -2,13 +2,13 @@ import {
   assertEquals,
   assertExists,
 } from "https://deno.land/std@0.208.0/assert/mod.ts";
-import { restore, stub } from "https://deno.land/std@0.208.0/testing/mock.ts";
+import { restore as _restore, stub as _stub } from "https://deno.land/std@0.208.0/testing/mock.ts";
 
 // Mock SQLite for testing
-const mockDatabase = new Map<string, any[]>();
+const _mockDatabase = new Map<string, any[]>();
 
-const mockSqlite = {
-  async execute(query: string, params: any[] = []) {
+const _mockSqlite = {
+  execute(query: string, _params: any[] = []) {
     // Simple mock that returns test data based on query patterns
     if (query.includes("CREATE TABLE")) {
       return [];
@@ -50,7 +50,7 @@ const mockSqlite = {
 // Import the API handler (we'll need to mock the sqlite import)
 // For now, let's test the core functionality by creating a test version
 
-async function createTestAPIHandler() {
+function createTestAPIHandler() {
   // Mock CORS headers type
   interface CorsHeaders extends Record<string, string> {
     "Access-Control-Allow-Origin": string;
@@ -94,7 +94,7 @@ async function createTestAPIHandler() {
           { headers: corsHeaders },
         );
 
-      case "/nearby":
+      case "/nearby": {
         const lat = parseFloat(url.searchParams.get("lat") || "0");
         const lng = parseFloat(url.searchParams.get("lng") || "0");
         const radius = parseFloat(url.searchParams.get("radius") || "5");
@@ -120,6 +120,7 @@ async function createTestAPIHandler() {
           }),
           { headers: corsHeaders },
         );
+      }
 
       default:
         return new Response(JSON.stringify({ error: "Not Found" }), {
@@ -129,7 +130,7 @@ async function createTestAPIHandler() {
     }
   }
 
-  async function getMockCheckins() {
+  function getMockCheckins() {
     return [
       {
         id: "test123",

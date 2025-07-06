@@ -244,7 +244,10 @@ export async function getUnresolvedAddresses(
     [limit],
   );
 
-  return results.map((row) => ({
+  // Ensure results is an array before mapping
+  const resultArray = Array.isArray(results) ? results : [];
+  
+  return resultArray.map((row) => ({
     checkinId: row.id as string,
     addressRef: {
       uri: row.address_ref_uri as string,
