@@ -16,17 +16,16 @@
     ]
   },
   "lint": {
-    "files": {
-      "include": [
-        "deno:/https/esm.town/**/*"
-      ]
-    },
     "rules": {
       "exclude": [
         "no-explicit-any"
       ]
     }
   },
+  "include": [
+    "src/",
+    "tests/"
+  ],
   "node_modules_dir": false,
   "experimental": {
     "unstable-node-globals": true,

@@ -1,6 +1,7 @@
 # Anchor AppView API Documentation
 
-The Anchor AppView provides a RESTful API for accessing location-based social check-ins from the AT Protocol network.
+The Anchor AppView provides a RESTful API for accessing location-based social
+check-ins from the AT Protocol network.
 
 ## Base URL
 
@@ -17,6 +18,7 @@ No authentication required. All endpoints are public.
 All responses are JSON with proper CORS headers enabled.
 
 ### Success Response
+
 ```json
 {
   "checkins": [...],
@@ -25,6 +27,7 @@ All responses are JSON with proper CORS headers enabled.
 ```
 
 ### Error Response
+
 ```json
 {
   "error": "Description of the error"
@@ -45,15 +48,18 @@ Get recent check-ins from all users with pagination support.
 **Endpoint:** `GET /global`
 
 **Parameters:**
+
 - `limit` (optional): Number of check-ins to return (default: 50, max: 100)
 - `cursor` (optional): ISO timestamp for pagination
 
 **Example Request:**
+
 ```bash
 curl "https://anchor-feed-generator.val.run/global?limit=10&cursor=2025-07-04T10:00:00Z"
 ```
 
 **Example Response:**
+
 ```json
 {
   "checkins": [
@@ -91,19 +97,23 @@ Get check-ins within a specified radius of coordinates using spatial queries.
 **Endpoint:** `GET /nearby`
 
 **Required Parameters:**
+
 - `lat`: Latitude (decimal degrees)
 - `lng`: Longitude (decimal degrees)
 
 **Optional Parameters:**
+
 - `radius`: Search radius in kilometers (default: 5, max: 50)
 - `limit`: Number of results (default: 50, max: 100)
 
 **Example Request:**
+
 ```bash
 curl "https://anchor-feed-generator.val.run/nearby?lat=52.3676&lng=4.9041&radius=10&limit=20"
 ```
 
 **Example Response:**
+
 ```json
 {
   "checkins": [
@@ -140,6 +150,7 @@ curl "https://anchor-feed-generator.val.run/nearby?lat=52.3676&lng=4.9041&radius
 ```
 
 **Notes:**
+
 - Results are sorted by distance (closest first)
 - Distance is calculated using the Haversine formula
 - `distance` field is included in nearby results (in kilometers)
@@ -151,18 +162,22 @@ Get all check-ins from a specific user.
 **Endpoint:** `GET /user`
 
 **Required Parameters:**
+
 - `did`: User's decentralized identifier
 
 **Optional Parameters:**
+
 - `limit`: Number of results (default: 50, max: 100)
 - `cursor`: ISO timestamp for pagination
 
 **Example Request:**
+
 ```bash
 curl "https://anchor-feed-generator.val.run/user?did=did:plc:example123&limit=10"
 ```
 
 **Example Response:**
+
 ```json
 {
   "checkins": [
@@ -202,18 +217,22 @@ Get check-ins from users that the specified user follows on Bluesky.
 **Endpoint:** `GET /following`
 
 **Required Parameters:**
+
 - `user`: User's DID to get following feed for
 
 **Optional Parameters:**
+
 - `limit`: Number of results (default: 50, max: 100)
 - `cursor`: ISO timestamp for pagination
 
 **Example Request:**
+
 ```bash
 curl "https://anchor-feed-generator.val.run/following?user=did:plc:example123&limit=10"
 ```
 
 **Example Response:**
+
 ```json
 {
   "checkins": [
@@ -247,7 +266,8 @@ curl "https://anchor-feed-generator.val.run/following?user=did:plc:example123&li
 }
 ```
 
-**Note:** Social graph data is synced daily from Bluesky. If no follows are found, returns an empty array.
+**Note:** Social graph data is synced daily from Bluesky. If no follows are
+found, returns an empty array.
 
 ### 5. Statistics
 
@@ -258,11 +278,13 @@ Get AppView health metrics and processing statistics.
 **Parameters:** None
 
 **Example Request:**
+
 ```bash
 curl "https://anchor-feed-generator.val.run/stats"
 ```
 
 **Example Response:**
+
 ```json
 {
   "totalCheckins": 1247,
@@ -274,6 +296,7 @@ curl "https://anchor-feed-generator.val.run/stats"
 ```
 
 **Fields:**
+
 - `totalCheckins`: Total number of check-ins in the database
 - `totalUsers`: Number of unique users who have checked in
 - `recentActivity`: Check-ins in the last 24 hours
@@ -286,43 +309,44 @@ curl "https://anchor-feed-generator.val.run/stats"
 
 ```typescript
 interface Checkin {
-  id: string;                    // Unique record identifier
-  uri: string;                   // Full AT Protocol URI
+  id: string; // Unique record identifier
+  uri: string; // Full AT Protocol URI
   author: {
-    did: string;                 // User's decentralized identifier
-    handle: string;              // User's Bluesky handle
+    did: string; // User's decentralized identifier
+    handle: string; // User's Bluesky handle
   };
-  text: string;                  // Check-in message/review
-  createdAt: string;             // ISO timestamp
-  coordinates?: {               // Optional location coordinates
+  text: string; // Check-in message/review
+  createdAt: string; // ISO timestamp
+  coordinates?: { // Optional location coordinates
     latitude: number;
     longitude: number;
   };
-  address?: {                   // Optional resolved venue information
-    name?: string;              // Venue name
-    street?: string;            // Street address
-    locality?: string;          // City
-    region?: string;            // State/Province
-    country?: string;           // Country
-    postalCode?: string;        // Postal/ZIP code
+  address?: { // Optional resolved venue information
+    name?: string; // Venue name
+    street?: string; // Street address
+    locality?: string; // City
+    region?: string; // State/Province
+    country?: string; // Country
+    postalCode?: string; // Postal/ZIP code
   };
-  distance?: number;            // Distance in km (only in nearby results)
+  distance?: number; // Distance in km (only in nearby results)
 }
 ```
 
 ## Error Codes
 
-| Status Code | Description |
-|-------------|-------------|
-| 200 | Success |
-| 400 | Bad Request - Missing or invalid parameters |
-| 404 | Not Found - Invalid endpoint |
-| 429 | Too Many Requests - Rate limit exceeded |
-| 500 | Internal Server Error |
+| Status Code | Description                                 |
+| ----------- | ------------------------------------------- |
+| 200         | Success                                     |
+| 400         | Bad Request - Missing or invalid parameters |
+| 404         | Not Found - Invalid endpoint                |
+| 429         | Too Many Requests - Rate limit exceeded     |
+| 500         | Internal Server Error                       |
 
 ## Common Error Examples
 
 ### Missing Required Parameters
+
 ```json
 {
   "error": "lat and lng parameters required"
@@ -330,6 +354,7 @@ interface Checkin {
 ```
 
 ### Invalid Coordinates
+
 ```json
 {
   "error": "Invalid latitude or longitude"
@@ -337,6 +362,7 @@ interface Checkin {
 ```
 
 ### Rate Limit Exceeded
+
 ```json
 {
   "error": "Rate limit exceeded. Try again later."
@@ -349,14 +375,14 @@ interface Checkin {
 
 ```typescript
 class AnchorAPI {
-  private baseURL = 'https://anchor-feed-generator.val.run';
+  private baseURL = "https://anchor-feed-generator.val.run";
 
   async getGlobalFeed(limit = 50, cursor?: string) {
     const params = new URLSearchParams({
       limit: limit.toString(),
-      ...(cursor && { cursor })
+      ...(cursor && { cursor }),
     });
-    
+
     const response = await fetch(`${this.baseURL}/global?${params}`);
     return response.json();
   }
@@ -366,9 +392,9 @@ class AnchorAPI {
       lat: lat.toString(),
       lng: lng.toString(),
       radius: radius.toString(),
-      limit: limit.toString()
+      limit: limit.toString(),
     });
-    
+
     const response = await fetch(`${this.baseURL}/nearby?${params}`);
     return response.json();
   }
@@ -377,9 +403,9 @@ class AnchorAPI {
     const params = new URLSearchParams({
       did,
       limit: limit.toString(),
-      ...(cursor && { cursor })
+      ...(cursor && { cursor }),
     });
-    
+
     const response = await fetch(`${this.baseURL}/user?${params}`);
     return response.json();
   }
@@ -388,9 +414,9 @@ class AnchorAPI {
     const params = new URLSearchParams({
       user: userDid,
       limit: limit.toString(),
-      ...(cursor && { cursor })
+      ...(cursor && { cursor }),
     });
-    
+
     const response = await fetch(`${this.baseURL}/following?${params}`);
     return response.json();
   }
@@ -441,21 +467,25 @@ class AnchorAPI {
 ## Best Practices
 
 ### Performance
+
 - Use pagination with cursors for large datasets
 - Cache responses when appropriate
 - Use reasonable limits (avoid requesting more than needed)
 
 ### Spatial Queries
+
 - Keep radius reasonable (< 50km) for good performance
 - Consider user's location accuracy when setting radius
 - Sort by distance when displaying nearby results
 
 ### Social Features
+
 - Check if social graph data is available before using /following
 - Handle empty following lists gracefully
 - Consider falling back to /global when following feed is empty
 
 ### Error Handling
+
 - Always check for error responses
 - Implement retry logic for temporary failures
 - Handle rate limits appropriately
@@ -463,12 +493,15 @@ class AnchorAPI {
 ## Support
 
 For API support and feature requests, please visit:
-- GitHub: [Anchor AppView Issues](https://github.com/your-org/anchor-appview/issues)
+
+- GitHub:
+  [Anchor AppView Issues](https://github.com/your-org/anchor-appview/issues)
 - AT Protocol Documentation: [atproto.com](https://atproto.com)
 
 ## Changelog
 
 ### v1.0.0 (2025-07-04)
+
 - Initial API release
 - Global, nearby, user, and following feeds
 - Statistics endpoint

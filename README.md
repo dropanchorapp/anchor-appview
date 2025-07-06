@@ -1,6 +1,7 @@
 # Anchor AppView
 
-A complete location-based social feed generator built on the AT Protocol for decentralized social networking.
+A complete location-based social feed generator built on the AT Protocol for
+decentralized social networking.
 
 ## 🏗️ Architecture
 
@@ -79,7 +80,8 @@ vt create http anchorAPI --file src/api/anchor-api.ts
 vt create cron socialGraphSync --file src/social/social-graph-sync.ts --schedule "0 2 * * *"
 ```
 
-> **Note**: No manual database setup required! Tables are created automatically when functions first run.
+> **Note**: No manual database setup required! Tables are created automatically
+> when functions first run.
 
 ## 🔌 API Endpoints
 
@@ -127,7 +129,8 @@ AppView health metrics and processing statistics.
 
 ## 📚 API Documentation
 
-For complete API documentation including examples, data models, and SDK code samples, see:
+For complete API documentation including examples, data models, and SDK code
+samples, see:
 
 **[📖 API Documentation](docs/api-documentation.md)**
 
@@ -171,7 +174,8 @@ deno task test:watch
 ### Val Town Best Practices
 
 - Use TypeScript for all functions
-- Import SQLite: `import { sqlite } from "https://esm.town/v/stevekrouse/sqlite"`
+- Import SQLite:
+  `import { sqlite } from "https://esm.town/v/stevekrouse/sqlite"`
 - Import blob storage: `import { blob } from "https://esm.town/v/std/blob"`
 - Use `https://esm.sh` for external dependencies
 - Never hardcode secrets - use `Deno.env.get('keyname')`
@@ -181,7 +185,8 @@ deno task test:watch
 
 - **SQLite**: Primary data (checkins, social graph, processing logs)
 - **Blob Storage**: Caching layer for address resolution with automatic expiry
-- **Schema Changes**: Increment table versions (e.g., `checkins_v1` → `checkins_v2`)
+- **Schema Changes**: Increment table versions (e.g., `checkins_v1` →
+  `checkins_v2`)
 - Always create tables with `IF NOT EXISTS` on function startup
 
 ## 📈 Monitoring
@@ -209,4 +214,5 @@ The AppView is fully compatible with the AT Protocol ecosystem:
 
 ## 📄 License
 
-This implementation is part of the Anchor project for location-based social networking on the AT Protocol.
+This implementation is part of the Anchor project for location-based social
+networking on the AT Protocol.

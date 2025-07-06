@@ -1,4 +1,7 @@
-import { assertEquals, assertExists } from "https://deno.land/std@0.208.0/assert/mod.ts";
+import {
+  assertEquals,
+  assertExists,
+} from "https://deno.land/std@0.208.0/assert/mod.ts";
 
 // Mock SQLite implementation for testing
 class MockSQLite {
@@ -7,31 +10,31 @@ class MockSQLite {
 
   async execute(query: string, params: any[] = []): Promise<any[]> {
     const normalizedQuery = query.trim().toLowerCase();
-    
+
     // Handle CREATE TABLE
-    if (normalizedQuery.startsWith('create table')) {
-      const tableName = this.extractTableName(query, 'create table');
+    if (normalizedQuery.startsWith("create table")) {
+      const tableName = this.extractTableName(query, "create table");
       if (tableName) {
         this.tables.set(tableName, []);
         this.tableSchemas.set(tableName, query);
       }
       return [];
     }
-    
+
     // Handle CREATE INDEX
-    if (normalizedQuery.startsWith('create index')) {
+    if (normalizedQuery.startsWith("create index")) {
       return [];
     }
-    
+
     // Handle INSERT
-    if (normalizedQuery.startsWith('insert')) {
-      const tableName = this.extractTableName(query, 'insert');
+    if (normalizedQuery.startsWith("insert")) {
+      const tableName = this.extractTableName(query, "insert");
       if (tableName && this.tables.has(tableName)) {
         const table = this.tables.get(tableName)!;
         // Extract field names from the query
         const fieldsMatch = query.match(/\(([^)]+)\)\s*values/i);
         if (fieldsMatch) {
-          const fieldNames = fieldsMatch[1].split(',').map(f => f.trim());
+          const fieldNames = fieldsMatch[1].split(",").map((f) => f.trim());
           const record: any = {};
           fieldNames.forEach((field, index) => {
             if (params[index] !== undefined) {
@@ -42,8 +45,19 @@ class MockSQLite {
         } else {
           // Fallback for checkins_v1
           const record: any = {};
-          if (tableName === 'checkins_v1') {
-            const fields = ['id', 'uri', 'author_did', 'author_handle', 'text', 'created_at', 'latitude', 'longitude', 'address_ref_uri', 'address_ref_cid'];
+          if (tableName === "checkins_v1") {
+            const fields = [
+              "id",
+              "uri",
+              "author_did",
+              "author_handle",
+              "text",
+              "created_at",
+              "latitude",
+              "longitude",
+              "address_ref_uri",
+              "address_ref_cid",
+            ];
             fields.forEach((field, index) => {
               if (params[index] !== undefined) {
                 record[field] = params[index];
@@ -55,48 +69,51 @@ class MockSQLite {
       }
       return [];
     }
-    
+
     // Handle SELECT
-    if (normalizedQuery.startsWith('select')) {
-      const tableName = this.extractTableName(query, 'from');
+    if (normalizedQuery.startsWith("select")) {
+      const tableName = this.extractTableName(query, "from");
       if (tableName && this.tables.has(tableName)) {
         let results = [...this.tables.get(tableName)!];
-        
+
         // Simple WHERE clause handling
-        if (query.toLowerCase().includes('where') && params.length > 0) {
-          if (query.toLowerCase().includes('id = ?')) {
-            results = results.filter(row => row.id === params[0]);
+        if (query.toLowerCase().includes("where") && params.length > 0) {
+          if (query.toLowerCase().includes("id = ?")) {
+            results = results.filter((row) => row.id === params[0]);
           }
-          if (query.toLowerCase().includes('author_did = ?')) {
-            results = results.filter(row => row.author_did === params[0]);
+          if (query.toLowerCase().includes("author_did = ?")) {
+            results = results.filter((row) => row.author_did === params[0]);
           }
         }
-        
+
         // Handle COUNT queries
-        if (normalizedQuery.includes('count(*)')) {
+        if (normalizedQuery.includes("count(*)")) {
           return [{ count: results.length }];
         }
-        
+
         return results;
       }
     }
-    
+
     return [];
   }
 
   private extractTableName(query: string, keyword: string): string | null {
     let regex: RegExp;
-    
-    if (keyword === 'create table') {
+
+    if (keyword === "create table") {
       regex = /create\s+table\s+(?:if\s+not\s+exists\s+)?(\w+)/i;
-    } else if (keyword === 'insert') {
+    } else if (keyword === "insert") {
       regex = /insert\s+(?:or\s+ignore\s+)?into\s+(\w+)/i;
-    } else if (keyword === 'from') {
+    } else if (keyword === "from") {
       regex = /from\s+(\w+)/i;
     } else {
-      regex = new RegExp(`${keyword}\\s+(?:if\\s+not\\s+exists\\s+)?([\\w_]+)`, 'i');
+      regex = new RegExp(
+        `${keyword}\\s+(?:if\\s+not\\s+exists\\s+)?([\\w_]+)`,
+        "i",
+      );
     }
-    
+
     const match = query.match(regex);
     return match ? match[1].toLowerCase() : null;
   }
@@ -112,7 +129,7 @@ const mockSqlite = new MockSQLite();
 // Test database table creation
 Deno.test("Database - table creation", async () => {
   mockSqlite.reset();
-  
+
   // Test checkins table creation
   await mockSqlite.execute(`
     CREATE TABLE IF NOT EXISTS checkins_v1 (
@@ -146,7 +163,7 @@ Deno.test("Database - table creation", async () => {
 
 Deno.test("Database - checkin insertion and retrieval", async () => {
   mockSqlite.reset();
-  
+
   // Create table
   await mockSqlite.execute(`
     CREATE TABLE IF NOT EXISTS checkins_v1 (
@@ -164,22 +181,25 @@ Deno.test("Database - checkin insertion and retrieval", async () => {
   `);
 
   // Insert test data
-  await mockSqlite.execute(`
+  await mockSqlite.execute(
+    `
     INSERT INTO checkins_v1 
     (id, uri, author_did, author_handle, text, created_at, latitude, longitude, address_ref_uri, address_ref_cid)
     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-  `, [
-    "test123",
-    "at://did:plc:test/app.dropanchor.checkin/test123",
-    "did:plc:test",
-    "test.bsky.social",
-    "Great coffee!",
-    "2024-01-01T12:00:00Z",
-    40.7128,
-    -74.0060,
-    null,
-    null
-  ]);
+  `,
+    [
+      "test123",
+      "at://did:plc:test/app.dropanchor.checkin/test123",
+      "did:plc:test",
+      "test.bsky.social",
+      "Great coffee!",
+      "2024-01-01T12:00:00Z",
+      40.7128,
+      -74.0060,
+      null,
+      null,
+    ],
+  );
 
   // Retrieve all checkins
   const allCheckins = await mockSqlite.execute("SELECT * FROM checkins_v1");
@@ -188,21 +208,24 @@ Deno.test("Database - checkin insertion and retrieval", async () => {
   assertEquals(allCheckins[0].text, "Great coffee!");
 
   // Test duplicate prevention
-  const duplicateCheck = await mockSqlite.execute("SELECT id FROM checkins_v1 WHERE id = ?", ["test123"]);
+  const duplicateCheck = await mockSqlite.execute(
+    "SELECT id FROM checkins_v1 WHERE id = ?",
+    ["test123"],
+  );
   assertEquals(duplicateCheck.length, 1);
 });
 
 Deno.test("Database - schema validation", async () => {
   mockSqlite.reset();
-  
+
   // Test that we can create all required tables without errors
   const tables = [
-    'checkins_v1',
-    'address_cache_v1', 
-    'user_follows_v1',
-    'processing_log_v1'
+    "checkins_v1",
+    "address_cache_v1",
+    "user_follows_v1",
+    "processing_log_v1",
   ];
-  
+
   // Create checkins table
   await mockSqlite.execute(`
     CREATE TABLE IF NOT EXISTS checkins_v1 (
@@ -213,22 +236,32 @@ Deno.test("Database - schema validation", async () => {
       created_at TEXT NOT NULL
     )
   `);
-  
+
   // Create other tables
-  await mockSqlite.execute(`CREATE TABLE IF NOT EXISTS address_cache_v1 (uri TEXT PRIMARY KEY)`);
-  await mockSqlite.execute(`CREATE TABLE IF NOT EXISTS user_follows_v1 (follower_did TEXT, following_did TEXT)`);
-  await mockSqlite.execute(`CREATE TABLE IF NOT EXISTS processing_log_v1 (id INTEGER PRIMARY KEY)`);
-  
+  await mockSqlite.execute(
+    `CREATE TABLE IF NOT EXISTS address_cache_v1 (uri TEXT PRIMARY KEY)`,
+  );
+  await mockSqlite.execute(
+    `CREATE TABLE IF NOT EXISTS user_follows_v1 (follower_did TEXT, following_did TEXT)`,
+  );
+  await mockSqlite.execute(
+    `CREATE TABLE IF NOT EXISTS processing_log_v1 (id INTEGER PRIMARY KEY)`,
+  );
+
   // Verify all tables exist (mock should have them in memory)
   const mockInstance = mockSqlite as any;
   for (const table of tables) {
-    assertEquals(mockInstance.tables.has(table), true, `Table ${table} should exist`);
+    assertEquals(
+      mockInstance.tables.has(table),
+      true,
+      `Table ${table} should exist`,
+    );
   }
 });
 
 Deno.test("Database - count queries", async () => {
   mockSqlite.reset();
-  
+
   // Create and populate table
   await mockSqlite.execute(`
     CREATE TABLE IF NOT EXISTS checkins_v1 (
@@ -242,14 +275,25 @@ Deno.test("Database - count queries", async () => {
 
   // Insert test records
   for (let i = 1; i <= 5; i++) {
-    await mockSqlite.execute(`
+    await mockSqlite.execute(
+      `
       INSERT INTO checkins_v1 (id, uri, author_did, text, created_at)
       VALUES (?, ?, ?, ?, ?)
-    `, [`id${i}`, `uri${i}`, `did:plc:user${i}`, `text${i}`, "2024-01-01T12:00:00Z"]);
+    `,
+      [
+        `id${i}`,
+        `uri${i}`,
+        `did:plc:user${i}`,
+        `text${i}`,
+        "2024-01-01T12:00:00Z",
+      ],
+    );
   }
 
   // Test count query
-  const countResult = await mockSqlite.execute("SELECT COUNT(*) as count FROM checkins_v1");
+  const countResult = await mockSqlite.execute(
+    "SELECT COUNT(*) as count FROM checkins_v1",
+  );
   assertEquals(countResult.length, 1);
   assertEquals(countResult[0].count, 5);
 });
