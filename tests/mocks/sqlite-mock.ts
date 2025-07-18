@@ -15,12 +15,12 @@ export class MockSQLite {
         this.tables.set(tableName, []);
         this.schemas.set(tableName, query);
       }
-      return { rows: [] };
+      return Promise.resolve({ rows: [] });
     }
     
     // Handle CREATE INDEX
     if (normalizedQuery.startsWith('create index')) {
-      return { rows: [] };
+      return Promise.resolve({ rows: [] });
     }
     
     // Handle INSERT
@@ -38,7 +38,7 @@ export class MockSQLite {
         table.push(row);
         this.tables.set(tableName, table);
       }
-      return { rows: [] };
+      return Promise.resolve({ rows: [] });
     }
     
     // Handle SELECT
@@ -62,9 +62,9 @@ export class MockSQLite {
           table = this.applyLimit(table, query, params);
         }
         
-        return { rows: table };
+        return Promise.resolve({ rows: table });
       }
-      return { rows: [] };
+      return Promise.resolve({ rows: [] });
     }
     
     // Handle COUNT queries
@@ -72,9 +72,9 @@ export class MockSQLite {
       const tableName = this.extractTableNameFromSelect(query);
       if (tableName) {
         const table = this.tables.get(tableName) || [];
-        return { rows: [{ count: table.length }] };
+        return Promise.resolve({ rows: [{ count: table.length }] });
       }
-      return { rows: [{ count: 0 }] };
+      return Promise.resolve({ rows: [{ count: 0 }] });
     }
     
     // Handle DELETE
@@ -83,7 +83,7 @@ export class MockSQLite {
       if (tableName) {
         this.tables.set(tableName, []);
       }
-      return { rows: [] };
+      return Promise.resolve({ rows: [] });
     }
     
     // Handle UPDATE
@@ -99,10 +99,10 @@ export class MockSQLite {
         });
         this.tables.set(tableName, table);
       }
-      return { rows: [] };
+      return Promise.resolve({ rows: [] });
     }
     
-    return { rows: [] };
+    return Promise.resolve({ rows: [] });
   }
   
   private extractTableName(query: string): string | null {

@@ -17,6 +17,7 @@ class MockAddressResolver implements AddressResolver {
   resolveAndCacheAddress(rkey: string, addressRef: any): Promise<void> {
     this.resolutionLog.push({ rkey, addressRef });
     console.log(`Mock address resolution for ${rkey}: ${addressRef.uri}`);
+    return Promise.resolve();
   }
 
   getResolutionLog() {
