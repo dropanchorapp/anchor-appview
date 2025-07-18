@@ -1,6 +1,8 @@
 // @val-town jetstreamPoller
 // Cron job: Runs every 15 minutes to ingest app.dropanchor.checkin records from Jetstream
 import { sqlite } from "https://esm.town/v/stevekrouse/sqlite";
+import { ATProtocolProfileResolver } from "../utils/profile-resolver-v2.ts";
+import { SqliteStorageProvider } from "../utils/storage-provider.ts";
 
 export default async function () {
   const startTime = Date.now();
@@ -64,6 +66,10 @@ async function initializeTables() {
   const CHECKINS_TABLE = "checkins_v1";
   const ADDRESS_CACHE_TABLE = "address_cache_v1";
   const PROCESSING_LOG_TABLE = "processing_log_v1";
+
+  // Ensure profile cache table exists
+  const storage = new SqliteStorageProvider(sqlite);
+  await storage.ensureTablesExist();
 
   // Main checkins table
   await sqlite.execute(`
@@ -301,8 +307,11 @@ async function processCheckinEvent(event: any) {
   const lat = record.coordinates?.latitude ? parseFloat(record.coordinates.latitude) : null;
   const lng = record.coordinates?.longitude ? parseFloat(record.coordinates.longitude) : null;
 
-  // For now, use DID as handle (will be resolved later)
-  const authorHandle = did;
+  // Resolve profile to get handle and other data
+  const storage = new SqliteStorageProvider(sqlite);
+  const profileResolver = new ATProtocolProfileResolver(storage);
+  const profile = await profileResolver.resolveProfile(did);
+  const authorHandle = profile?.handle || did;
 
   // Insert checkin with StrongRef
   console.log(`Attempting to insert checkin ${commit.rkey} with data:`, {
@@ -438,7 +447,7 @@ async function pollATProtocolForNewCheckins(): Promise<{ eventsProcessed: number
             rkey,
             record.uri,
             did,
-            did, // Use DID as handle for now
+            did, // Will be updated with resolved handle later
             record.value.text || "",
             record.value.createdAt || new Date().toISOString(),
             lat,

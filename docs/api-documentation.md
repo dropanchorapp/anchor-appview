@@ -26,6 +26,37 @@ All responses are JSON with proper CORS headers enabled.
 }
 ```
 
+### Check-in Object
+
+Each check-in in the response includes full profile information:
+
+```json
+{
+  "id": "3lbmo5gsjgv2f",
+  "uri": "at://did:plc:wxex3wx5k4ctciupsv5m5stb/app.dropanchor.checkin/3lbmo5gsjgv2f",
+  "author": {
+    "did": "did:plc:wxex3wx5k4ctciupsv5m5stb",
+    "handle": "tijs.social",
+    "displayName": "Tijs",
+    "avatar": "https://cdn.bsky.app/img/avatar/..."
+  },
+  "text": "Great coffee here!",
+  "createdAt": "2025-07-04T10:00:00Z",
+  "coordinates": {
+    "latitude": 37.7749,
+    "longitude": -122.4194
+  },
+  "address": {
+    "name": "Blue Bottle Coffee",
+    "street": "1 Ferry Building",
+    "locality": "San Francisco",
+    "region": "CA",
+    "country": "US",
+    "postalCode": "94111"
+  }
+}
+```
+
 ### Error Response
 
 ```json

@@ -24,10 +24,13 @@ src/
 └── utils/             # Shared utilities
     ├── handle-resolver.ts
     ├── address-resolver.ts
-    └── address-cache.ts    # Val Town blob storage cache
+    ├── address-cache.ts    # Val Town blob storage cache
+    ├── profile-resolver.ts # Profile caching and resolution
+    └── profile-refresh-job.ts # Background profile refresh
 
 database/
-└── database-schema.sql # SQLite schema and indexes
+├── database-schema.sql # SQLite schema and indexes
+└── add-profile-cache.sql # Profile cache migration
 
 docs/
 ├── api-documentation.md # Complete API reference for client development
@@ -42,11 +45,13 @@ scripts/
 tests/
 ├── unit/              # Unit tests for individual functions
 │   ├── handle-resolver.test.ts
+│   ├── profile-resolver.test.ts  # Profile caching and resolution
 │   ├── address-cache.test.ts
 │   ├── database.test.ts
 │   └── spatial.test.ts
 ├── integration/       # Integration tests for API endpoints
-│   └── api.test.ts
+│   ├── api.test.ts
+│   └── api-profiles.test.ts      # API endpoints with profile data
 └── fixtures/          # Test data and fixtures
     └── test-data.ts
 ```
@@ -137,10 +142,11 @@ samples, see:
 
 ## 📊 Database Schema
 
-The system uses 4 main SQLite tables:
+The system uses 5 main SQLite tables:
 
 - `checkins_v1` - Main check-ins with coordinates and cached address data
 - `address_cache_v1` - Resolved venue/address information from strongrefs
+- `profile_cache_v1` - Cached user profile data (display names, avatars)
 - `user_follows_v1` - Social graph data for following-based feeds
 - `processing_log_v1` - Monitoring and operational logging
 
@@ -148,6 +154,7 @@ The system uses 4 main SQLite tables:
 
 - **Real-time Ingestion**: WebSocket polling every 5 minutes from Jetstream
 - **Address Resolution**: Automatic strongref resolution with caching
+- **Profile Resolution**: Automatic profile data fetching and caching
 - **Spatial Queries**: Nearby check-ins using Haversine distance calculations
 - **Social Integration**: Following feeds leveraging Bluesky's social graph
 - **Performance**: SQLite with proper indexing for fast queries
@@ -157,16 +164,30 @@ The system uses 4 main SQLite tables:
 
 ### Testing
 
+The project includes comprehensive tests for all components:
+
+**Unit Tests**:
+- `profile-resolver.test.ts` - Profile caching, resolution, and refresh logic
+- `handle-resolver.test.ts` - Handle resolution from DIDs
+- `address-cache.test.ts` - Address caching and resolution
+- `database.test.ts` - Database operations
+- `spatial.test.ts` - Spatial calculations
+- `jetstream-ingestion.test.ts` - Event ingestion
+
+**Integration Tests**:
+- `api-profiles.test.ts` - API endpoints with profile data included
+- `api.test.ts` - Core API functionality
+
 ```bash
 # Run all tests
 ./scripts/test.sh
 
 # Run specific test suites
-deno task test:unit        # Unit tests only
-deno task test:integration # Integration tests only
+deno test --allow-all tests/unit/        # Unit tests only
+deno test --allow-all tests/integration/ # Integration tests only
 
 # Run tests in watch mode
-deno task test:watch
+./scripts/test.sh --watch
 
 # Run with coverage
 ./scripts/test.sh --coverage

@@ -1,6 +1,8 @@
 // @val-town anchorAPI
 // Main HTTP API handler for Anchor AppView
 import { sqlite } from "https://esm.town/v/stevekrouse/sqlite";
+import { ATProtocolProfileResolver, ProfileResolver } from "../utils/profile-resolver-v2.ts";
+import { SqliteStorageProvider, ProfileData } from "../utils/storage-provider.ts";
 
 // Types for better TypeScript support
 interface CorsHeaders {
@@ -8,6 +10,7 @@ interface CorsHeaders {
   "Access-Control-Allow-Methods": string;
   "Access-Control-Allow-Headers": string;
   "Content-Type": string;
+  [key: string]: string;
 }
 
 interface CheckinRecord {
@@ -16,6 +19,8 @@ interface CheckinRecord {
   author: {
     did: string;
     handle: string;
+    displayName?: string;
+    avatar?: string;
   };
   text: string;
   createdAt: string;
@@ -73,6 +78,9 @@ export default async function (req: Request): Promise<Response> {
 
 async function initializeTables() {
   // Ensure all tables exist
+  const storage = new SqliteStorageProvider(sqlite);
+  await storage.ensureTablesExist();
+  
   await sqlite.execute(`
     CREATE TABLE IF NOT EXISTS checkins_v1 (
       id TEXT PRIMARY KEY,
@@ -148,8 +156,15 @@ async function getGlobalFeed(
   params.push(limit);
 
   const results = await sqlite.execute(query, params);
+  const rows = results.rows || [];
 
-  const checkins = results.rows ? results.rows.map(formatCheckin) : [];
+  // Resolve profiles for all authors
+  const dids = [...new Set(rows.map(row => row.author_did as string))];
+  const storage = new SqliteStorageProvider(sqlite);
+  const profileResolver = new ATProtocolProfileResolver(storage);
+  const profiles = await profileResolver.batchResolveProfiles(dids);
+
+  const checkins = rows.map(row => formatCheckin(row, profiles));
 
   return new Response(
     JSON.stringify({
@@ -199,23 +214,30 @@ async function getNearbyCheckins(
     [limit * 3],
   ); // Get more to filter by distance
 
+  const rows = results.rows || [];
+
   // Calculate distances and filter
-  const nearbyCheckins = results.rows
-    ? results.rows
-      .map((row) => {
-        const distance = calculateDistance(
-          lat,
-          lng,
-          row.latitude as number,
-          row.longitude as number,
-        );
-        return { ...row, distance };
-      })
-      .filter((row) => row.distance <= radius)
-      .sort((a, b) => a.distance - b.distance)
-      .slice(0, limit)
-      .map(formatCheckin)
-    : [];
+  const nearbyRows = rows
+    .map((row) => {
+      const distance = calculateDistance(
+        lat,
+        lng,
+        row.latitude as number,
+        row.longitude as number,
+      );
+      return { ...row, distance };
+    })
+    .filter((row) => row.distance <= radius)
+    .sort((a, b) => a.distance - b.distance)
+    .slice(0, limit);
+
+  // Resolve profiles for filtered results
+  const dids = [...new Set(nearbyRows.map((row: any) => row.author_did as string))];
+  const storage = new SqliteStorageProvider(sqlite);
+  const profileResolver = new ATProtocolProfileResolver(storage);
+  const profiles = await profileResolver.batchResolveProfiles(dids);
+
+  const nearbyCheckins = nearbyRows.map(row => formatCheckin(row, profiles));
 
   return new Response(
     JSON.stringify({
@@ -255,7 +277,15 @@ async function getUserCheckins(
     [did, limit],
   );
 
-  const checkins = results.rows ? results.rows.map(formatCheckin) : [];
+  const rows = results.rows || [];
+
+  // Resolve profiles
+  const dids = [...new Set(rows.map(row => row.author_did as string))];
+  const storage = new SqliteStorageProvider(sqlite);
+  const profileResolver = new ATProtocolProfileResolver(storage);
+  const profiles = await profileResolver.batchResolveProfiles(dids);
+
+  const checkins = rows.map(row => formatCheckin(row, profiles));
 
   return new Response(
     JSON.stringify({
@@ -324,7 +354,15 @@ async function getFollowingFeed(
   params.push(limit);
 
   const results = await sqlite.execute(query, params);
-  const checkins = results.rows ? results.rows.map(formatCheckin) : [];
+  const rows = results.rows || [];
+
+  // Resolve profiles
+  const dids = [...new Set(rows.map(row => row.author_did as string))];
+  const storage = new SqliteStorageProvider(sqlite);
+  const profileResolver = new ATProtocolProfileResolver(storage);
+  const profiles = await profileResolver.batchResolveProfiles(dids);
+
+  const checkins = rows.map(row => formatCheckin(row, profiles));
 
   return new Response(
     JSON.stringify({
@@ -364,13 +402,17 @@ async function getStats(corsHeaders: CorsHeaders): Promise<Response> {
   return new Response(JSON.stringify(stats), { headers: corsHeaders });
 }
 
-function formatCheckin(row: any): CheckinRecord {
+function formatCheckin(row: any, profiles: Map<string, ProfileData>): CheckinRecord {
+  const profile = profiles.get(row.author_did as string);
+  
   const checkin: any = {
     id: row.id,
     uri: row.uri,
     author: {
       did: row.author_did,
-      handle: row.author_handle || row.author_did,
+      handle: profile?.handle || row.author_handle || row.author_did,
+      displayName: profile?.displayName,
+      avatar: profile?.avatar,
     },
     text: row.text,
     createdAt: row.created_at,

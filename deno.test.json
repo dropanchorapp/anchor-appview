@@ -1,0 +1,16 @@
+{
+  "test": {
+    "include": [
+      "tests/**/*.test.ts"
+    ],
+    "exclude": [
+      "node_modules",
+      "dist"
+    ]
+  },
+  "permissions": {
+    "net": true,
+    "read": true,
+    "write": true
+  }
+}
