@@ -109,26 +109,28 @@ export class SqliteStorageProvider implements StorageProvider {
 export class InMemoryStorageProvider implements StorageProvider {
   private profiles: Map<string, ProfileData> = new Map();
 
-  async getProfile(did: string): Promise<ProfileData | null> {
-    return this.profiles.get(did) || null;
+  getProfile(did: string): Promise<ProfileData | null> {
+    return Promise.resolve(this.profiles.get(did) || null);
   }
 
-  async setProfile(profile: ProfileData): Promise<void> {
+  setProfile(profile: ProfileData): Promise<void> {
     this.profiles.set(profile.did, profile);
+    return Promise.resolve();
   }
 
-  async getStaleProfiles(limit: number, staleThresholdHours: number): Promise<ProfileData[]> {
+  getStaleProfiles(limit: number, staleThresholdHours: number): Promise<ProfileData[]> {
     const staleThreshold = new Date();
     staleThreshold.setHours(staleThreshold.getHours() - staleThresholdHours);
 
-    return Array.from(this.profiles.values())
+    return Promise.resolve(Array.from(this.profiles.values())
       .filter(profile => new Date(profile.fetchedAt) < staleThreshold)
       .sort((a, b) => a.fetchedAt.localeCompare(b.fetchedAt))
-      .slice(0, limit);
+      .slice(0, limit));
   }
 
-  async ensureTablesExist(): Promise<void> {
+  ensureTablesExist(): Promise<void> {
     // No-op for in-memory storage
+    return Promise.resolve();
   }
 
   clear(): void {

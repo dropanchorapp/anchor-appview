@@ -241,33 +241,35 @@ export class SqliteAddressStorage implements AddressStorageProvider {
 export class InMemoryCheckinStorage implements CheckinStorageProvider {
   private checkins: Map<string, CheckinData> = new Map();
 
-  async getCheckin(id: string): Promise<CheckinData | null> {
-    return this.checkins.get(id) || null;
+  getCheckin(id: string): Promise<CheckinData | null> {
+    return Promise.resolve(this.checkins.get(id) || null);
   }
 
-  async setCheckin(checkin: CheckinData): Promise<void> {
+  setCheckin(checkin: CheckinData): Promise<void> {
     this.checkins.set(checkin.id, checkin);
+    return Promise.resolve();
   }
 
-  async checkinExists(id: string): Promise<boolean> {
-    return this.checkins.has(id);
+  checkinExists(id: string): Promise<boolean> {
+    return Promise.resolve(this.checkins.has(id));
   }
 
-  async getCheckinsByAuthor(authorDid: string, limit: number = 50): Promise<CheckinData[]> {
-    return Array.from(this.checkins.values())
+  getCheckinsByAuthor(authorDid: string, limit: number = 50): Promise<CheckinData[]> {
+    return Promise.resolve(Array.from(this.checkins.values())
       .filter(checkin => checkin.authorDid === authorDid)
       .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
-      .slice(0, limit);
+      .slice(0, limit));
   }
 
-  async getAllCheckins(limit: number = 50): Promise<CheckinData[]> {
-    return Array.from(this.checkins.values())
+  getAllCheckins(limit: number = 50): Promise<CheckinData[]> {
+    return Promise.resolve(Array.from(this.checkins.values())
       .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
-      .slice(0, limit);
+      .slice(0, limit));
   }
 
-  async ensureTablesExist(): Promise<void> {
+  ensureTablesExist(): Promise<void> {
     // No-op for in-memory storage
+    return Promise.resolve();
   }
 
   clear(): void {
@@ -278,23 +280,25 @@ export class InMemoryCheckinStorage implements CheckinStorageProvider {
 export class InMemoryAddressStorage implements AddressStorageProvider {
   private addresses: Map<string, AddressData> = new Map();
 
-  async getAddress(uri: string): Promise<AddressData | null> {
-    return this.addresses.get(uri) || null;
+  getAddress(uri: string): Promise<AddressData | null> {
+    return Promise.resolve(this.addresses.get(uri) || null);
   }
 
-  async setAddress(address: AddressData): Promise<void> {
+  setAddress(address: AddressData): Promise<void> {
     this.addresses.set(address.uri, address);
+    return Promise.resolve();
   }
 
-  async getFailedAddresses(limit: number = 50): Promise<AddressData[]> {
-    return Array.from(this.addresses.values())
+  getFailedAddresses(limit: number = 50): Promise<AddressData[]> {
+    return Promise.resolve(Array.from(this.addresses.values())
       .filter(address => address.failedAt)
       .sort((a, b) => (b.failedAt || '').localeCompare(a.failedAt || ''))
-      .slice(0, limit);
+      .slice(0, limit));
   }
 
-  async ensureTablesExist(): Promise<void> {
+  ensureTablesExist(): Promise<void> {
     // No-op for in-memory storage
+    return Promise.resolve();
   }
 
   clear(): void {
@@ -305,23 +309,25 @@ export class InMemoryAddressStorage implements AddressStorageProvider {
 export class InMemoryBlobStorage implements BlobStorageProvider {
   private blobs: Map<string, any> = new Map();
 
-  async get(key: string): Promise<any> {
-    return this.blobs.get(key) || null;
+  get(key: string): Promise<any> {
+    return Promise.resolve(this.blobs.get(key) || null);
   }
 
-  async set(key: string, value: any): Promise<void> {
+  set(key: string, value: any): Promise<void> {
     this.blobs.set(key, value);
+    return Promise.resolve();
   }
 
-  async delete(key: string): Promise<void> {
+  delete(key: string): Promise<void> {
     this.blobs.delete(key);
+    return Promise.resolve();
   }
 
-  async list(prefix?: string): Promise<string[]> {
+  list(prefix?: string): Promise<string[]> {
     if (prefix) {
-      return Array.from(this.blobs.keys()).filter(key => key.startsWith(prefix));
+      return Promise.resolve(Array.from(this.blobs.keys()).filter(key => key.startsWith(prefix)));
     }
-    return Array.from(this.blobs.keys());
+    return Promise.resolve(Array.from(this.blobs.keys()));
   }
 
   clear(): void {

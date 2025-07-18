@@ -14,7 +14,7 @@ interface AddressResolver {
 class MockAddressResolver implements AddressResolver {
   private resolutionLog: Array<{rkey: string, addressRef: any}> = [];
 
-  async resolveAndCacheAddress(rkey: string, addressRef: any): Promise<void> {
+  resolveAndCacheAddress(rkey: string, addressRef: any): Promise<void> {
     this.resolutionLog.push({ rkey, addressRef });
     console.log(`Mock address resolution for ${rkey}: ${addressRef.uri}`);
   }

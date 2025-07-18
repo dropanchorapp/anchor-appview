@@ -157,12 +157,12 @@ export class BlueskyProfileFetcher implements ProfileFetcher {
 export class MockProfileFetcher implements ProfileFetcher {
   constructor(private mockProfiles: Map<string, Partial<ProfileData>> = new Map()) {}
 
-  async fetchProfile(did: string): Promise<ProfileData | null> {
+  fetchProfile(did: string): Promise<ProfileData | null> {
     const mock = this.mockProfiles.get(did);
-    if (!mock) return null;
+    if (!mock) return Promise.resolve(null);
 
     const now = new Date().toISOString();
-    return {
+    return Promise.resolve({
       did,
       handle: mock.handle || `${did.slice(-6)}.bsky.social`,
       displayName: mock.displayName,
@@ -170,7 +170,7 @@ export class MockProfileFetcher implements ProfileFetcher {
       description: mock.description,
       fetchedAt: now,
       updatedAt: now,
-    };
+    });
   }
 
   setMockProfile(did: string, profile: Partial<ProfileData>): void {

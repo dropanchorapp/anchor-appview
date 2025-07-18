@@ -1,7 +1,7 @@
 // @val-town anchorAPI
 // Main HTTP API handler for Anchor AppView
 import { sqlite } from "https://esm.town/v/stevekrouse/sqlite";
-import { ATProtocolProfileResolver, ProfileResolver } from "../utils/profile-resolver-v2.ts";
+import { ATProtocolProfileResolver } from "../utils/profile-resolver-v2.ts";
 import { SqliteStorageProvider, ProfileData } from "../utils/storage-provider.ts";
 
 // Types for better TypeScript support

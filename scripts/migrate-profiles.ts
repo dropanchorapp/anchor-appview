@@ -49,7 +49,7 @@ async function migrateProfiles() {
   // Update author_handle in check-ins from resolved profiles
   console.log("Updating check-in handles from profile cache...");
   
-  const updateResult = await sqlite.execute(`
+  const _updateResult = await sqlite.execute(`
     UPDATE checkins_v1 
     SET author_handle = (
       SELECT handle 

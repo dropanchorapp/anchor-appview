@@ -144,7 +144,7 @@ function setupProfileFetchMock() {
 
 Deno.test("API - Global feed includes profile data", async () => {
   await createTestCheckins();
-  const fetchStub = setupProfileFetchMock();
+  const _fetchStub = setupProfileFetchMock();
   
   try {
     const request = new Request("https://test.com/global");
@@ -177,7 +177,7 @@ Deno.test("API - Global feed includes profile data", async () => {
 
 Deno.test("API - Nearby feed includes profile data", async () => {
   await createTestCheckins();
-  const fetchStub = setupProfileFetchMock();
+  const _fetchStub = setupProfileFetchMock();
   
   try {
     const request = new Request("https://test.com/nearby?lat=37.7750&lng=-122.4190&radius=1");
@@ -205,7 +205,7 @@ Deno.test("API - Nearby feed includes profile data", async () => {
 
 Deno.test("API - User feed includes profile data", async () => {
   await createTestCheckins();
-  const fetchStub = setupProfileFetchMock();
+  const _fetchStub = setupProfileFetchMock();
   
   try {
     const request = new Request("https://test.com/user?did=did:plc:user1");
@@ -268,7 +268,7 @@ Deno.test("API - Resolves missing profiles on demand", async () => {
     ]
   );
   
-  const fetchStub = setupProfileFetchMock();
+  const _fetchStub = setupProfileFetchMock();
   let fetchCalled = false;
   const originalFetch = fetchStub.original;
   fetchStub.returns = (url: string) => {
@@ -315,7 +315,7 @@ Deno.test("API - Following feed includes profile data", async () => {
     ["did:plc:follower", "did:plc:user1"]
   );
   
-  const fetchStub = setupProfileFetchMock();
+  const _fetchStub = setupProfileFetchMock();
   
   try {
     const request = new Request("https://test.com/following?user=did:plc:follower");
@@ -389,7 +389,7 @@ Deno.test("API - Handles profiles without display name or avatar", async () => {
     ]
   );
   
-  const fetchStub = setupProfileFetchMock();
+  const _fetchStub = setupProfileFetchMock();
   
   try {
     const request = new Request("https://test.com/global");

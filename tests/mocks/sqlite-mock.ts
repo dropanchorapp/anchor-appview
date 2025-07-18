@@ -5,7 +5,7 @@ export class MockSQLite {
   private tables: Map<string, any[]> = new Map();
   private schemas: Map<string, string> = new Map();
 
-  async execute(query: string, params?: any[]): Promise<{ rows?: any[] }> {
+  execute(query: string, params?: any[]): Promise<{ rows?: any[] }> {
     const normalizedQuery = query.trim().toLowerCase();
     
     // Handle CREATE TABLE
