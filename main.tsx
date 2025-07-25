@@ -2,28 +2,28 @@
 // Main frontend dashboard for Anchor AppView feed generator
 import { sqlite } from "https://esm.town/v/stevekrouse/sqlite";
 
-export default async function(req: Request): Promise<Response> {
+export default async function (req: Request): Promise<Response> {
   const url = new URL(req.url);
-  
+
   // Handle different dashboard pages
   if (url.pathname === "/api") {
     // Redirect to API documentation (Val Town compatible redirect)
-    return new Response(null, { 
-      status: 302, 
-      headers: { Location: "https://anchor-feed-generator.val.run" }
+    return new Response(null, {
+      status: 302,
+      headers: { Location: "https://anchor-feed-generator.val.run" },
     });
   }
-  
+
   // Main dashboard
   await initializeTables();
   const stats = await getDashboardStats();
   const html = generateDashboardHTML(stats);
-  
+
   return new Response(html, {
     headers: {
       "Content-Type": "text/html",
-      "Cache-Control": "no-cache, max-age=0"
-    }
+      "Cache-Control": "no-cache, max-age=0",
+    },
   });
 }
 
@@ -92,23 +92,29 @@ async function getDashboardStats() {
     recentCheckins,
     recentActivity,
     lastProcessingRun,
-    checkinsWithAddresses
+    checkinsWithAddresses,
   ] = await Promise.all([
     // Total check-ins
     sqlite.execute(`SELECT COUNT(*) as count FROM checkins_v1`),
-    
+
     // Unique users
-    sqlite.execute(`SELECT COUNT(DISTINCT author_did) as count FROM checkins_v1`),
-    
+    sqlite.execute(
+      `SELECT COUNT(DISTINCT author_did) as count FROM checkins_v1`,
+    ),
+
     // Successfully resolved addresses
-    sqlite.execute(`SELECT COUNT(*) as count FROM address_cache_v1 WHERE resolved_at IS NOT NULL`),
-    
+    sqlite.execute(
+      `SELECT COUNT(*) as count FROM address_cache_v1 WHERE resolved_at IS NOT NULL`,
+    ),
+
     // Failed address resolutions
-    sqlite.execute(`SELECT COUNT(*) as count FROM address_cache_v1 WHERE failed_at IS NOT NULL`),
-    
+    sqlite.execute(
+      `SELECT COUNT(*) as count FROM address_cache_v1 WHERE failed_at IS NOT NULL`,
+    ),
+
     // Total addresses in cache
     sqlite.execute(`SELECT COUNT(*) as count FROM address_cache_v1`),
-    
+
     // Recent check-ins (last 5)
     sqlite.execute(`
       SELECT text, author_handle, created_at, cached_address_name 
@@ -116,27 +122,27 @@ async function getDashboardStats() {
       ORDER BY created_at DESC 
       LIMIT 5
     `),
-    
+
     // Recent activity (24 hours)
     sqlite.execute(`
       SELECT COUNT(*) as count 
       FROM checkins_v1 
       WHERE created_at > datetime('now', '-24 hours')
     `),
-    
+
     // Last processing run
     sqlite.execute(`
       SELECT * FROM processing_log_v1 
       ORDER BY run_at DESC 
       LIMIT 1
     `),
-    
+
     // Check-ins with resolved addresses
     sqlite.execute(`
       SELECT COUNT(*) as count 
       FROM checkins_v1 
       WHERE address_resolved_at IS NOT NULL
-    `)
+    `),
   ]);
 
   return {
@@ -147,14 +153,17 @@ async function getDashboardStats() {
     addressesTotal: addressesTotal.rows?.[0]?.count || 0,
     recentCheckins: recentCheckins.rows ? recentCheckins.rows : [],
     recentActivity: recentActivity.rows?.[0]?.count || 0,
-    lastProcessingRun: lastProcessingRun.rows && lastProcessingRun.rows.length > 0 ? lastProcessingRun.rows[0] : null,
+    lastProcessingRun:
+      lastProcessingRun.rows && lastProcessingRun.rows.length > 0
+        ? lastProcessingRun.rows[0]
+        : null,
     checkinsWithAddresses: checkinsWithAddresses.rows?.[0]?.count || 0,
-    timestamp: new Date().toISOString()
+    timestamp: new Date().toISOString(),
   };
 }
 
 function generateDashboardHTML(stats: any): string {
-  const addressResolutionRate = stats.totalCheckins > 0 
+  const addressResolutionRate = stats.totalCheckins > 0
     ? ((stats.checkinsWithAddresses / stats.totalCheckins) * 100).toFixed(1)
     : 0;
 
@@ -327,18 +336,25 @@ function generateDashboardHTML(stats: any): string {
         </div>
     </div>
 
-    ${stats.lastProcessingRun ? `
+    ${
+    stats.lastProcessingRun
+      ? `
     <div class="recent-section">
         <h3>
-            <span class="status-indicator ${getProcessingStatus(stats.lastProcessingRun)}"></span>
+            <span class="status-indicator ${
+        getProcessingStatus(stats.lastProcessingRun)
+      }"></span>
             Last Processing Run
         </h3>
-        <p><strong>Time:</strong> ${new Date(stats.lastProcessingRun.run_at).toLocaleString()}</p>
+        <p><strong>Time:</strong> ${
+        new Date(stats.lastProcessingRun.run_at).toLocaleString()
+      }</p>
         <p><strong>Events Processed:</strong> ${stats.lastProcessingRun.events_processed}</p>
         <p><strong>Errors:</strong> ${stats.lastProcessingRun.errors}</p>
         <p><strong>Duration:</strong> ${stats.lastProcessingRun.duration_ms}ms</p>
     </div>
-    ` : `
+    `
+      : `
     <div class="recent-section">
         <h3>
             <span class="status-indicator status-idle"></span>
@@ -346,28 +362,37 @@ function generateDashboardHTML(stats: any): string {
         </h3>
         <p>No processing runs yet. Jetstream poller may not be active.</p>
     </div>
-    `}
+    `
+  }
 
-    ${stats.recentCheckins.length > 0 ? `
+    ${
+    stats.recentCheckins.length > 0
+      ? `
     <div class="recent-section">
         <h3>Recent Check-ins</h3>
-        ${stats.recentCheckins.map((checkin: any) => `
+        ${
+        stats.recentCheckins.map((checkin: any) => `
             <div class="checkin-item">
-                <div class="checkin-text">"${checkin.text || 'No message'}"</div>
+                <div class="checkin-text">"${
+          checkin.text || "No message"
+        }"</div>
                 <div class="checkin-meta">
-                    By ${checkin.author_handle || 'Unknown'} • 
+                    By ${checkin.author_handle || "Unknown"} • 
                     ${new Date(checkin.created_at).toLocaleString()} • 
-                    ${checkin.cached_address_name || 'Address not resolved'}
+                    ${checkin.cached_address_name || "Address not resolved"}
                 </div>
             </div>
-        `).join('')}
+        `).join("")
+      }
     </div>
-    ` : `
+    `
+      : `
     <div class="recent-section">
         <h3>Recent Check-ins</h3>
         <p>No check-ins found. System is waiting for data ingestion.</p>
     </div>
-    `}
+    `
+  }
 
     <div class="footer">
         <h3>API Endpoints</h3>
@@ -392,22 +417,22 @@ function generateDashboardHTML(stats: any): string {
 }
 
 function getProcessingStatus(run: any): string {
-  if (!run) return 'status-idle';
-  
+  if (!run) return "status-idle";
+
   const lastRun = new Date(run.run_at);
   const now = new Date();
   const minutesSinceLastRun = (now.getTime() - lastRun.getTime()) / (1000 * 60);
-  
+
   // If last run was within 10 minutes and had no errors, status is active
   if (minutesSinceLastRun < 10 && run.errors === 0) {
-    return 'status-active';
+    return "status-active";
   }
-  
+
   // If errors occurred, status is error
   if (run.errors > 0) {
-    return 'status-error';
+    return "status-error";
   }
-  
+
   // Otherwise, idle
-  return 'status-idle';
+  return "status-idle";
 }

@@ -167,6 +167,7 @@ The system uses 5 main SQLite tables:
 The project includes comprehensive tests for all components:
 
 **Unit Tests**:
+
 - `profile-resolver.test.ts` - Profile caching, resolution, and refresh logic
 - `handle-resolver.test.ts` - Handle resolution from DIDs
 - `address-cache.test.ts` - Address caching and resolution
@@ -175,6 +176,7 @@ The project includes comprehensive tests for all components:
 - `jetstream-ingestion.test.ts` - Event ingestion
 
 **Integration Tests**:
+
 - `api-profiles.test.ts` - API endpoints with profile data included
 - `api.test.ts` - Core API functionality
 

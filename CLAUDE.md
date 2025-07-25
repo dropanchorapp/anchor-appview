@@ -34,11 +34,28 @@ The system consists of three main components:
 The system uses four main tables:
 
 - `checkins_v1` - Main check-ins with coordinates and cached address data
-- `address_cache_v1` - Cached venue/address information (currently unused - location data is embedded in check-ins)
+- `address_cache_v1` - Cached venue/address information (currently unused -
+  location data is embedded in check-ins)
 - `user_follows_v1` - Social graph data for following-based feeds
 - `processing_log_v1` - Monitoring and operational logging
 
 ## Development Commands
+
+### Deno Tasks
+
+The project includes several Deno tasks for common development workflows:
+
+- `deno task quality` - Run formatter, linter, and all tests in sequence
+- `deno task quality:fix` - Same as quality but auto-fixes linting issues
+- `deno task fmt` - Format code using deno fmt
+- `deno task lint` - Run linter to check code quality
+- `deno task check` - TypeScript type checking for all source files
+- `deno task test` - Run all tests
+- `deno task test:unit` - Run unit tests only
+- `deno task test:integration` - Run integration tests only
+- `deno task test:watch` - Run tests in watch mode
+- `deno task deploy` - Deploy to Val Town using deploy script
+- `deno task debug` - Run debug script to check data and API status
 
 ### Testing
 
@@ -55,14 +72,17 @@ The system uses four main tables:
 
 ### Debugging
 
-- `deno run --allow-net scripts/debug.ts` - Check data availability and API status
-- `deno run --allow-net scripts/debug.ts --check-data` - Check AT Protocol records only
+- `deno run --allow-net scripts/debug.ts` - Check data availability and API
+  status
+- `deno run --allow-net scripts/debug.ts --check-data` - Check AT Protocol
+  records only
 - `deno run --allow-net scripts/debug.ts --test-api` - Test API endpoints only
 
 ## Key Features
 
 - **Real-time ingestion** via WebSocket polling every 5 minutes
-- **Embedded location data** with coordinates and address details included in check-in records
+- **Embedded location data** with coordinates and address details included in
+  check-in records
 - **Spatial queries** for nearby check-ins using coordinate-based distance
   calculations
 - **Social feeds** leveraging Bluesky's social graph for personalized content
@@ -131,11 +151,13 @@ Components deploy as separate Val Town functions:
 
 ## Important Implementation Details
 
-- **StrongRef Address Resolution**: Check-in records contain `addressRef` StrongRefs that must be resolved to separate address records and cached
+- **StrongRef Address Resolution**: Check-in records contain `addressRef`
+  StrongRefs that must be resolved to separate address records and cached
 
 ### Check-in Record Structure (Current Format)
 
 #### AT Protocol Record Format (when queried directly)
+
 ```json
 {
   "uri": "at://did:plc:example/app.dropanchor.checkin/abc123",
@@ -157,6 +179,7 @@ Components deploy as separate Val Town functions:
 ```
 
 #### Jetstream Event Format (real-time ingestion)
+
 ```json
 {
   "did": "did:plc:wxex3wx5k4ctciupsv5m5stb",
@@ -186,25 +209,32 @@ Components deploy as separate Val Town functions:
 }
 ```
 
-**CRITICAL**: The DID is at the **top level** in Jetstream events (`event.did`), not in `commit.repo`. This is essential for proper data extraction during real-time ingestion.
+**CRITICAL**: The DID is at the **top level** in Jetstream events (`event.did`),
+not in `commit.repo`. This is essential for proper data extraction during
+real-time ingestion.
 
 ### Jetstream Real-time Ingestion Process
+
 1. **Connect to Jetstream** with cursor-based resumption (1-hour lookback)
-2. **Filter events** for `kind: "commit"`, `collection: "app.dropanchor.checkin"`, `operation: "create"`
+2. **Filter events** for `kind: "commit"`,
+   `collection: "app.dropanchor.checkin"`, `operation: "create"`
 3. **Extract data** from Jetstream event structure:
    - Author DID: `event.did` (top-level field)
    - Record key: `event.commit.rkey`
    - Record data: `event.commit.record`
    - Timestamp: `event.time_us` (for cursor tracking)
 4. **Duplicate detection** using `rkey` as primary key
-5. **Store in database** with proper URI construction: `at://${event.did}/${collection}/${rkey}`
+5. **Store in database** with proper URI construction:
+   `at://${event.did}/${collection}/${rkey}`
 
 ### Address Resolution Process
+
 1. **Ingest check-in** with `coordinates` and `addressRef` StrongRef
 2. **Store StrongRef** in `address_ref_uri` and `address_ref_cid` fields
 3. **Resolve StrongRef** to separate address record using address resolver
 4. **Cache address data** in `cached_address_*` fields for fast API responses
 5. **Return complete objects** in API feeds with resolved address data
+
 - **Social Graph Integration**: Following feeds require syncing follow
   relationships from Bluesky's public API
 - **Spatial Indexing**: Performance depends on proper SQLite indexing for
@@ -213,7 +243,8 @@ Components deploy as separate Val Town functions:
   constraints
 - **Error Handling**: Comprehensive error tracking for monitoring ingestion
   health
-- **Data Processing Pipeline**: Extracts coordinates from `coordinates` field and resolves `addressRef` StrongRefs to cache complete address data
+- **Data Processing Pipeline**: Extracts coordinates from `coordinates` field
+  and resolves `addressRef` StrongRefs to cache complete address data
 - **Hybrid Storage**: SQLite for relational data, blob storage for key-value
   caching
 

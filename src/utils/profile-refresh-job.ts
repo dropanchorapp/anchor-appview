@@ -4,13 +4,15 @@ import { refreshStaleProfiles } from "./profile-resolver.ts";
 
 export default async function () {
   console.log("Starting profile refresh job...");
-  
+
   try {
     // Refresh up to 100 stale profiles per run
     const refreshedCount = await refreshStaleProfiles(100);
-    
-    console.log(`Profile refresh job completed: ${refreshedCount} profiles updated`);
-    
+
+    console.log(
+      `Profile refresh job completed: ${refreshedCount} profiles updated`,
+    );
+
     return new Response(
       JSON.stringify({
         success: true,
@@ -19,11 +21,11 @@ export default async function () {
       }),
       {
         headers: { "Content-Type": "application/json" },
-      }
+      },
     );
   } catch (error) {
     console.error("Profile refresh job failed:", error);
-    
+
     return new Response(
       JSON.stringify({
         success: false,
@@ -33,7 +35,7 @@ export default async function () {
       {
         status: 500,
         headers: { "Content-Type": "application/json" },
-      }
+      },
     );
   }
 }

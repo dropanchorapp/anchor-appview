@@ -3,14 +3,14 @@ import {
   assertExists,
 } from "https://deno.land/std@0.208.0/assert/mod.ts";
 
-import { 
+import {
   InMemoryStorageProvider,
-  ProfileData 
+  ProfileData,
 } from "../../src/utils/storage-provider.ts";
 
-import { 
+import {
   ATProtocolProfileResolver,
-  MockProfileFetcher 
+  MockProfileFetcher,
 } from "../../src/utils/profile-resolver-v2.ts";
 
 Deno.test("Profile Resolver v2 - resolveProfile with cache hit", async () => {
@@ -33,7 +33,7 @@ Deno.test("Profile Resolver v2 - resolveProfile with cache hit", async () => {
 
   // Should return cached profile without fetching
   const result = await resolver.resolveProfile("did:plc:cached");
-  
+
   assertExists(result);
   assertEquals(result.handle, "cached.bsky.social");
   assertEquals(result.displayName, "Cached User");
@@ -53,7 +53,7 @@ Deno.test("Profile Resolver v2 - resolveProfile with cache miss", async () => {
 
   // Should fetch and cache profile
   const result = await resolver.resolveProfile("did:plc:fresh");
-  
+
   assertExists(result);
   assertEquals(result.handle, "fresh.bsky.social");
   assertEquals(result.displayName, "Fresh User");
@@ -73,7 +73,7 @@ Deno.test("Profile Resolver v2 - resolveProfile with stale cache", async () => {
   // Pre-populate cache with stale profile (25 hours ago)
   const staleDate = new Date();
   staleDate.setHours(staleDate.getHours() - 25);
-  
+
   const staleProfile: ProfileData = {
     did: "did:plc:stale",
     handle: "old.bsky.social",
@@ -93,7 +93,7 @@ Deno.test("Profile Resolver v2 - resolveProfile with stale cache", async () => {
 
   // Should fetch fresh profile
   const result = await resolver.resolveProfile("did:plc:stale");
-  
+
   assertExists(result);
   assertEquals(result.handle, "updated.bsky.social");
   assertEquals(result.displayName, "Updated Name");
@@ -125,11 +125,11 @@ Deno.test("Profile Resolver v2 - batchResolveProfiles with mixed cache", async (
   // Batch resolve both profiles
   const results = await resolver.batchResolveProfiles([
     "did:plc:cached",
-    "did:plc:fresh"
+    "did:plc:fresh",
   ]);
 
   assertEquals(results.size, 2);
-  
+
   // Check cached profile
   const cached = results.get("did:plc:cached");
   assertExists(cached);
@@ -159,7 +159,7 @@ Deno.test("Profile Resolver v2 - refreshStaleProfiles", async () => {
   };
 
   const staleProfile2: ProfileData = {
-    did: "did:plc:stale2", 
+    did: "did:plc:stale2",
     handle: "stale2.bsky.social",
     displayName: "Stale 2",
     fetchedAt: staleDate.toISOString(),
@@ -176,19 +176,19 @@ Deno.test("Profile Resolver v2 - refreshStaleProfiles", async () => {
   });
 
   fetcher.setMockProfile("did:plc:stale2", {
-    handle: "updated2.bsky.social", 
+    handle: "updated2.bsky.social",
     displayName: "Updated 2",
   });
 
   // Refresh stale profiles
   const refreshedCount = await resolver.refreshStaleProfiles(10);
-  
+
   assertEquals(refreshedCount, 2);
 
   // Check profiles were updated
   const updated1 = await storage.getProfile("did:plc:stale1");
   const updated2 = await storage.getProfile("did:plc:stale2");
-  
+
   assertExists(updated1);
   assertExists(updated2);
   assertEquals(updated1.displayName, "Updated 1");
@@ -202,7 +202,7 @@ Deno.test("Profile Resolver v2 - handles fetch failures gracefully", async () =>
 
   // Should return null for unknown profile
   const result = await resolver.resolveProfile("did:plc:unknown");
-  
+
   assertEquals(result, null);
 });
 
@@ -214,7 +214,7 @@ Deno.test("Profile Resolver v2 - returns stale cache on fetch failure", async ()
   // Pre-populate cache with stale profile
   const staleDate = new Date();
   staleDate.setHours(staleDate.getHours() - 25);
-  
+
   const staleProfile: ProfileData = {
     did: "did:plc:stale",
     handle: "stale.bsky.social",
@@ -227,7 +227,7 @@ Deno.test("Profile Resolver v2 - returns stale cache on fetch failure", async ()
 
   // Should return stale cache when fetch fails
   const result = await resolver.resolveProfile("did:plc:stale");
-  
+
   assertExists(result);
   assertEquals(result.handle, "stale.bsky.social");
   assertEquals(result.displayName, "Stale User");
@@ -240,7 +240,7 @@ Deno.test("Profile Resolver v2 - batch processing with rate limiting", async () 
 
   // Set up mock profiles
   const dids = Array.from({ length: 12 }, (_, i) => `did:plc:user${i}`);
-  
+
   for (const did of dids) {
     fetcher.setMockProfile(did, {
       handle: `user${did.slice(-1)}.bsky.social`,
@@ -249,15 +249,15 @@ Deno.test("Profile Resolver v2 - batch processing with rate limiting", async () 
   }
 
   const startTime = Date.now();
-  
+
   // Should process in batches with delays
   const results = await resolver.batchResolveProfiles(dids);
-  
+
   const duration = Date.now() - startTime;
-  
+
   // Should have resolved all profiles
   assertEquals(results.size, 12);
-  
+
   // Should have taken some time due to rate limiting
   // (3 batches - 1 delay = 2 delays of 500ms each = ~1000ms minimum)
   assertEquals(duration >= 1000, true);

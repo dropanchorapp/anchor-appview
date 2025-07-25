@@ -14,7 +14,10 @@ export interface ProfileData {
 export interface StorageProvider {
   getProfile(did: string): Promise<ProfileData | null>;
   setProfile(profile: ProfileData): Promise<void>;
-  getStaleProfiles(limit: number, staleThresholdHours: number): Promise<ProfileData[]>;
+  getStaleProfiles(
+    limit: number,
+    staleThresholdHours: number,
+  ): Promise<ProfileData[]>;
   ensureTablesExist(): Promise<void>;
 }
 
@@ -24,7 +27,7 @@ export class SqliteStorageProvider implements StorageProvider {
   async getProfile(did: string): Promise<ProfileData | null> {
     const result = await this.sqlite.execute(
       "SELECT * FROM profile_cache_v1 WHERE did = ?",
-      [did]
+      [did],
     );
 
     if (result.rows && result.rows.length > 0) {
@@ -56,11 +59,14 @@ export class SqliteStorageProvider implements StorageProvider {
         profile.description || null,
         profile.fetchedAt,
         profile.updatedAt || profile.fetchedAt,
-      ]
+      ],
     );
   }
 
-  async getStaleProfiles(limit: number, staleThresholdHours: number): Promise<ProfileData[]> {
+  async getStaleProfiles(
+    limit: number,
+    staleThresholdHours: number,
+  ): Promise<ProfileData[]> {
     const staleThreshold = new Date();
     staleThreshold.setHours(staleThreshold.getHours() - staleThresholdHours);
 
@@ -69,7 +75,7 @@ export class SqliteStorageProvider implements StorageProvider {
        WHERE fetched_at < ? 
        ORDER BY fetched_at ASC 
        LIMIT ?`,
-      [staleThreshold.toISOString(), limit]
+      [staleThreshold.toISOString(), limit],
     );
 
     return (result.rows || []).map((row: any) => ({
@@ -98,10 +104,10 @@ export class SqliteStorageProvider implements StorageProvider {
     `);
 
     await this.sqlite.execute(
-      `CREATE INDEX IF NOT EXISTS idx_profiles_updated ON profile_cache_v1(updated_at)`
+      `CREATE INDEX IF NOT EXISTS idx_profiles_updated ON profile_cache_v1(updated_at)`,
     );
     await this.sqlite.execute(
-      `CREATE INDEX IF NOT EXISTS idx_profiles_fetched ON profile_cache_v1(fetched_at)`
+      `CREATE INDEX IF NOT EXISTS idx_profiles_fetched ON profile_cache_v1(fetched_at)`,
     );
   }
 }
@@ -118,14 +124,19 @@ export class InMemoryStorageProvider implements StorageProvider {
     return Promise.resolve();
   }
 
-  getStaleProfiles(limit: number, staleThresholdHours: number): Promise<ProfileData[]> {
+  getStaleProfiles(
+    limit: number,
+    staleThresholdHours: number,
+  ): Promise<ProfileData[]> {
     const staleThreshold = new Date();
     staleThreshold.setHours(staleThreshold.getHours() - staleThresholdHours);
 
-    return Promise.resolve(Array.from(this.profiles.values())
-      .filter(profile => new Date(profile.fetchedAt) < staleThreshold)
-      .sort((a, b) => a.fetchedAt.localeCompare(b.fetchedAt))
-      .slice(0, limit));
+    return Promise.resolve(
+      Array.from(this.profiles.values())
+        .filter((profile) => new Date(profile.fetchedAt) < staleThreshold)
+        .sort((a, b) => a.fetchedAt.localeCompare(b.fetchedAt))
+        .slice(0, limit),
+    );
   }
 
   ensureTablesExist(): Promise<void> {

@@ -2,7 +2,10 @@
 // Main HTTP API handler for Anchor AppView
 import { sqlite } from "https://esm.town/v/stevekrouse/sqlite";
 import { ATProtocolProfileResolver } from "../utils/profile-resolver-v2.ts";
-import { SqliteStorageProvider, ProfileData } from "../utils/storage-provider.ts";
+import {
+  ProfileData,
+  SqliteStorageProvider,
+} from "../utils/storage-provider.ts";
 
 // Types for better TypeScript support
 interface CorsHeaders {
@@ -80,7 +83,7 @@ async function initializeTables() {
   // Ensure all tables exist
   const storage = new SqliteStorageProvider(sqlite);
   await storage.ensureTablesExist();
-  
+
   await sqlite.execute(`
     CREATE TABLE IF NOT EXISTS checkins_v1 (
       id TEXT PRIMARY KEY,
@@ -159,12 +162,12 @@ async function getGlobalFeed(
   const rows = results.rows || [];
 
   // Resolve profiles for all authors
-  const dids = [...new Set(rows.map(row => row.author_did as string))];
+  const dids = [...new Set(rows.map((row) => row.author_did as string))];
   const storage = new SqliteStorageProvider(sqlite);
   const profileResolver = new ATProtocolProfileResolver(storage);
   const profiles = await profileResolver.batchResolveProfiles(dids);
 
-  const checkins = rows.map(row => formatCheckin(row, profiles));
+  const checkins = rows.map((row) => formatCheckin(row, profiles));
 
   return new Response(
     JSON.stringify({
@@ -232,12 +235,14 @@ async function getNearbyCheckins(
     .slice(0, limit);
 
   // Resolve profiles for filtered results
-  const dids = [...new Set(nearbyRows.map((row: any) => row.author_did as string))];
+  const dids = [
+    ...new Set(nearbyRows.map((row: any) => row.author_did as string)),
+  ];
   const storage = new SqliteStorageProvider(sqlite);
   const profileResolver = new ATProtocolProfileResolver(storage);
   const profiles = await profileResolver.batchResolveProfiles(dids);
 
-  const nearbyCheckins = nearbyRows.map(row => formatCheckin(row, profiles));
+  const nearbyCheckins = nearbyRows.map((row) => formatCheckin(row, profiles));
 
   return new Response(
     JSON.stringify({
@@ -280,12 +285,12 @@ async function getUserCheckins(
   const rows = results.rows || [];
 
   // Resolve profiles
-  const dids = [...new Set(rows.map(row => row.author_did as string))];
+  const dids = [...new Set(rows.map((row) => row.author_did as string))];
   const storage = new SqliteStorageProvider(sqlite);
   const profileResolver = new ATProtocolProfileResolver(storage);
   const profiles = await profileResolver.batchResolveProfiles(dids);
 
-  const checkins = rows.map(row => formatCheckin(row, profiles));
+  const checkins = rows.map((row) => formatCheckin(row, profiles));
 
   return new Response(
     JSON.stringify({
@@ -357,12 +362,12 @@ async function getFollowingFeed(
   const rows = results.rows || [];
 
   // Resolve profiles
-  const dids = [...new Set(rows.map(row => row.author_did as string))];
+  const dids = [...new Set(rows.map((row) => row.author_did as string))];
   const storage = new SqliteStorageProvider(sqlite);
   const profileResolver = new ATProtocolProfileResolver(storage);
   const profiles = await profileResolver.batchResolveProfiles(dids);
 
-  const checkins = rows.map(row => formatCheckin(row, profiles));
+  const checkins = rows.map((row) => formatCheckin(row, profiles));
 
   return new Response(
     JSON.stringify({
@@ -402,9 +407,12 @@ async function getStats(corsHeaders: CorsHeaders): Promise<Response> {
   return new Response(JSON.stringify(stats), { headers: corsHeaders });
 }
 
-function formatCheckin(row: any, profiles: Map<string, ProfileData>): CheckinRecord {
+function formatCheckin(
+  row: any,
+  profiles: Map<string, ProfileData>,
+): CheckinRecord {
   const profile = profiles.get(row.author_did as string);
-  
+
   const checkin: any = {
     id: row.id,
     uri: row.uri,

@@ -1,7 +1,7 @@
 // Profile resolution utilities for AT Protocol
 // Clean architecture with dependency injection for testing
 
-import { StorageProvider, ProfileData } from "./storage-provider.ts";
+import { ProfileData, StorageProvider } from "./storage-provider.ts";
 
 export interface ProfileResolver {
   resolveProfile(did: string): Promise<ProfileData | null>;
@@ -16,7 +16,7 @@ export class ATProtocolProfileResolver implements ProfileResolver {
 
   constructor(
     private storage: StorageProvider,
-    private fetcher: ProfileFetcher = new BlueskyProfileFetcher()
+    private fetcher: ProfileFetcher = new BlueskyProfileFetcher(),
   ) {}
 
   async resolveProfile(did: string): Promise<ProfileData | null> {
@@ -41,7 +41,9 @@ export class ATProtocolProfileResolver implements ProfileResolver {
     return cached;
   }
 
-  async batchResolveProfiles(dids: string[]): Promise<Map<string, ProfileData>> {
+  async batchResolveProfiles(
+    dids: string[],
+  ): Promise<Map<string, ProfileData>> {
     const results = new Map<string, ProfileData>();
     const didsToFetch: string[] = [];
 
@@ -64,15 +66,18 @@ export class ATProtocolProfileResolver implements ProfileResolver {
   }
 
   async refreshStaleProfiles(limit: number = 50): Promise<number> {
-    const staleProfiles = await this.storage.getStaleProfiles(limit, ATProtocolProfileResolver.CACHE_TTL_HOURS);
-    
+    const staleProfiles = await this.storage.getStaleProfiles(
+      limit,
+      ATProtocolProfileResolver.CACHE_TTL_HOURS,
+    );
+
     if (staleProfiles.length === 0) {
       return 0;
     }
 
-    const dids = staleProfiles.map(p => p.did);
+    const dids = staleProfiles.map((p) => p.did);
     const refreshed = await this.batchResolveProfiles(dids);
-    
+
     return refreshed.size;
   }
 
@@ -85,9 +90,12 @@ export class ATProtocolProfileResolver implements ProfileResolver {
 
   private async batchFetchProfiles(
     dids: string[],
-    results: Map<string, ProfileData>
+    results: Map<string, ProfileData>,
   ): Promise<void> {
-    const batches = this.createBatches(dids, ATProtocolProfileResolver.BATCH_SIZE);
+    const batches = this.createBatches(
+      dids,
+      ATProtocolProfileResolver.BATCH_SIZE,
+    );
 
     for (const [index, batch] of batches.entries()) {
       const promises = batch.map(async (did) => {
@@ -106,7 +114,9 @@ export class ATProtocolProfileResolver implements ProfileResolver {
 
       // Rate limit between batches
       if (index < batches.length - 1) {
-        await new Promise(resolve => setTimeout(resolve, ATProtocolProfileResolver.BATCH_DELAY_MS));
+        await new Promise((resolve) =>
+          setTimeout(resolve, ATProtocolProfileResolver.BATCH_DELAY_MS)
+        );
       }
     }
   }
@@ -128,7 +138,7 @@ export class BlueskyProfileFetcher implements ProfileFetcher {
   async fetchProfile(did: string): Promise<ProfileData | null> {
     try {
       const response = await fetch(
-        `https://public.api.bsky.app/xrpc/app.bsky.actor.getProfile?actor=${did}`
+        `https://public.api.bsky.app/xrpc/app.bsky.actor.getProfile?actor=${did}`,
       );
 
       if (!response.ok) {
@@ -155,7 +165,9 @@ export class BlueskyProfileFetcher implements ProfileFetcher {
 }
 
 export class MockProfileFetcher implements ProfileFetcher {
-  constructor(private mockProfiles: Map<string, Partial<ProfileData>> = new Map()) {}
+  constructor(
+    private mockProfiles: Map<string, Partial<ProfileData>> = new Map(),
+  ) {}
 
   fetchProfile(did: string): Promise<ProfileData | null> {
     const mock = this.mockProfiles.get(did);

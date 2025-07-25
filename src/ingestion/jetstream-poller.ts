@@ -17,7 +17,7 @@ export default async function () {
   // Try to connect to Jetstream with retry logic
   let jetStreamSuccess = false;
   const maxRetries = 3;
-  
+
   for (let attempt = 1; attempt <= maxRetries; attempt++) {
     try {
       console.log(`Jetstream connection attempt ${attempt}/${maxRetries}...`);
@@ -29,12 +29,12 @@ export default async function () {
     } catch (error) {
       console.error(`Jetstream connection attempt ${attempt} failed:`, error);
       errors++;
-      
+
       if (attempt < maxRetries) {
         // Exponential backoff: 1s, 2s, 4s
         const backoffMs = Math.pow(2, attempt - 1) * 1000;
         console.log(`Waiting ${backoffMs}ms before retry...`);
-        await new Promise(resolve => setTimeout(resolve, backoffMs));
+        await new Promise((resolve) => setTimeout(resolve, backoffMs));
       }
     }
   }
@@ -49,7 +49,7 @@ export default async function () {
 
   // Log this run
   const duration = Date.now() - startTime;
-  
+
   // Use basic logging since cursor column doesn't exist yet
   await sqlite.execute(
     `
@@ -66,9 +66,11 @@ export default async function () {
 
   // Log connection health status
   if (errors > 0) {
-    console.log(`⚠️ Jetstream connection had ${errors} errors but completed with fallback`);
+    console.log(
+      `⚠️ Jetstream connection had ${errors} errors but completed with fallback`,
+    );
   }
-  
+
   console.log(
     `Polling completed: ${eventsProcessed} events, ${errors} errors, ${duration}ms`,
   );
@@ -154,7 +156,9 @@ async function initializeTables() {
 
   // Add cursor column if it doesn't exist (for existing tables)
   try {
-    await sqlite.execute(`ALTER TABLE ${PROCESSING_LOG_TABLE} ADD COLUMN last_jetstream_cursor TEXT`);
+    await sqlite.execute(
+      `ALTER TABLE ${PROCESSING_LOG_TABLE} ADD COLUMN last_jetstream_cursor TEXT`,
+    );
   } catch (_e) {
     // Column already exists, ignore error
   }
@@ -177,9 +181,8 @@ function connectAndProcess(): Promise<
   return new Promise((resolve, reject) => {
     let eventsProcessed = 0;
     let errors = 0;
-    let _lastEventTime = Date.now();
     const sessionStartTime = Date.now();
-    
+
     // Debug counters
     let totalMessages = 0;
     let commitMessages = 0;
@@ -192,12 +195,17 @@ function connectAndProcess(): Promise<
 
     // Get the last processed timestamp from database for cursor-based resumption
     const lastTimestamp = getLastProcessedTimestamp();
-    const cursorParam = lastTimestamp ? `&cursor=${lastTimestamp}` : '';
-    const wsUrl = `wss://jetstream.atproto.tools/subscribe?wantedCollections=app.dropanchor.checkin${cursorParam}`;
-    
-    console.log(`Connecting to Jetstream with cursor: ${lastTimestamp || 'none (live-tail)'}`);
+    const cursorParam = lastTimestamp ? `&cursor=${lastTimestamp}` : "";
+    const wsUrl =
+      `wss://jetstream.atproto.tools/subscribe?wantedCollections=app.dropanchor.checkin${cursorParam}`;
+
+    console.log(
+      `Connecting to Jetstream with cursor: ${
+        lastTimestamp || "none (live-tail)"
+      }`,
+    );
     console.log(`WebSocket URL: ${wsUrl}`);
-    
+
     let ws: WebSocket;
     try {
       ws = new WebSocket(wsUrl);
@@ -206,7 +214,7 @@ function connectAndProcess(): Promise<
       reject(new Error(`Failed to create WebSocket: ${error}`));
       return;
     }
-    
+
     // Connection timeout - reject if not connected within 10 seconds
     const connectionTimeout = setTimeout(() => {
       if (ws.readyState !== WebSocket.OPEN) {
@@ -226,12 +234,14 @@ function connectAndProcess(): Promise<
     // Auto-disconnect when no events received for 15 seconds (caught up)
     const inactivityTimeout = () => {
       return setTimeout(() => {
-        console.log("No events for 15 seconds, assuming caught up. Disconnecting.");
+        console.log(
+          "No events for 15 seconds, assuming caught up. Disconnecting.",
+        );
         ws.close();
         resolve({ eventsProcessed, errors });
       }, 15000);
     };
-    
+
     let inactivityTimer = inactivityTimeout();
 
     ws.onopen = () => {
@@ -247,17 +257,16 @@ function connectAndProcess(): Promise<
         // Reset inactivity timer on any message
         clearTimeout(inactivityTimer);
         inactivityTimer = inactivityTimeout();
-        _lastEventTime = Date.now();
 
         // Debug: Track message types
         if (data.kind) {
           seenMessageTypes.add(data.kind);
-          
+
           if (data.kind === "commit") {
             commitMessages++;
             if (data.commit?.collection) {
               seenCollections.add(data.commit.collection);
-              
+
               if (data.commit.collection === "app.dropanchor.checkin") {
                 checkinCommits++;
               } else {
@@ -279,7 +288,7 @@ function connectAndProcess(): Promise<
           console.log("Processing checkin event:", data.commit.rkey);
           await processCheckinEvent(data);
           eventsProcessed++;
-          
+
           // Update last processed timestamp for next cursor
           if (data.time_us) {
             updateLastProcessedTimestamp(data.time_us);
@@ -296,14 +305,16 @@ function connectAndProcess(): Promise<
         error: error,
         readyState: ws.readyState,
         url: wsUrl,
-        time: new Date().toISOString()
+        time: new Date().toISOString(),
       });
       clearTimeout(connectionTimeout);
       clearTimeout(safetyTimeout);
       clearTimeout(inactivityTimer);
-      
+
       // Provide more specific error message
-      const errorMsg = error instanceof Error ? error.message : "Unknown WebSocket error";
+      const errorMsg = error instanceof Error
+        ? error.message
+        : "Unknown WebSocket error";
       reject(new Error(`WebSocket connection failed: ${errorMsg}`));
     };
 
@@ -312,7 +323,7 @@ function connectAndProcess(): Promise<
       clearTimeout(connectionTimeout);
       clearTimeout(safetyTimeout);
       clearTimeout(inactivityTimer);
-      
+
       // Debug summary
       console.log("=== Jetstream Session Debug Summary ===");
       console.log(`Total messages received: ${totalMessages}`);
@@ -322,16 +333,20 @@ function connectAndProcess(): Promise<
       console.log(`- Other commits: ${otherCommits}`);
       console.log(`Identity messages: ${identityMessages}`);
       console.log(`Account messages: ${accountMessages}`);
-      
+
       if (seenCollections.size > 0) {
         const collections = Array.from(seenCollections);
-        console.log(`Collections seen (${collections.length}): ${collections.slice(0, 10).join(", ")}${collections.length > 10 ? "..." : ""}`);
+        console.log(
+          `Collections seen (${collections.length}): ${
+            collections.slice(0, 10).join(", ")
+          }${collections.length > 10 ? "..." : ""}`,
+        );
       }
-      
+
       console.log(`Check-ins processed: ${eventsProcessed}`);
       console.log(`Session duration: ${Date.now() - sessionStartTime}ms`);
       console.log("=== End Debug Summary ===");
-      
+
       resolve({ eventsProcessed, errors });
     };
   });
@@ -342,23 +357,30 @@ async function processCheckinEvent(event: any) {
   const record = commit.record;
 
   console.log(`Processing checkin ${commit.rkey} from DID ${did}`);
-  
+
   // Check if already processed (duplicate detection)
   const existing = await sqlite.execute(
     `SELECT id FROM checkins_v1 WHERE id = ?`,
     [commit.rkey],
   );
-  
-  console.log(`Duplicate check result for ${commit.rkey}:`, existing.rows ? existing.rows.length : 'no rows');
-  
+
+  console.log(
+    `Duplicate check result for ${commit.rkey}:`,
+    existing.rows ? existing.rows.length : "no rows",
+  );
+
   if (existing.rows && existing.rows.length > 0) {
     console.log("Duplicate checkin, skipping:", commit.rkey);
     return;
   }
 
   // Extract coordinates from new format only
-  const lat = record.coordinates?.latitude ? parseFloat(record.coordinates.latitude) : null;
-  const lng = record.coordinates?.longitude ? parseFloat(record.coordinates.longitude) : null;
+  const lat = record.coordinates?.latitude
+    ? parseFloat(record.coordinates.latitude)
+    : null;
+  const lng = record.coordinates?.longitude
+    ? parseFloat(record.coordinates.longitude)
+    : null;
 
   // Resolve profile to get handle and other data
   const storage = new SqliteStorageProvider(sqlite);
@@ -372,10 +394,11 @@ async function processCheckinEvent(event: any) {
     uri: `at://${did}/${commit.collection}/${commit.rkey}`,
     author_did: did,
     text: record.text || "",
-    lat, lng,
-    addressRef: record.addressRef?.uri
+    lat,
+    lng,
+    addressRef: record.addressRef?.uri,
   });
-  
+
   const insertResult = await sqlite.execute(
     `
     INSERT OR IGNORE INTO checkins_v1 
@@ -402,10 +425,12 @@ async function processCheckinEvent(event: any) {
   // Trigger address resolution if StrongRef is present
   if (record.addressRef?.uri) {
     console.log("Address StrongRef found, resolving:", record.addressRef.uri);
-    
+
     // Import and call the address resolver
     try {
-      const { resolveAndCacheAddress } = await import("../utils/address-resolver.ts");
+      const { resolveAndCacheAddress } = await import(
+        "../utils/address-resolver.ts"
+      );
       await resolveAndCacheAddress(commit.rkey, record.addressRef);
     } catch (error) {
       console.error("Address resolution failed:", error);
@@ -421,74 +446,79 @@ function getLastProcessedTimestamp(): string | null {
   return microseconds.toString();
 }
 
-let _currentCursor: string | null = null;
-
 function updateLastProcessedTimestamp(timeUs: string): void {
   try {
-    _currentCursor = timeUs;
     // We'll update this at the end of the run in the main logging
+    // For now, just log it
+    console.log(`Cursor update: ${timeUs}`);
   } catch (error) {
     console.error("Error storing cursor:", error);
   }
 }
 
-async function pollATProtocolForNewCheckins(): Promise<{ eventsProcessed: number; errors: number }> {
+async function pollATProtocolForNewCheckins(): Promise<
+  { eventsProcessed: number; errors: number }
+> {
   let eventsProcessed = 0;
   let errors = 0;
 
   // Known DIDs that create check-ins
   const knownDids = [
     "did:plc:wxex3wx5k4ctciupsv5m5stb",
-    "did:plc:z4r4rg2j6eoqqxzkgr36xqzb"
+    "did:plc:z4r4rg2j6eoqqxzkgr36xqzb",
   ];
 
   for (const did of knownDids) {
     try {
       console.log(`Polling AT Protocol for new check-ins from ${did}...`);
-      
+
       const url = "https://bsky.social/xrpc/com.atproto.repo.listRecords";
       const params = new URLSearchParams({
         repo: did,
         collection: "app.dropanchor.checkin",
         limit: "20", // Check more recent records since we run every 15 min
-        reverse: "true"
+        reverse: "true",
       });
-      
+
       const response = await fetch(`${url}?${params}`);
       if (!response.ok) {
         console.error(`Failed to fetch records for ${did}: ${response.status}`);
         errors++;
         continue;
       }
-      
+
       const data = await response.json();
       const records = data.records || [];
       console.log(`Found ${records.length} total records for ${did}`);
-      
+
       for (const record of records) {
-        const rkey = record.uri.split('/').pop();
-        
+        const rkey = record.uri.split("/").pop();
+
         // Only process new format with addressRef
         if (!record.value.addressRef) {
           continue;
         }
-        
+
         // Check if already exists
         const existing = await sqlite.execute(
           `SELECT id FROM checkins_v1 WHERE id = ?`,
-          [rkey]
+          [rkey],
         );
         if (existing.rows && existing.rows.length > 0) {
           continue; // Already exists
         }
-        
+
         // This is a new check-in! Process it
         console.log(`Found new check-in via AT Protocol: ${rkey}`);
-        
+
         // Extract coordinates
-        const lat = record.value.coordinates?.latitude ? parseFloat(record.value.coordinates.latitude) : null;
-        const lng = record.value.coordinates?.longitude ? parseFloat(record.value.coordinates.longitude) : null;
-        
+        const lat = record.value.coordinates?.latitude
+          ? parseFloat(record.value.coordinates.latitude)
+          : null;
+        const lng = record.value.coordinates?.longitude
+          ? parseFloat(record.value.coordinates.longitude)
+          : null;
+
         // Insert checkin
         await sqlite.execute(
           `
@@ -507,23 +537,24 @@ async function pollATProtocolForNewCheckins(): Promise<{ eventsProcessed: number
             lng,
             record.value.addressRef?.uri || null,
             record.value.addressRef?.cid || null,
-          ]
+          ],
         );
-        
+
         console.log("New checkin stored via AT Protocol polling:", rkey);
         eventsProcessed++;
-        
+
         // Trigger address resolution
         if (record.value.addressRef?.uri) {
           try {
-            const { resolveAndCacheAddress } = await import("../utils/address-resolver.ts");
+            const { resolveAndCacheAddress } = await import(
+              "../utils/address-resolver.ts"
+            );
             await resolveAndCacheAddress(rkey, record.value.addressRef);
           } catch (error) {
             console.error("Address resolution failed:", error);
           }
         }
       }
-      
     } catch (error) {
       console.error(`Error polling ${did}:`, error);
       errors++;

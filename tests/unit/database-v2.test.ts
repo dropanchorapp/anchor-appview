@@ -3,13 +3,13 @@ import {
   assertExists,
 } from "https://deno.land/std@0.208.0/assert/mod.ts";
 
-import { 
-  InMemoryCheckinStorage, 
-  InMemoryAddressStorage,
-  CheckinData,
+import {
   AddressData,
+  AddressStorageProvider,
+  CheckinData,
   CheckinStorageProvider,
-  AddressStorageProvider 
+  InMemoryAddressStorage,
+  InMemoryCheckinStorage,
 } from "../../src/utils/universal-storage.ts";
 
 // Database service interface
@@ -17,7 +17,10 @@ interface DatabaseService {
   getCheckin(id: string): Promise<CheckinData | null>;
   setCheckin(checkin: CheckinData): Promise<void>;
   checkinExists(id: string): Promise<boolean>;
-  getCheckinsByAuthor(authorDid: string, limit?: number): Promise<CheckinData[]>;
+  getCheckinsByAuthor(
+    authorDid: string,
+    limit?: number,
+  ): Promise<CheckinData[]>;
   getAllCheckins(limit?: number): Promise<CheckinData[]>;
   getAddress(uri: string): Promise<AddressData | null>;
   setAddress(address: AddressData): Promise<void>;
@@ -29,7 +32,7 @@ interface DatabaseService {
 class DatabaseServiceImpl implements DatabaseService {
   constructor(
     private checkinStorage: CheckinStorageProvider,
-    private addressStorage: AddressStorageProvider
+    private addressStorage: AddressStorageProvider,
   ) {}
 
   async getCheckin(id: string): Promise<CheckinData | null> {
@@ -44,7 +47,10 @@ class DatabaseServiceImpl implements DatabaseService {
     return await this.checkinStorage.checkinExists(id);
   }
 
-  async getCheckinsByAuthor(authorDid: string, limit?: number): Promise<CheckinData[]> {
+  async getCheckinsByAuthor(
+    authorDid: string,
+    limit?: number,
+  ): Promise<CheckinData[]> {
     return await this.checkinStorage.getCheckinsByAuthor(authorDid, limit);
   }
 
@@ -93,8 +99,9 @@ Deno.test("Database v2 - checkin operations", async (t) => {
       createdAt: "2024-01-01T12:00:00Z",
       latitude: 40.7128,
       longitude: -74.0060,
-      addressRefUri: "at://did:plc:test/community.lexicon.location.address/addr123",
-      addressRefCid: "bafyreicid123"
+      addressRefUri:
+        "at://did:plc:test/community.lexicon.location.address/addr123",
+      addressRefCid: "bafyreicid123",
     };
 
     await dbService.setCheckin(checkinData);
@@ -105,7 +112,10 @@ Deno.test("Database v2 - checkin operations", async (t) => {
     assertEquals(retrieved.text, "Great coffee!");
     assertEquals(retrieved.latitude, 40.7128);
     assertEquals(retrieved.longitude, -74.0060);
-    assertEquals(retrieved.addressRefUri, "at://did:plc:test/community.lexicon.location.address/addr123");
+    assertEquals(
+      retrieved.addressRefUri,
+      "at://did:plc:test/community.lexicon.location.address/addr123",
+    );
   });
 
   await t.step("should check checkin existence", async () => {
@@ -124,7 +134,7 @@ Deno.test("Database v2 - checkin operations", async (t) => {
       authorDid: "did:plc:test",
       authorHandle: "test.bsky.social",
       text: "Existing checkin",
-      createdAt: "2024-01-01T12:00:00Z"
+      createdAt: "2024-01-01T12:00:00Z",
     };
 
     await dbService.setCheckin(checkinData);
@@ -147,7 +157,7 @@ Deno.test("Database v2 - checkin operations", async (t) => {
         authorDid: "did:plc:author1",
         authorHandle: "author1.bsky.social",
         text: "First checkin",
-        createdAt: "2024-01-01T12:00:00Z"
+        createdAt: "2024-01-01T12:00:00Z",
       },
       {
         id: "author1_checkin2",
@@ -155,7 +165,7 @@ Deno.test("Database v2 - checkin operations", async (t) => {
         authorDid: "did:plc:author1",
         authorHandle: "author1.bsky.social",
         text: "Second checkin",
-        createdAt: "2024-01-01T13:00:00Z"
+        createdAt: "2024-01-01T13:00:00Z",
       },
       {
         id: "author2_checkin1",
@@ -163,8 +173,8 @@ Deno.test("Database v2 - checkin operations", async (t) => {
         authorDid: "did:plc:author2",
         authorHandle: "author2.bsky.social",
         text: "Other author checkin",
-        createdAt: "2024-01-01T14:00:00Z"
-      }
+        createdAt: "2024-01-01T14:00:00Z",
+      },
     ];
 
     for (const checkin of checkins) {
@@ -172,13 +182,18 @@ Deno.test("Database v2 - checkin operations", async (t) => {
     }
 
     // Should get only checkins from author1
-    const author1Checkins = await dbService.getCheckinsByAuthor("did:plc:author1");
+    const author1Checkins = await dbService.getCheckinsByAuthor(
+      "did:plc:author1",
+    );
     assertEquals(author1Checkins.length, 2);
     assertEquals(author1Checkins[0].authorDid, "did:plc:author1");
     assertEquals(author1Checkins[1].authorDid, "did:plc:author1");
 
     // Should respect limit
-    const limitedCheckins = await dbService.getCheckinsByAuthor("did:plc:author1", 1);
+    const limitedCheckins = await dbService.getCheckinsByAuthor(
+      "did:plc:author1",
+      1,
+    );
     assertEquals(limitedCheckins.length, 1);
   });
 
@@ -195,7 +210,7 @@ Deno.test("Database v2 - checkin operations", async (t) => {
         authorDid: `did:plc:user${i}`,
         authorHandle: `user${i}.bsky.social`,
         text: `Checkin ${i}`,
-        createdAt: `2024-01-0${i}T12:00:00Z`
+        createdAt: `2024-01-0${i}T12:00:00Z`,
       };
       await dbService.setCheckin(checkinData);
     }
@@ -234,14 +249,19 @@ Deno.test("Database v2 - address operations", async (t) => {
       postalCode: "12345",
       latitude: 40.7128,
       longitude: -74.0060,
-      resolvedAt: "2024-01-01T12:00:00Z"
+      resolvedAt: "2024-01-01T12:00:00Z",
     };
 
     await dbService.setAddress(addressData);
 
-    const retrieved = await dbService.getAddress("at://did:plc:test/community.lexicon.location.address/addr123");
+    const retrieved = await dbService.getAddress(
+      "at://did:plc:test/community.lexicon.location.address/addr123",
+    );
     assertExists(retrieved);
-    assertEquals(retrieved.uri, "at://did:plc:test/community.lexicon.location.address/addr123");
+    assertEquals(
+      retrieved.uri,
+      "at://did:plc:test/community.lexicon.location.address/addr123",
+    );
     assertEquals(retrieved.name, "Test Cafe");
     assertEquals(retrieved.street, "123 Test Street");
     assertEquals(retrieved.latitude, 40.7128);
@@ -256,7 +276,7 @@ Deno.test("Database v2 - address operations", async (t) => {
     // Add failed address
     const failedAddress: AddressData = {
       uri: "at://did:plc:test/community.lexicon.location.address/failed123",
-      failedAt: "2024-01-01T12:00:00Z"
+      failedAt: "2024-01-01T12:00:00Z",
     };
 
     await dbService.setAddress(failedAddress);
@@ -264,7 +284,10 @@ Deno.test("Database v2 - address operations", async (t) => {
     // Should retrieve failed addresses
     const failedAddresses = await dbService.getFailedAddresses();
     assertEquals(failedAddresses.length, 1);
-    assertEquals(failedAddresses[0].uri, "at://did:plc:test/community.lexicon.location.address/failed123");
+    assertEquals(
+      failedAddresses[0].uri,
+      "at://did:plc:test/community.lexicon.location.address/failed123",
+    );
     assertEquals(failedAddresses[0].failedAt, "2024-01-01T12:00:00Z");
   });
 
@@ -273,13 +296,14 @@ Deno.test("Database v2 - address operations", async (t) => {
     const addressStorage = new InMemoryAddressStorage();
     const dbService = new DatabaseServiceImpl(checkinStorage, addressStorage);
 
-    const uri = "at://did:plc:test/community.lexicon.location.address/update123";
+    const uri =
+      "at://did:plc:test/community.lexicon.location.address/update123";
 
     // Add initial address
     const initialAddress: AddressData = {
       uri: uri,
       name: "Initial Name",
-      street: "Old Street"
+      street: "Old Street",
     };
 
     await dbService.setAddress(initialAddress);
@@ -289,7 +313,7 @@ Deno.test("Database v2 - address operations", async (t) => {
       uri: uri,
       name: "Updated Name",
       street: "New Street",
-      locality: "New City"
+      locality: "New City",
     };
 
     await dbService.setAddress(updatedAddress);
@@ -333,14 +357,16 @@ Deno.test("Database v2 - schema validation", async (t) => {
       fullData: {
         amenities: ["wifi", "parking"],
         rating: 4.5,
-        tags: { cuisine: "italian", price: "$$" }
+        tags: { cuisine: "italian", price: "$$" },
       },
-      resolvedAt: "2024-01-01T12:00:00Z"
+      resolvedAt: "2024-01-01T12:00:00Z",
     };
 
     await dbService.setAddress(addressData);
 
-    const retrieved = await dbService.getAddress("at://did:plc:test/community.lexicon.location.address/complex123");
+    const retrieved = await dbService.getAddress(
+      "at://did:plc:test/community.lexicon.location.address/complex123",
+    );
     assertExists(retrieved);
     assertEquals(retrieved.fullData?.amenities, ["wifi", "parking"]);
     assertEquals(retrieved.fullData?.rating, 4.5);

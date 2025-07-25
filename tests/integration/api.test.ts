@@ -2,7 +2,10 @@ import {
   assertEquals,
   assertExists,
 } from "https://deno.land/std@0.208.0/assert/mod.ts";
-import { restore as _restore, stub as _stub } from "https://deno.land/std@0.208.0/testing/mock.ts";
+import {
+  restore as _restore,
+  stub as _stub,
+} from "https://deno.land/std@0.208.0/testing/mock.ts";
 
 // Mock SQLite for testing
 const _mockDatabase = new Map<string, any[]>();

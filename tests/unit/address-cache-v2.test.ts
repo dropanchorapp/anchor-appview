@@ -3,9 +3,9 @@ import {
   assertExists,
 } from "https://deno.land/std@0.208.0/assert/mod.ts";
 
-import { 
+import {
+  AddressData,
   InMemoryBlobStorage,
-  AddressData 
 } from "../../src/utils/universal-storage.ts";
 
 // Address cache service interface
@@ -26,7 +26,7 @@ class BlobAddressCacheService implements AddressCacheService {
   async getAddress(uri: string): Promise<AddressData | null> {
     const cacheKey = this.getCacheKey(uri);
     const cached = await this.blobStorage.get(cacheKey);
-    
+
     if (!cached) {
       return null;
     }
@@ -46,17 +46,23 @@ class BlobAddressCacheService implements AddressCacheService {
       ...address,
       cachedAt: new Date().toISOString(),
     };
-    
+
     await this.blobStorage.set(cacheKey, cacheEntry);
   }
 
   async getCachedAddresses(): Promise<string[]> {
-    const keys = await this.blobStorage.list(BlobAddressCacheService.CACHE_PREFIX);
-    return keys.map(key => key.replace(BlobAddressCacheService.CACHE_PREFIX, ''));
+    const keys = await this.blobStorage.list(
+      BlobAddressCacheService.CACHE_PREFIX,
+    );
+    return keys.map((key) =>
+      key.replace(BlobAddressCacheService.CACHE_PREFIX, "")
+    );
   }
 
   async clearExpiredAddresses(maxAgeHours: number): Promise<number> {
-    const keys = await this.blobStorage.list(BlobAddressCacheService.CACHE_PREFIX);
+    const keys = await this.blobStorage.list(
+      BlobAddressCacheService.CACHE_PREFIX,
+    );
     let clearedCount = 0;
 
     for (const key of keys) {
@@ -74,9 +80,12 @@ class BlobAddressCacheService implements AddressCacheService {
     return `${BlobAddressCacheService.CACHE_PREFIX}${uri}`;
   }
 
-  private isExpired(cached: any, maxAgeHours: number = BlobAddressCacheService.CACHE_TTL_HOURS): boolean {
+  private isExpired(
+    cached: any,
+    maxAgeHours: number = BlobAddressCacheService.CACHE_TTL_HOURS,
+  ): boolean {
     if (!cached.cachedAt) return false;
-    
+
     const cachedAt = new Date(cached.cachedAt);
     const now = new Date();
     const hoursDiff = (now.getTime() - cachedAt.getTime()) / (1000 * 60 * 60);
@@ -90,7 +99,9 @@ Deno.test("Address Cache v2 - basic operations", async () => {
   const cache = new BlobAddressCacheService(blobStorage);
 
   // Should return null for non-existent address
-  const notFound = await cache.getAddress("at://did:plc:test/com.atproto.repo.strongRef/address1");
+  const notFound = await cache.getAddress(
+    "at://did:plc:test/com.atproto.repo.strongRef/address1",
+  );
   assertEquals(notFound, null);
 
   // Should store and retrieve address
@@ -130,10 +141,15 @@ Deno.test("Address Cache v2 - cache expiration", async () => {
     cachedAt: new Date(Date.now() - 25 * 60 * 60 * 1000).toISOString(), // 25 hours ago
   };
 
-  await blobStorage.set("address_cache_at://did:plc:test/com.atproto.repo.strongRef/expired", expiredAddress);
+  await blobStorage.set(
+    "address_cache_at://did:plc:test/com.atproto.repo.strongRef/expired",
+    expiredAddress,
+  );
 
   // Should return null for expired cache
-  const result = await cache.getAddress("at://did:plc:test/com.atproto.repo.strongRef/expired");
+  const result = await cache.getAddress(
+    "at://did:plc:test/com.atproto.repo.strongRef/expired",
+  );
   assertEquals(result, null);
 
   // Should clean up expired entry
@@ -147,9 +163,18 @@ Deno.test("Address Cache v2 - list cached addresses", async () => {
 
   // Add multiple addresses
   const addresses = [
-    { uri: "at://did:plc:test/com.atproto.repo.strongRef/addr1", name: "Location 1" },
-    { uri: "at://did:plc:test/com.atproto.repo.strongRef/addr2", name: "Location 2" },
-    { uri: "at://did:plc:test/com.atproto.repo.strongRef/addr3", name: "Location 3" },
+    {
+      uri: "at://did:plc:test/com.atproto.repo.strongRef/addr1",
+      name: "Location 1",
+    },
+    {
+      uri: "at://did:plc:test/com.atproto.repo.strongRef/addr2",
+      name: "Location 2",
+    },
+    {
+      uri: "at://did:plc:test/com.atproto.repo.strongRef/addr3",
+      name: "Location 3",
+    },
   ];
 
   for (const addr of addresses) {
@@ -159,11 +184,14 @@ Deno.test("Address Cache v2 - list cached addresses", async () => {
   // Should list all cached addresses
   const cachedUris = await cache.getCachedAddresses();
   assertEquals(cachedUris.length, 3);
-  assertEquals(cachedUris.sort(), [
-    "at://did:plc:test/com.atproto.repo.strongRef/addr1",
-    "at://did:plc:test/com.atproto.repo.strongRef/addr2", 
-    "at://did:plc:test/com.atproto.repo.strongRef/addr3",
-  ].sort());
+  assertEquals(
+    cachedUris.sort(),
+    [
+      "at://did:plc:test/com.atproto.repo.strongRef/addr1",
+      "at://did:plc:test/com.atproto.repo.strongRef/addr2",
+      "at://did:plc:test/com.atproto.repo.strongRef/addr3",
+    ].sort(),
+  );
 });
 
 Deno.test("Address Cache v2 - clear expired addresses", async () => {
@@ -179,18 +207,24 @@ Deno.test("Address Cache v2 - clear expired addresses", async () => {
 
   // Manually add expired addresses
   const expiredTime = new Date(Date.now() - 25 * 60 * 60 * 1000).toISOString();
-  
-  await blobStorage.set("address_cache_at://did:plc:test/com.atproto.repo.strongRef/expired1", {
-    uri: "at://did:plc:test/com.atproto.repo.strongRef/expired1",
-    name: "Expired 1",
-    cachedAt: expiredTime,
-  });
 
-  await blobStorage.set("address_cache_at://did:plc:test/com.atproto.repo.strongRef/expired2", {
-    uri: "at://did:plc:test/com.atproto.repo.strongRef/expired2",
-    name: "Expired 2", 
-    cachedAt: expiredTime,
-  });
+  await blobStorage.set(
+    "address_cache_at://did:plc:test/com.atproto.repo.strongRef/expired1",
+    {
+      uri: "at://did:plc:test/com.atproto.repo.strongRef/expired1",
+      name: "Expired 1",
+      cachedAt: expiredTime,
+    },
+  );
+
+  await blobStorage.set(
+    "address_cache_at://did:plc:test/com.atproto.repo.strongRef/expired2",
+    {
+      uri: "at://did:plc:test/com.atproto.repo.strongRef/expired2",
+      name: "Expired 2",
+      cachedAt: expiredTime,
+    },
+  );
 
   // Should have 3 total addresses
   const beforeCleanup = await cache.getCachedAddresses();
@@ -203,7 +237,10 @@ Deno.test("Address Cache v2 - clear expired addresses", async () => {
   // Should have 1 remaining address
   const afterCleanup = await cache.getCachedAddresses();
   assertEquals(afterCleanup.length, 1);
-  assertEquals(afterCleanup[0], "at://did:plc:test/com.atproto.repo.strongRef/fresh");
+  assertEquals(
+    afterCleanup[0],
+    "at://did:plc:test/com.atproto.repo.strongRef/fresh",
+  );
 });
 
 Deno.test("Address Cache v2 - handle missing cache metadata", async () => {
@@ -216,10 +253,15 @@ Deno.test("Address Cache v2 - handle missing cache metadata", async () => {
     name: "No Timestamp Location",
   };
 
-  await blobStorage.set("address_cache_at://did:plc:test/com.atproto.repo.strongRef/no-timestamp", addressWithoutTimestamp);
+  await blobStorage.set(
+    "address_cache_at://did:plc:test/com.atproto.repo.strongRef/no-timestamp",
+    addressWithoutTimestamp,
+  );
 
   // Should return address (not expired if no timestamp)
-  const result = await cache.getAddress("at://did:plc:test/com.atproto.repo.strongRef/no-timestamp");
+  const result = await cache.getAddress(
+    "at://did:plc:test/com.atproto.repo.strongRef/no-timestamp",
+  );
   assertExists(result);
   assertEquals(result.name, "No Timestamp Location");
 });
@@ -248,7 +290,9 @@ Deno.test("Address Cache v2 - update existing address", async () => {
   await cache.setAddress(updatedAddress);
 
   // Should have updated data
-  const retrieved = await cache.getAddress("at://did:plc:test/com.atproto.repo.strongRef/update");
+  const retrieved = await cache.getAddress(
+    "at://did:plc:test/com.atproto.repo.strongRef/update",
+  );
   assertExists(retrieved);
   assertEquals(retrieved.name, "Updated Name");
   assertEquals(retrieved.street, "New Street");

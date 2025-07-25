@@ -246,7 +246,7 @@ export async function getUnresolvedAddresses(
 
   // Ensure results is an array before mapping
   const resultArray = Array.isArray(results) ? results : [];
-  
+
   return resultArray.map((row) => ({
     checkinId: row.id as string,
     addressRef: {

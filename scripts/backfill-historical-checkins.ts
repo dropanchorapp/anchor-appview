@@ -10,14 +10,14 @@ async function getCheckinRecords(did: string): Promise<any[]> {
     repo: did,
     collection: "app.dropanchor.checkin",
     limit: "100",
-    reverse: "true"
+    reverse: "true",
   });
-  
+
   const response = await fetch(`${url}?${params}`);
   if (!response.ok) {
     throw new Error(`Failed to fetch records: ${response.status}`);
   }
-  
+
   const data = await response.json();
   return data.records || [];
 }
@@ -76,27 +76,34 @@ async function initializeTables(): Promise<void> {
   `);
 }
 
-async function processCheckinRecord(record: any, authorDid: string): Promise<boolean> {
-  const rkey = record.uri.split('/').pop();
-  
+async function processCheckinRecord(
+  record: any,
+  authorDid: string,
+): Promise<boolean> {
+  const rkey = record.uri.split("/").pop();
+
   // Only process new format with addressRef StrongRefs
   if (!record.value.addressRef) {
     return false; // Skip legacy format
   }
-  
+
   // Check if already exists
   const existing = await sqlite.execute(
     `SELECT id FROM checkins_v1 WHERE id = ?`,
-    [rkey]
+    [rkey],
   );
   if (existing.length > 0) {
     return false; // Already exists
   }
-  
+
   // Extract coordinates from new format
-  const lat = record.value.coordinates?.latitude ? parseFloat(record.value.coordinates.latitude) : null;
-  const lng = record.value.coordinates?.longitude ? parseFloat(record.value.coordinates.longitude) : null;
-  
+  const lat = record.value.coordinates?.latitude
+    ? parseFloat(record.value.coordinates.latitude)
+    : null;
+  const lng = record.value.coordinates?.longitude
+    ? parseFloat(record.value.coordinates.longitude)
+    : null;
+
   // Insert checkin with StrongRef
   await sqlite.execute(
     `
@@ -115,84 +122,88 @@ async function processCheckinRecord(record: any, authorDid: string): Promise<boo
       lng,
       record.value.addressRef?.uri || null,
       record.value.addressRef?.cid || null,
-    ]
+    ],
   );
-  
+
   // Trigger address resolution if needed
   if (record.value.addressRef?.uri) {
     try {
       // Import and call the address resolver (if available in this context)
-      const { resolveAndCacheAddress } = await import("../src/utils/address-resolver.ts");
+      const { resolveAndCacheAddress } = await import(
+        "../src/utils/address-resolver.ts"
+      );
       await resolveAndCacheAddress(rkey, record.value.addressRef);
     } catch (error) {
-      console.log(`   ⚠️  Address resolution failed for ${rkey}: ${error.message}`);
+      console.log(
+        `   ⚠️  Address resolution failed for ${rkey}: ${error.message}`,
+      );
     }
   }
-  
+
   return true; // New record added
 }
 
-export default async function(): Promise<Response> {
+export default async function (): Promise<Response> {
   const output: string[] = [];
   let totalProcessed = 0;
   let totalAdded = 0;
   let errors = 0;
-  
+
   try {
     output.push("🔄 Backfilling historical check-in records...");
     await initializeTables();
-    
+
     // Known DIDs that have check-in records
     const knownDids = [
       "did:plc:wxex3wx5k4ctciupsv5m5stb",
-      "did:plc:z4r4rg2j6eoqqxzkgr36xqzb"
+      "did:plc:z4r4rg2j6eoqqxzkgr36xqzb",
     ];
-    
+
     for (const did of knownDids) {
       output.push(`\n🔍 Processing DID: ${did}`);
-      
+
       try {
         const records = await getCheckinRecords(did);
         output.push(`   Found ${records.length} records`);
-        
+
         for (const record of records) {
           totalProcessed++;
           const added = await processCheckinRecord(record, did);
           if (added) {
             totalAdded++;
-            output.push(`   ✅ Added: ${record.uri.split('/').pop()}`);
+            output.push(`   ✅ Added: ${record.uri.split("/").pop()}`);
           } else {
-            output.push(`   ⏭️  Skipped (exists): ${record.uri.split('/').pop()}`);
+            output.push(
+              `   ⏭️  Skipped (exists): ${record.uri.split("/").pop()}`,
+            );
           }
         }
-        
       } catch (error) {
         errors++;
         output.push(`   ❌ Error processing ${did}: ${error.message}`);
       }
     }
-    
+
     // Log the backfill run
     await sqlite.execute(
       `INSERT INTO processing_log_v1 (run_at, events_processed, errors, duration_ms) VALUES (?, ?, ?, ?)`,
-      [new Date().toISOString(), totalAdded, errors, Date.now()]
+      [new Date().toISOString(), totalAdded, errors, Date.now()],
     );
-    
+
     output.push(`\n📊 Backfill Summary:`);
     output.push(`   Records processed: ${totalProcessed}`);
     output.push(`   New records added: ${totalAdded}`);
     output.push(`   Errors: ${errors}`);
     output.push(`\n🏁 Backfill complete!`);
-    
-    return new Response(output.join('\n'), {
-      headers: { "Content-Type": "text/plain" }
+
+    return new Response(output.join("\n"), {
+      headers: { "Content-Type": "text/plain" },
     });
-    
   } catch (error) {
     output.push(`\n❌ Backfill failed: ${error.message}`);
-    return new Response(output.join('\n'), {
+    return new Response(output.join("\n"), {
       status: 500,
-      headers: { "Content-Type": "text/plain" }
+      headers: { "Content-Type": "text/plain" },
     });
   }
 }

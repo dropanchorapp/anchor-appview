@@ -3,9 +3,9 @@ import {
   assertExists,
 } from "https://deno.land/std@0.208.0/assert/mod.ts";
 
-import { 
+import {
   InMemoryStorageProvider,
-  ProfileData 
+  ProfileData,
 } from "../../src/utils/storage-provider.ts";
 
 Deno.test("InMemoryStorageProvider - basic operations", async () => {
@@ -98,7 +98,7 @@ Deno.test("InMemoryStorageProvider - getStaleProfiles", async () => {
 
   await storage.setProfile({
     did: "did:plc:stale2",
-    handle: "stale2.bsky.social", 
+    handle: "stale2.bsky.social",
     displayName: "Stale User 2",
     fetchedAt: stale2.toISOString(),
     updatedAt: stale2.toISOString(),
@@ -134,7 +134,7 @@ Deno.test("InMemoryStorageProvider - getStaleProfiles with limit", async () => {
 
   // Should return only 3 profiles
   assertEquals(staleProfiles.length, 3);
-  
+
   // Should be sorted by age (oldest first)
   assertEquals(staleProfiles[0].did, "did:plc:stale4"); // Oldest
   assertEquals(staleProfiles[1].did, "did:plc:stale3");
@@ -156,7 +156,7 @@ Deno.test("InMemoryStorageProvider - clear functionality", async () => {
   await storage.setProfile({
     did: "did:plc:test2",
     handle: "test2.bsky.social",
-    displayName: "Test 2", 
+    displayName: "Test 2",
     fetchedAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),
   });
@@ -186,11 +186,11 @@ Deno.test("InMemoryStorageProvider - ensureTablesExist is no-op", async () => {
 
   // Should not throw
   await storage.ensureTablesExist();
-  
+
   // Should still work normally
   await storage.setProfile({
     did: "did:plc:test",
-    handle: "test.bsky.social", 
+    handle: "test.bsky.social",
     displayName: "Test User",
     fetchedAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),

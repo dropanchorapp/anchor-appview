@@ -34,7 +34,10 @@ export interface CheckinStorageProvider {
   getCheckin(id: string): Promise<CheckinData | null>;
   setCheckin(checkin: CheckinData): Promise<void>;
   checkinExists(id: string): Promise<boolean>;
-  getCheckinsByAuthor(authorDid: string, limit?: number): Promise<CheckinData[]>;
+  getCheckinsByAuthor(
+    authorDid: string,
+    limit?: number,
+  ): Promise<CheckinData[]>;
   getAllCheckins(limit?: number): Promise<CheckinData[]>;
   ensureTablesExist(): Promise<void>;
 }
@@ -60,7 +63,7 @@ export class SqliteCheckinStorage implements CheckinStorageProvider {
   async getCheckin(id: string): Promise<CheckinData | null> {
     const result = await this.sqlite.execute(
       "SELECT * FROM checkins_v1 WHERE id = ?",
-      [id]
+      [id],
     );
 
     if (result.rows && result.rows.length > 0) {
@@ -86,34 +89,37 @@ export class SqliteCheckinStorage implements CheckinStorageProvider {
         checkin.longitude || null,
         checkin.addressRefUri || null,
         checkin.addressRefCid || null,
-      ]
+      ],
     );
   }
 
   async checkinExists(id: string): Promise<boolean> {
     const result = await this.sqlite.execute(
       "SELECT id FROM checkins_v1 WHERE id = ?",
-      [id]
+      [id],
     );
     return result.rows && result.rows.length > 0;
   }
 
-  async getCheckinsByAuthor(authorDid: string, limit: number = 50): Promise<CheckinData[]> {
+  async getCheckinsByAuthor(
+    authorDid: string,
+    limit: number = 50,
+  ): Promise<CheckinData[]> {
     const result = await this.sqlite.execute(
       "SELECT * FROM checkins_v1 WHERE author_did = ? ORDER BY created_at DESC LIMIT ?",
-      [authorDid, limit]
+      [authorDid, limit],
     );
 
-    return (result.rows || []).map(row => this.mapRowToCheckin(row));
+    return (result.rows || []).map((row) => this.mapRowToCheckin(row));
   }
 
   async getAllCheckins(limit: number = 50): Promise<CheckinData[]> {
     const result = await this.sqlite.execute(
       "SELECT * FROM checkins_v1 ORDER BY created_at DESC LIMIT ?",
-      [limit]
+      [limit],
     );
 
-    return (result.rows || []).map(row => this.mapRowToCheckin(row));
+    return (result.rows || []).map((row) => this.mapRowToCheckin(row));
   }
 
   async ensureTablesExist(): Promise<void> {
@@ -156,7 +162,7 @@ export class SqliteAddressStorage implements AddressStorageProvider {
   async getAddress(uri: string): Promise<AddressData | null> {
     const result = await this.sqlite.execute(
       "SELECT * FROM address_cache_v1 WHERE uri = ?",
-      [uri]
+      [uri],
     );
 
     if (result.rows && result.rows.length > 0) {
@@ -185,17 +191,17 @@ export class SqliteAddressStorage implements AddressStorageProvider {
         address.fullData ? JSON.stringify(address.fullData) : null,
         address.resolvedAt || null,
         address.failedAt || null,
-      ]
+      ],
     );
   }
 
   async getFailedAddresses(limit: number = 50): Promise<AddressData[]> {
     const result = await this.sqlite.execute(
       "SELECT * FROM address_cache_v1 WHERE failed_at IS NOT NULL ORDER BY failed_at DESC LIMIT ?",
-      [limit]
+      [limit],
     );
 
-    return (result.rows || []).map(row => this.mapRowToAddress(row));
+    return (result.rows || []).map((row) => this.mapRowToAddress(row));
   }
 
   async ensureTablesExist(): Promise<void> {
@@ -254,17 +260,24 @@ export class InMemoryCheckinStorage implements CheckinStorageProvider {
     return Promise.resolve(this.checkins.has(id));
   }
 
-  getCheckinsByAuthor(authorDid: string, limit: number = 50): Promise<CheckinData[]> {
-    return Promise.resolve(Array.from(this.checkins.values())
-      .filter(checkin => checkin.authorDid === authorDid)
-      .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
-      .slice(0, limit));
+  getCheckinsByAuthor(
+    authorDid: string,
+    limit: number = 50,
+  ): Promise<CheckinData[]> {
+    return Promise.resolve(
+      Array.from(this.checkins.values())
+        .filter((checkin) => checkin.authorDid === authorDid)
+        .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
+        .slice(0, limit),
+    );
   }
 
   getAllCheckins(limit: number = 50): Promise<CheckinData[]> {
-    return Promise.resolve(Array.from(this.checkins.values())
-      .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
-      .slice(0, limit));
+    return Promise.resolve(
+      Array.from(this.checkins.values())
+        .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
+        .slice(0, limit),
+    );
   }
 
   ensureTablesExist(): Promise<void> {
@@ -290,10 +303,12 @@ export class InMemoryAddressStorage implements AddressStorageProvider {
   }
 
   getFailedAddresses(limit: number = 50): Promise<AddressData[]> {
-    return Promise.resolve(Array.from(this.addresses.values())
-      .filter(address => address.failedAt)
-      .sort((a, b) => (b.failedAt || '').localeCompare(a.failedAt || ''))
-      .slice(0, limit));
+    return Promise.resolve(
+      Array.from(this.addresses.values())
+        .filter((address) => address.failedAt)
+        .sort((a, b) => (b.failedAt || "").localeCompare(a.failedAt || ""))
+        .slice(0, limit),
+    );
   }
 
   ensureTablesExist(): Promise<void> {
@@ -325,7 +340,9 @@ export class InMemoryBlobStorage implements BlobStorageProvider {
 
   list(prefix?: string): Promise<string[]> {
     if (prefix) {
-      return Promise.resolve(Array.from(this.blobs.keys()).filter(key => key.startsWith(prefix)));
+      return Promise.resolve(
+        Array.from(this.blobs.keys()).filter((key) => key.startsWith(prefix)),
+      );
     }
     return Promise.resolve(Array.from(this.blobs.keys()));
   }
