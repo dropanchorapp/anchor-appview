@@ -14,14 +14,34 @@ export default async function () {
   // Initialize database tables - run on every execution for robustness
   await initializeTables();
 
-  // Connect to Jetstream with cursor-based resumption
-  const result = await connectAndProcess();
-  eventsProcessed = result.eventsProcessed;
-  errors = result.errors;
+  // Try to connect to Jetstream with retry logic
+  let jetStreamSuccess = false;
+  const maxRetries = 3;
+  
+  for (let attempt = 1; attempt <= maxRetries; attempt++) {
+    try {
+      console.log(`Jetstream connection attempt ${attempt}/${maxRetries}...`);
+      const result = await connectAndProcess();
+      eventsProcessed = result.eventsProcessed;
+      errors = result.errors;
+      jetStreamSuccess = true;
+      break;
+    } catch (error) {
+      console.error(`Jetstream connection attempt ${attempt} failed:`, error);
+      errors++;
+      
+      if (attempt < maxRetries) {
+        // Exponential backoff: 1s, 2s, 4s
+        const backoffMs = Math.pow(2, attempt - 1) * 1000;
+        console.log(`Waiting ${backoffMs}ms before retry...`);
+        await new Promise(resolve => setTimeout(resolve, backoffMs));
+      }
+    }
+  }
 
-  // If Jetstream found no events, fall back to AT Protocol polling
-  if (eventsProcessed === 0) {
-    console.log("No events from Jetstream, trying AT Protocol polling fallback...");
+  // Always fall back to AT Protocol polling if Jetstream fails or finds no events
+  if (!jetStreamSuccess || eventsProcessed === 0) {
+    console.log("Falling back to AT Protocol polling...");
     const fallbackResult = await pollATProtocolForNewCheckins();
     eventsProcessed += fallbackResult.eventsProcessed;
     errors += fallbackResult.errors;
@@ -44,6 +64,11 @@ export default async function () {
     ],
   );
 
+  // Log connection health status
+  if (errors > 0) {
+    console.log(`⚠️ Jetstream connection had ${errors} errors but completed with fallback`);
+  }
+  
   console.log(
     `Polling completed: ${eventsProcessed} events, ${errors} errors, ${duration}ms`,
   );
@@ -152,7 +177,6 @@ function connectAndProcess(): Promise<
   return new Promise((resolve, reject) => {
     let eventsProcessed = 0;
     let errors = 0;
-    const _isProcessingHistorical = true;
     let _lastEventTime = Date.now();
     const sessionStartTime = Date.now();
     
@@ -172,7 +196,25 @@ function connectAndProcess(): Promise<
     const wsUrl = `wss://jetstream.atproto.tools/subscribe?wantedCollections=app.dropanchor.checkin${cursorParam}`;
     
     console.log(`Connecting to Jetstream with cursor: ${lastTimestamp || 'none (live-tail)'}`);
-    const ws = new WebSocket(wsUrl);
+    console.log(`WebSocket URL: ${wsUrl}`);
+    
+    let ws: WebSocket;
+    try {
+      ws = new WebSocket(wsUrl);
+    } catch (error) {
+      console.error("Failed to create WebSocket:", error);
+      reject(new Error(`Failed to create WebSocket: ${error}`));
+      return;
+    }
+    
+    // Connection timeout - reject if not connected within 10 seconds
+    const connectionTimeout = setTimeout(() => {
+      if (ws.readyState !== WebSocket.OPEN) {
+        console.error("WebSocket connection timeout - not connected after 10s");
+        ws.close();
+        reject(new Error("WebSocket connection timeout"));
+      }
+    }, 10000);
 
     // Timeout for safety (50 seconds max - well under Val Town's 1 min free limit)
     const safetyTimeout = setTimeout(() => {
@@ -194,6 +236,7 @@ function connectAndProcess(): Promise<
 
     ws.onopen = () => {
       console.log("Connected to Jetstream WebSocket");
+      clearTimeout(connectionTimeout);
     };
 
     ws.onmessage = async (event) => {
@@ -249,14 +292,24 @@ function connectAndProcess(): Promise<
     };
 
     ws.onerror = (error) => {
-      console.error("WebSocket error:", error);
+      console.error("WebSocket error details:", {
+        error: error,
+        readyState: ws.readyState,
+        url: wsUrl,
+        time: new Date().toISOString()
+      });
+      clearTimeout(connectionTimeout);
       clearTimeout(safetyTimeout);
       clearTimeout(inactivityTimer);
-      reject(new Error("WebSocket connection failed"));
+      
+      // Provide more specific error message
+      const errorMsg = error instanceof Error ? error.message : "Unknown WebSocket error";
+      reject(new Error(`WebSocket connection failed: ${errorMsg}`));
     };
 
     ws.onclose = () => {
       console.log("WebSocket connection closed");
+      clearTimeout(connectionTimeout);
       clearTimeout(safetyTimeout);
       clearTimeout(inactivityTimer);
       
@@ -425,7 +478,7 @@ async function pollATProtocolForNewCheckins(): Promise<{ eventsProcessed: number
           `SELECT id FROM checkins_v1 WHERE id = ?`,
           [rkey]
         );
-        if (existing.length > 0) {
+        if (existing.rows && existing.rows.length > 0) {
           continue; // Already exists
         }
         
