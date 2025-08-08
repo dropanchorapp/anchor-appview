@@ -82,12 +82,60 @@ export default async function (req: Request): Promise<Response> {
     });
   }
 
-  // Main dashboard
-  if (url.pathname === "/") {
+  // Admin dashboard (keep the old stats-based interface)
+  if (url.pathname === "/admin") {
     await initializeTables();
     await initializeOAuthTables();
     const stats = await getDashboardStats();
     const html = generateDashboardHTML(stats, url);
+
+    return new Response(html, {
+      headers: {
+        "Content-Type": "text/html",
+        "Cache-Control": "no-cache, max-age=0",
+      },
+    });
+  }
+
+  // Main dashboard
+  if (url.pathname === "/") {
+    await initializeTables();
+    await initializeOAuthTables();
+    
+    // Check authentication status
+    const loginSuccess = url.searchParams.get("login") === "success";
+    const loginHandle = url.searchParams.get("handle");
+    const feedType = url.searchParams.get("feed") || "global"; // default to global
+    
+    // For now, we'll simulate authentication check
+    // TODO: Implement proper session-based auth check
+    const isAuthenticated = loginSuccess;
+    const userHandle = loginHandle;
+    
+    // Load appropriate feed
+    let feedData;
+    if (isAuthenticated && feedType === "following" && userHandle) {
+      // Load following feed - we'll need to implement session lookup later
+      // For now, show empty state for following feed
+      feedData = { 
+        checkins: [], // TODO: Implement actual following feed
+        feedType: "following",
+        isAuthenticated: true,
+        userHandle 
+      };
+    } else {
+      // Load global feed
+      const feedResponse = await getGlobalFeed(url, {} as CorsHeaders);
+      const feedJson = await feedResponse.json();
+      feedData = { 
+        checkins: feedJson.checkins || [],
+        feedType: "global",
+        isAuthenticated,
+        userHandle 
+      };
+    }
+    
+    const html = generateConsumerDashboardHTML(feedData, url);
 
     return new Response(html, {
       headers: {
@@ -625,6 +673,372 @@ async function getDashboardStats() {
   };
 }
 
+function formatTimeAgo(dateString: string): string {
+  const date = new Date(dateString);
+  const now = new Date();
+  const diffMs = now.getTime() - date.getTime();
+  const diffSecs = Math.floor(diffMs / 1000);
+  const diffMins = Math.floor(diffSecs / 60);
+  const diffHours = Math.floor(diffMins / 60);
+  const diffDays = Math.floor(diffHours / 24);
+
+  if (diffSecs < 60) return 'now';
+  if (diffMins < 60) return diffMins + 'm';
+  if (diffHours < 24) return diffHours + 'h';
+  if (diffDays < 7) return diffDays + 'd';
+  return date.toLocaleDateString();
+}
+
+function generateConsumerDashboardHTML(feedData: any, url: URL): string {
+  const { checkins, feedType, isAuthenticated, userHandle } = feedData;
+  
+  return `
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Anchor - Check-ins near you</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+            line-height: 1.5;
+            color: #1c1c1e;
+            background: #f2f2f7;
+            min-height: 100vh;
+        }
+        
+        .header {
+            background: white;
+            border-bottom: 1px solid #e5e5ea;
+            position: sticky;
+            top: 0;
+            z-index: 100;
+            padding: 12px 16px;
+        }
+        
+        .header-content {
+            max-width: 600px;
+            margin: 0 auto;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+        
+        .logo {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 20px;
+            font-weight: 600;
+            color: #1c1c1e;
+            text-decoration: none;
+        }
+        
+        .header-actions {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+        
+        .login-btn {
+            background: #007aff;
+            color: white;
+            border: none;
+            padding: 8px 16px;
+            border-radius: 18px;
+            font-size: 14px;
+            font-weight: 500;
+            text-decoration: none;
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+        }
+        
+        .login-btn:hover {
+            background: #0056cc;
+        }
+        
+        .user-info {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 14px;
+            color: #3c3c43;
+        }
+        
+        .main-content {
+            max-width: 600px;
+            margin: 0 auto;
+            padding: 0 16px;
+        }
+        
+        .feed-controls {
+            background: white;
+            border-radius: 12px;
+            margin: 16px 0;
+            padding: 16px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+        }
+        
+        .feed-tabs {
+            display: flex;
+            background: #f2f2f7;
+            border-radius: 8px;
+            padding: 2px;
+        }
+        
+        .feed-tab {
+            flex: 1;
+            padding: 8px 16px;
+            text-align: center;
+            border-radius: 6px;
+            font-size: 14px;
+            font-weight: 500;
+            text-decoration: none;
+            color: #3c3c43;
+            transition: all 0.2s;
+        }
+        
+        .feed-tab.active {
+            background: white;
+            color: #007aff;
+            box-shadow: 0 1px 2px rgba(0,0,0,0.1);
+        }
+        
+        .feed-tab:hover:not(.active) {
+            background: #e5e5ea;
+        }
+        
+        .checkin-card {
+            background: white;
+            border-radius: 12px;
+            padding: 16px;
+            margin-bottom: 12px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+        }
+        
+        .checkin-header {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            margin-bottom: 12px;
+        }
+        
+        .user-avatar {
+            width: 40px;
+            height: 40px;
+            border-radius: 20px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-weight: 600;
+            font-size: 16px;
+        }
+        
+        .user-info-card {
+            flex: 1;
+        }
+        
+        .user-name {
+            font-weight: 600;
+            font-size: 15px;
+            color: #1c1c1e;
+        }
+        
+        .user-handle {
+            font-size: 13px;
+            color: #8e8e93;
+        }
+        
+        .checkin-time {
+            font-size: 13px;
+            color: #8e8e93;
+        }
+        
+        .checkin-content {
+            margin-bottom: 12px;
+        }
+        
+        .checkin-text {
+            font-size: 15px;
+            line-height: 1.4;
+            color: #1c1c1e;
+            margin-bottom: 8px;
+        }
+        
+        .checkin-location {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            font-size: 14px;
+            color: #007aff;
+            background: #f0f8ff;
+            padding: 6px 10px;
+            border-radius: 8px;
+            width: fit-content;
+        }
+        
+        .location-icon {
+            font-size: 12px;
+        }
+        
+        .empty-state {
+            text-align: center;
+            padding: 60px 20px;
+            color: #8e8e93;
+        }
+        
+        .empty-state-icon {
+            font-size: 48px;
+            margin-bottom: 16px;
+        }
+        
+        .empty-state h3 {
+            font-size: 20px;
+            margin-bottom: 8px;
+            color: #1c1c1e;
+        }
+        
+        .empty-state p {
+            font-size: 15px;
+            line-height: 1.4;
+        }
+        
+        .footer {
+            text-align: center;
+            padding: 40px 16px;
+            color: #8e8e93;
+            font-size: 13px;
+        }
+        
+        @media (max-width: 640px) {
+            .header-content {
+                padding: 0 4px;
+            }
+            
+            .main-content {
+                padding: 0 12px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <header class="header">
+        <div class="header-content">
+            <a href="/" class="logo">
+                ⚓ Anchor
+            </a>
+            <div class="header-actions">
+                ${isAuthenticated 
+                  ? `
+                    <div class="user-info">
+                        <span>@${userHandle}</span>
+                    </div>
+                  `
+                  : `
+                    <a href="/login" class="login-btn">
+                        🔐 Sign in
+                    </a>
+                  `
+                }
+            </div>
+        </div>
+    </header>
+
+    <main class="main-content">
+        ${isAuthenticated ? `
+        <div class="feed-controls">
+            <div class="feed-tabs">
+                <a href="/?feed=following" class="feed-tab ${feedType === 'following' ? 'active' : ''}">
+                    Following
+                </a>
+                <a href="/?feed=global" class="feed-tab ${feedType === 'global' ? 'active' : ''}">
+                    Global
+                </a>
+            </div>
+        </div>
+        ` : ''}
+
+        <div class="feed">
+            ${checkins.length > 0 ? checkins.map((checkin: any) => `
+                <div class="checkin-card">
+                    <div class="checkin-header">
+                        <div class="user-avatar">
+                            ${checkin.author.displayName ? checkin.author.displayName.charAt(0).toUpperCase() : checkin.author.handle.charAt(0).toUpperCase()}
+                        </div>
+                        <div class="user-info-card">
+                            <div class="user-name">${checkin.author.displayName || checkin.author.handle}</div>
+                            <div class="user-handle">@${checkin.author.handle}</div>
+                        </div>
+                        <div class="checkin-time" data-created-at="${checkin.createdAt}">${formatTimeAgo(checkin.createdAt)}</div>
+                    </div>
+                    <div class="checkin-content">
+                        ${checkin.text ? `<div class="checkin-text">${checkin.text}</div>` : ''}
+                        ${checkin.address?.name || checkin.address?.locality ? `
+                        <div class="checkin-location">
+                            <span class="location-icon">📍</span>
+                            <span>${checkin.address.name || checkin.address.locality}${checkin.address.locality && checkin.address.name ? `, ${checkin.address.locality}` : ''}</span>
+                        </div>
+                        ` : ''}
+                    </div>
+                </div>
+            `).join('') : `
+                <div class="empty-state">
+                    <div class="empty-state-icon">📍</div>
+                    <h3>${isAuthenticated && feedType === 'following' ? "No check-ins from people you follow" : "No check-ins yet"}</h3>
+                    <p>${isAuthenticated && feedType === 'following' ? "Check-ins from people you follow will appear here." : "Check-ins from the community will appear here as people start sharing their locations."}</p>
+                </div>
+            `}
+        </div>
+    </main>
+
+    <footer class="footer">
+        <p>Anchor • Location check-ins for AT Protocol</p>
+    </footer>
+
+    <script>
+        function formatTimeAgo(dateString) {
+            const date = new Date(dateString);
+            const now = new Date();
+            const diffMs = now - date;
+            const diffSecs = Math.floor(diffMs / 1000);
+            const diffMins = Math.floor(diffSecs / 60);
+            const diffHours = Math.floor(diffMins / 60);
+            const diffDays = Math.floor(diffHours / 24);
+
+            if (diffSecs < 60) return 'now';
+            if (diffMins < 60) return diffMins + 'm';
+            if (diffHours < 24) return diffHours + 'h';
+            if (diffDays < 7) return diffDays + 'd';
+            return date.toLocaleDateString();
+        }
+
+        // Update relative times every minute
+        setInterval(() => {
+            document.querySelectorAll('.checkin-time').forEach(el => {
+                const checkinCard = el.closest('.checkin-card');
+                const dateString = checkinCard?.dataset.createdAt;
+                if (dateString) {
+                    el.textContent = formatTimeAgo(dateString);
+                }
+            });
+        }, 60000);
+    </script>
+</body>
+</html>
+  `;
+}
+
+// Keep the old function for now in case we need admin access
 function generateDashboardHTML(stats: any, url: URL): string {
   const addressResolutionRate = stats.totalCheckins > 0
     ? ((stats.checkinsWithAddresses / stats.totalCheckins) * 100).toFixed(1)
