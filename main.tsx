@@ -1,13 +1,43 @@
 // @val-town anchordashboard
-// Main frontend dashboard for Anchor AppView feed generator
+// Main frontend dashboard for Anchor AppView feed generator with OAuth authentication
 import { sqlite } from "https://esm.town/v/stevekrouse/sqlite";
+import {
+  handleClientMetadata,
+  handleOAuthCallback,
+  handleOAuthStart,
+} from "./src/oauth/endpoints.ts";
+import { initializeOAuthTables } from "./src/oauth/session.ts";
 
 export default async function (req: Request): Promise<Response> {
   const url = new URL(req.url);
 
-  // Handle different dashboard pages
+  // Handle OAuth endpoints
+  if (url.pathname === "/client-metadata.json") {
+    return handleClientMetadata();
+  }
+
+  if (url.pathname === "/api/auth/start" && req.method === "POST") {
+    return handleOAuthStart(req);
+  }
+
+  if (url.pathname === "/oauth/callback") {
+    return handleOAuthCallback(req);
+  }
+
+  // Login page
+  if (url.pathname === "/login") {
+    await initializeOAuthTables();
+    const html = generateLoginHTML(url);
+    return new Response(html, {
+      headers: {
+        "Content-Type": "text/html",
+        "Cache-Control": "no-cache, max-age=0",
+      },
+    });
+  }
+
+  // Handle API redirect
   if (url.pathname === "/api") {
-    // Redirect to API documentation (Val Town compatible redirect)
     return new Response(null, {
       status: 302,
       headers: { Location: "https://anchor-feed-generator.val.run" },
@@ -16,8 +46,9 @@ export default async function (req: Request): Promise<Response> {
 
   // Main dashboard
   await initializeTables();
+  await initializeOAuthTables();
   const stats = await getDashboardStats();
-  const html = generateDashboardHTML(stats);
+  const html = generateDashboardHTML(stats, url);
 
   return new Response(html, {
     headers: {
@@ -78,6 +109,20 @@ async function initializeTables() {
       events_processed INTEGER DEFAULT 0,
       errors INTEGER DEFAULT 0,
       duration_ms INTEGER
+    )
+  `);
+
+  await sqlite.execute(`
+    CREATE TABLE IF NOT EXISTS oauth_sessions (
+      did TEXT PRIMARY KEY,
+      handle TEXT NOT NULL,
+      pds_url TEXT NOT NULL,
+      access_token TEXT NOT NULL,
+      refresh_token TEXT NOT NULL,
+      dpop_private_key TEXT NOT NULL,
+      dpop_public_key TEXT NOT NULL,
+      created_at INTEGER NOT NULL,
+      updated_at INTEGER NOT NULL
     )
   `);
 }
@@ -162,10 +207,13 @@ async function getDashboardStats() {
   };
 }
 
-function generateDashboardHTML(stats: any): string {
+function generateDashboardHTML(stats: any, url: URL): string {
   const addressResolutionRate = stats.totalCheckins > 0
     ? ((stats.checkinsWithAddresses / stats.totalCheckins) * 100).toFixed(1)
     : 0;
+
+  // Check for login success message
+  const loginSuccess = url.searchParams.get("login") === "success";
 
   return `
 <!DOCTYPE html>
@@ -296,17 +344,51 @@ function generateDashboardHTML(stats: any): string {
         .refresh-button:hover {
             background: #2563eb;
         }
+        .header-actions {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            flex-wrap: wrap;
+            gap: 10px;
+        }
+        .login-link {
+            background: #059669;
+            color: white;
+            border: none;
+            padding: 8px 16px;
+            border-radius: 6px;
+            cursor: pointer;
+            text-decoration: none;
+            display: inline-block;
+            font-size: 14px;
+        }
+        .login-link:hover {
+            background: #047857;
+            text-decoration: none;
+        }
     </style>
 </head>
 <body>
     <div class="header">
         <h1>⚓ Anchor AppView Dashboard</h1>
         <p>Location-based check-ins feed generator for AT Protocol</p>
-        <p style="color: #64748b; font-size: 0.9em;">
-            Last updated: ${new Date(stats.timestamp).toLocaleString()}
-            <a href="/" class="refresh-button">Refresh</a>
-        </p>
+        <div class="header-actions">
+            <p style="color: #64748b; font-size: 0.9em; margin: 0;">
+                Last updated: ${new Date(stats.timestamp).toLocaleString()}
+                <a href="/" class="refresh-button">Refresh</a>
+            </p>
+            ${
+    !loginSuccess
+      ? `
+            <a href="/login" class="login-link">🔐 Login with Bluesky</a>
+            `
+      : `
+            <span style="color: #059669; font-weight: 500; font-size: 14px;">✅ Authenticated</span>
+            `
+  }
+        </div>
     </div>
+
 
     <div class="stats-grid">
         <div class="stat-card">
@@ -406,10 +488,207 @@ function generateDashboardHTML(stats: any): string {
     </div>
 
     <script>
-        // Auto-refresh every 30 seconds
-        setTimeout(() => {
-            window.location.reload();
-        }, 30000);
+        // Auto-refresh every 30 seconds (but not if we just logged in)
+        const urlParams = new URLSearchParams(window.location.search);
+        if (!urlParams.get('login')) {
+            setTimeout(() => {
+                window.location.reload();
+            }, 30000);
+        }
+    </script>
+</body>
+</html>
+  `;
+}
+
+function generateLoginHTML(url: URL): string {
+  // Check for login success message
+  const loginSuccess = url.searchParams.get("login") === "success";
+  const loginHandle = url.searchParams.get("handle");
+
+  return `
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Login - Anchor AppView</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+            line-height: 1.6;
+            color: #333;
+            max-width: 500px;
+            margin: 0 auto;
+            padding: 20px;
+            background: #f8fafc;
+            display: flex;
+            flex-direction: column;
+            min-height: 100vh;
+            justify-content: center;
+        }
+        .login-container {
+            background: white;
+            padding: 40px;
+            border-radius: 12px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+            text-align: center;
+        }
+        .header {
+            margin-bottom: 30px;
+        }
+        .header h1 {
+            color: #1e293b;
+            margin: 0 0 10px 0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 10px;
+        }
+        .login-form {
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+            align-items: center;
+        }
+        .login-input {
+            padding: 12px 16px;
+            border: 1px solid #d1d5db;
+            border-radius: 8px;
+            font-size: 16px;
+            width: 100%;
+            max-width: 300px;
+        }
+        .login-button {
+            background: #3b82f6;
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 16px;
+            font-weight: 500;
+            width: 100%;
+            max-width: 300px;
+        }
+        .login-button:hover {
+            background: #2563eb;
+        }
+        .login-button:disabled {
+            background: #9ca3af;
+            cursor: not-allowed;
+        }
+        .success-message {
+            background: #d1fae5;
+            border: 1px solid #10b981;
+            color: #065f46;
+            padding: 20px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+        }
+        .back-link {
+            color: #3b82f6;
+            text-decoration: none;
+            margin-top: 20px;
+            display: inline-block;
+        }
+        .back-link:hover {
+            text-decoration: underline;
+        }
+        .description {
+            color: #64748b;
+            font-size: 0.9em;
+            margin-bottom: 30px;
+        }
+    </style>
+</head>
+<body>
+    <div class="login-container">
+        <div class="header">
+            <h1>⚓ Anchor AppView</h1>
+            <p class="description">Login with your Bluesky account to access personalized feeds</p>
+        </div>
+
+        ${
+    loginSuccess
+      ? `
+        <div class="success-message">
+            ✅ Successfully logged in as @${loginHandle}! OAuth authentication is now active.
+        </div>
+        <p style="color: #64748b; font-size: 0.9em; margin-bottom: 20px;">
+            You can now access personalized feeds and check-ins from people you follow.
+        </p>
+        <a href="/" class="login-button" style="text-decoration: none; display: inline-block;">Go to Dashboard</a>
+        `
+      : `
+        <div class="login-form">
+            <input type="text" id="handleInput" class="login-input" placeholder="Enter your Bluesky handle (e.g., user.bsky.social)" />
+            <button onclick="startOAuth()" class="login-button" id="loginButton">Login with Bluesky</button>
+        </div>
+        <p style="color: #64748b; font-size: 0.9em; margin-top: 15px;">
+            We'll redirect you to your Bluesky server for secure authentication.
+        </p>
+        `
+  }
+        
+        <a href="/" class="back-link">← Back to Dashboard</a>
+    </div>
+
+    <script>
+        // OAuth login functionality
+        async function startOAuth() {
+            const handleInput = document.getElementById('handleInput');
+            const loginButton = document.getElementById('loginButton');
+            const handle = handleInput.value.trim();
+            
+            if (!handle) {
+                alert('Please enter your Bluesky handle');
+                return;
+            }
+            
+            loginButton.disabled = true;
+            loginButton.textContent = 'Starting OAuth...';
+            
+            try {
+                const response = await fetch('/api/auth/start', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({ handle }),
+                });
+                
+                const data = await response.json();
+                
+                if (response.ok && data.authUrl) {
+                    // Redirect to OAuth authorization
+                    window.location.href = data.authUrl;
+                } else {
+                    alert('Failed to start OAuth: ' + (data.error || 'Unknown error'));
+                    loginButton.disabled = false;
+                    loginButton.textContent = 'Login with Bluesky';
+                }
+            } catch (error) {
+                console.error('OAuth start error:', error);
+                alert('Failed to start OAuth: ' + error.message);
+                loginButton.disabled = false;
+                loginButton.textContent = 'Login with Bluesky';
+            }
+        }
+        
+        // Handle Enter key in handle input
+        document.addEventListener('DOMContentLoaded', function() {
+            const handleInput = document.getElementById('handleInput');
+            if (handleInput) {
+                handleInput.addEventListener('keypress', function(e) {
+                    if (e.key === 'Enter') {
+                        startOAuth();
+                    }
+                });
+                // Focus on the input field
+                handleInput.focus();
+            }
+        });
     </script>
 </body>
 </html>
