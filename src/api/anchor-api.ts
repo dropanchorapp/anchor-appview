@@ -101,40 +101,26 @@ export default async function (req: Request): Promise<Response> {
   if (url.pathname === "/") {
     await initializeTables();
     await initializeOAuthTables();
-    
+
     // Check authentication status
     const loginSuccess = url.searchParams.get("login") === "success";
     const loginHandle = url.searchParams.get("handle");
-    const feedType = url.searchParams.get("feed") || "global"; // default to global
-    
+
     // For now, we'll simulate authentication check
     // TODO: Implement proper session-based auth check
     const isAuthenticated = loginSuccess;
     const userHandle = loginHandle;
-    
-    // Load appropriate feed
-    let feedData;
-    if (isAuthenticated && feedType === "following" && userHandle) {
-      // Load following feed - we'll need to implement session lookup later
-      // For now, show empty state for following feed
-      feedData = { 
-        checkins: [], // TODO: Implement actual following feed
-        feedType: "following",
-        isAuthenticated: true,
-        userHandle 
-      };
-    } else {
-      // Load global feed
-      const feedResponse = await getGlobalFeed(url, {} as CorsHeaders);
-      const feedJson = await feedResponse.json();
-      feedData = { 
-        checkins: feedJson.checkins || [],
-        feedType: "global",
-        isAuthenticated,
-        userHandle 
-      };
-    }
-    
+
+    // Always load global feed initially - client will handle switching
+    const feedResponse = await getGlobalFeed(url, {} as CorsHeaders);
+    const feedJson = await feedResponse.json();
+    const feedData = {
+      checkins: feedJson.checkins || [],
+      feedType: "global", // Always start with global
+      isAuthenticated,
+      userHandle,
+    };
+
     const html = generateConsumerDashboardHTML(feedData, url);
 
     return new Response(html, {
@@ -682,16 +668,16 @@ function formatTimeAgo(dateString: string): string {
   const diffHours = Math.floor(diffMins / 60);
   const diffDays = Math.floor(diffHours / 24);
 
-  if (diffSecs < 60) return 'now';
-  if (diffMins < 60) return diffMins + 'm';
-  if (diffHours < 24) return diffHours + 'h';
-  if (diffDays < 7) return diffDays + 'd';
+  if (diffSecs < 60) return "now";
+  if (diffMins < 60) return diffMins + "m";
+  if (diffHours < 24) return diffHours + "h";
+  if (diffDays < 7) return diffDays + "d";
   return date.toLocaleDateString();
 }
 
-function generateConsumerDashboardHTML(feedData: any, url: URL): string {
+function generateConsumerDashboardHTML(feedData: any, _url: URL): string {
   const { checkins, feedType, isAuthenticated, userHandle } = feedData;
-  
+
   return `
 <!DOCTYPE html>
 <html lang="en">
@@ -801,7 +787,9 @@ function generateConsumerDashboardHTML(feedData: any, url: URL): string {
             border-radius: 6px;
             font-size: 14px;
             font-weight: 500;
-            text-decoration: none;
+            border: none;
+            background: none;
+            cursor: pointer;
             color: #3c3c43;
             transition: all 0.2s;
         }
@@ -920,6 +908,60 @@ function generateConsumerDashboardHTML(feedData: any, url: URL): string {
             font-size: 13px;
         }
         
+        .loading {
+            text-align: center;
+            padding: 40px 20px;
+            color: #8e8e93;
+        }
+        
+        .loading-spinner {
+            display: inline-block;
+            width: 20px;
+            height: 20px;
+            border: 2px solid #e5e5ea;
+            border-radius: 50%;
+            border-top-color: #007aff;
+            animation: spin 1s ease-in-out infinite;
+            margin-bottom: 12px;
+        }
+        
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+        
+        .login-prompt {
+            background: white;
+            border-radius: 12px;
+            padding: 40px 20px;
+            margin: 20px 0;
+            text-align: center;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+        }
+        
+        .login-prompt h3 {
+            font-size: 18px;
+            margin-bottom: 12px;
+            color: #1c1c1e;
+        }
+        
+        .login-prompt p {
+            color: #8e8e93;
+            margin-bottom: 20px;
+            line-height: 1.4;
+        }
+        
+        .login-prompt .login-btn {
+            background: #007aff;
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 20px;
+            font-size: 16px;
+            font-weight: 500;
+            text-decoration: none;
+            display: inline-block;
+        }
+        
         @media (max-width: 640px) {
             .header-content {
                 padding: 0 4px;
@@ -938,66 +980,97 @@ function generateConsumerDashboardHTML(feedData: any, url: URL): string {
                 ⚓ Anchor
             </a>
             <div class="header-actions">
-                ${isAuthenticated 
-                  ? `
+                ${
+    isAuthenticated
+      ? `
                     <div class="user-info">
                         <span>@${userHandle}</span>
                     </div>
                   `
-                  : `
+      : `
                     <a href="/login" class="login-btn">
                         🔐 Sign in
                     </a>
                   `
-                }
+  }
             </div>
         </div>
     </header>
 
     <main class="main-content">
-        ${isAuthenticated ? `
         <div class="feed-controls">
             <div class="feed-tabs">
-                <a href="/?feed=following" class="feed-tab ${feedType === 'following' ? 'active' : ''}">
+                <button class="feed-tab" id="following-tab" data-feed="following">
                     Following
-                </a>
-                <a href="/?feed=global" class="feed-tab ${feedType === 'global' ? 'active' : ''}">
+                </button>
+                <button class="feed-tab active" id="global-tab" data-feed="global">
                     Global
-                </a>
+                </button>
             </div>
         </div>
-        ` : ''}
 
         <div class="feed">
-            ${checkins.length > 0 ? checkins.map((checkin: any) => `
+            ${
+    checkins.length > 0
+      ? checkins.map((checkin: any) => `
                 <div class="checkin-card">
                     <div class="checkin-header">
                         <div class="user-avatar">
-                            ${checkin.author.displayName ? checkin.author.displayName.charAt(0).toUpperCase() : checkin.author.handle.charAt(0).toUpperCase()}
+                            ${
+        checkin.author.displayName
+          ? checkin.author.displayName.charAt(0).toUpperCase()
+          : checkin.author.handle.charAt(0).toUpperCase()
+      }
                         </div>
                         <div class="user-info-card">
-                            <div class="user-name">${checkin.author.displayName || checkin.author.handle}</div>
+                            <div class="user-name">${
+        checkin.author.displayName || checkin.author.handle
+      }</div>
                             <div class="user-handle">@${checkin.author.handle}</div>
                         </div>
-                        <div class="checkin-time" data-created-at="${checkin.createdAt}">${formatTimeAgo(checkin.createdAt)}</div>
+                        <div class="checkin-time" data-created-at="${checkin.createdAt}">${
+        formatTimeAgo(checkin.createdAt)
+      }</div>
                     </div>
                     <div class="checkin-content">
-                        ${checkin.text ? `<div class="checkin-text">${checkin.text}</div>` : ''}
-                        ${checkin.address?.name || checkin.address?.locality ? `
+                        ${
+        checkin.text ? `<div class="checkin-text">${checkin.text}</div>` : ""
+      }
+                        ${
+        checkin.address?.name || checkin.address?.locality
+          ? `
                         <div class="checkin-location">
                             <span class="location-icon">📍</span>
-                            <span>${checkin.address.name || checkin.address.locality}${checkin.address.locality && checkin.address.name ? `, ${checkin.address.locality}` : ''}</span>
+                            <span>${
+            checkin.address.name || checkin.address.locality
+          }${
+            checkin.address.locality && checkin.address.name
+              ? `, ${checkin.address.locality}`
+              : ""
+          }</span>
                         </div>
-                        ` : ''}
+                        `
+          : ""
+      }
                     </div>
                 </div>
-            `).join('') : `
+            `).join("")
+      : `
                 <div class="empty-state">
                     <div class="empty-state-icon">📍</div>
-                    <h3>${isAuthenticated && feedType === 'following' ? "No check-ins from people you follow" : "No check-ins yet"}</h3>
-                    <p>${isAuthenticated && feedType === 'following' ? "Check-ins from people you follow will appear here." : "Check-ins from the community will appear here as people start sharing their locations."}</p>
+                    <h3>${
+        isAuthenticated && feedType === "following"
+          ? "No check-ins from people you follow"
+          : "No check-ins yet"
+      }</h3>
+                    <p>${
+        isAuthenticated && feedType === "following"
+          ? "Check-ins from people you follow will appear here."
+          : "Check-ins from the community will appear here as people start sharing their locations."
+      }</p>
                 </div>
-            `}
+            `
+  }
         </div>
     </main>
 
@@ -1006,6 +1079,17 @@ function generateConsumerDashboardHTML(feedData: any, url: URL): string {
     </footer>
 
     <script>
+        // App state
+        let currentFeed = 'global';
+        let isAuthenticated = ${isAuthenticated ? 'true' : 'false'};
+        let userHandle = '${userHandle || ''}';
+        
+        // DOM elements
+        const feedContainer = document.querySelector('.feed');
+        const followingTab = document.getElementById('following-tab');
+        const globalTab = document.getElementById('global-tab');
+        
+        // Utility functions
         function formatTimeAgo(dateString) {
             const date = new Date(dateString);
             const now = new Date();
@@ -1021,17 +1105,136 @@ function generateConsumerDashboardHTML(feedData: any, url: URL): string {
             if (diffDays < 7) return diffDays + 'd';
             return date.toLocaleDateString();
         }
-
+        
+        function showLoading() {
+            feedContainer.innerHTML = \`
+                <div class="loading">
+                    <div class="loading-spinner"></div>
+                    <p>Loading check-ins...</p>
+                </div>
+            \`;
+        }
+        
+        function showLoginPrompt() {
+            feedContainer.innerHTML = \`
+                <div class="login-prompt">
+                    <h3>Sign in to see following feed</h3>
+                    <p>Follow people on Bluesky to see their check-ins here.</p>
+                    <a href="/login" class="login-btn">Sign in with Bluesky</a>
+                </div>
+            \`;
+        }
+        
+        function showEmptyState(feedType) {
+            const isFollowing = feedType === 'following';
+            feedContainer.innerHTML = \`
+                <div class="empty-state">
+                    <div class="empty-state-icon">📍</div>
+                    <h3>\${isFollowing ? "No check-ins from people you follow" : "No check-ins yet"}</h3>
+                    <p>\${isFollowing ? "Check-ins from people you follow will appear here." : "Check-ins from the community will appear here as people start sharing their locations."}</p>
+                </div>
+            \`;
+        }
+        
+        function renderCheckins(checkins) {
+            if (checkins.length === 0) {
+                showEmptyState(currentFeed);
+                return;
+            }
+            
+            feedContainer.innerHTML = checkins.map(checkin => \`
+                <div class="checkin-card" data-created-at="\${checkin.createdAt}">
+                    <div class="checkin-header">
+                        <div class="user-avatar">
+                            \${checkin.author.displayName ? checkin.author.displayName.charAt(0).toUpperCase() : checkin.author.handle.charAt(0).toUpperCase()}
+                        </div>
+                        <div class="user-info-card">
+                            <div class="user-name">\${checkin.author.displayName || checkin.author.handle}</div>
+                            <div class="user-handle">@\${checkin.author.handle}</div>
+                        </div>
+                        <div class="checkin-time" data-created-at="\${checkin.createdAt}">\${formatTimeAgo(checkin.createdAt)}</div>
+                    </div>
+                    <div class="checkin-content">
+                        \${checkin.text ? \`<div class="checkin-text">\${checkin.text}</div>\` : ''}
+                        \${checkin.address?.name || checkin.address?.locality ? \`
+                        <div class="checkin-location">
+                            <span class="location-icon">📍</span>
+                            <span>\${checkin.address.name || checkin.address.locality}\${checkin.address.locality && checkin.address.name ? \`, \${checkin.address.locality}\` : ''}</span>
+                        </div>
+                        \` : ''}
+                    </div>
+                </div>
+            \`).join('');
+        }
+        
+        async function loadFeed(feedType) {
+            if (feedType === 'following' && !isAuthenticated) {
+                showLoginPrompt();
+                return;
+            }
+            
+            showLoading();
+            
+            try {
+                let url;
+                if (feedType === 'following') {
+                    // TODO: Implement following feed endpoint
+                    // For now, show empty state
+                    setTimeout(() => showEmptyState('following'), 500);
+                    return;
+                } else {
+                    url = '/global';
+                }
+                
+                const response = await fetch(url);
+                const data = await response.json();
+                
+                renderCheckins(data.checkins || []);
+            } catch (error) {
+                console.error('Failed to load feed:', error);
+                feedContainer.innerHTML = \`
+                    <div class="empty-state">
+                        <div class="empty-state-icon">⚠️</div>
+                        <h3>Failed to load check-ins</h3>
+                        <p>Please try again later.</p>
+                    </div>
+                \`;
+            }
+        }
+        
+        function switchToFeed(feedType) {
+            if (currentFeed === feedType) return;
+            
+            currentFeed = feedType;
+            
+            // Update tab states
+            document.querySelectorAll('.feed-tab').forEach(tab => {
+                tab.classList.remove('active');
+            });
+            document.getElementById(\`\${feedType}-tab\`).classList.add('active');
+            
+            // Load feed
+            loadFeed(feedType);
+        }
+        
+        // Event listeners
+        followingTab.addEventListener('click', () => switchToFeed('following'));
+        globalTab.addEventListener('click', () => switchToFeed('global'));
+        
         // Update relative times every minute
         setInterval(() => {
             document.querySelectorAll('.checkin-time').forEach(el => {
-                const checkinCard = el.closest('.checkin-card');
-                const dateString = checkinCard?.dataset.createdAt;
+                const dateString = el.dataset.createdAt;
                 if (dateString) {
                     el.textContent = formatTimeAgo(dateString);
                 }
             });
         }, 60000);
+        
+        // Initialize
+        document.addEventListener('DOMContentLoaded', () => {
+            // Feed is already loaded server-side, no need to reload
+        });
     </script>
 </body>
 </html>
