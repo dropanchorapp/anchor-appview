@@ -7,7 +7,6 @@ import {
   SqliteStorageProvider,
 } from "../utils/storage-provider.ts";
 
-
 // Types for better TypeScript support
 interface CorsHeaders {
   "Access-Control-Allow-Origin": string;

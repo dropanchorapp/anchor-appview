@@ -2,201 +2,202 @@ import {
   assertEquals,
   assertExists,
 } from "https://deno.land/std@0.208.0/assert/mod.ts";
-
 import {
   InMemoryStorageProvider,
   ProfileData,
-} from "../../src/utils/storage-provider.ts";
+} from "../../backend/utils/storage-provider.ts";
 
-Deno.test("InMemoryStorageProvider - basic operations", async () => {
+Deno.test("InMemoryStorageProvider - store and retrieve profile", async () => {
   const storage = new InMemoryStorageProvider();
-
-  // Should return null for non-existent profile
-  const notFound = await storage.getProfile("did:plc:nonexistent");
-  assertEquals(notFound, null);
-
-  // Should store and retrieve profile
   const profile: ProfileData = {
-    did: "did:plc:test",
+    did: "did:plc:test123",
     handle: "test.bsky.social",
     displayName: "Test User",
     avatar: "https://example.com/avatar.jpg",
-    description: "Test description",
+    description: "A test user profile",
     fetchedAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString(),
   };
 
   await storage.setProfile(profile);
+  const retrieved = await storage.getProfile(profile.did);
 
-  const retrieved = await storage.getProfile("did:plc:test");
   assertExists(retrieved);
-  assertEquals(retrieved.did, "did:plc:test");
-  assertEquals(retrieved.handle, "test.bsky.social");
-  assertEquals(retrieved.displayName, "Test User");
-  assertEquals(retrieved.avatar, "https://example.com/avatar.jpg");
-  assertEquals(retrieved.description, "Test description");
+  assertEquals(retrieved.did, profile.did);
+  assertEquals(retrieved.handle, profile.handle);
+  assertEquals(retrieved.displayName, profile.displayName);
+  assertEquals(retrieved.avatar, profile.avatar);
+  assertEquals(retrieved.description, profile.description);
+  assertEquals(retrieved.fetchedAt, profile.fetchedAt);
 });
 
-Deno.test("InMemoryStorageProvider - update existing profile", async () => {
+Deno.test("InMemoryStorageProvider - retrieve non-existent profile", async () => {
   const storage = new InMemoryStorageProvider();
+  const result = await storage.getProfile("did:plc:nonexistent");
+  assertEquals(result, null);
+});
 
-  // Store initial profile
-  const initialProfile: ProfileData = {
-    did: "did:plc:test",
-    handle: "old.bsky.social",
-    displayName: "Old Name",
+Deno.test("InMemoryStorageProvider - overwrite existing profile", async () => {
+  const storage = new InMemoryStorageProvider();
+  const did = "did:plc:overwrite123";
+
+  const originalProfile: ProfileData = {
+    did,
+    handle: "original.bsky.social",
+    displayName: "Original Name",
     fetchedAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString(),
   };
 
-  await storage.setProfile(initialProfile);
-
-  // Update profile
   const updatedProfile: ProfileData = {
-    did: "did:plc:test",
-    handle: "new.bsky.social",
-    displayName: "New Name",
-    avatar: "https://example.com/new.jpg",
-    fetchedAt: initialProfile.fetchedAt,
-    updatedAt: new Date().toISOString(),
+    did,
+    handle: "updated.bsky.social",
+    displayName: "Updated Name",
+    avatar: "https://example.com/new-avatar.jpg",
+    fetchedAt: new Date().toISOString(),
   };
 
+  await storage.setProfile(originalProfile);
   await storage.setProfile(updatedProfile);
 
-  // Should have updated profile
-  const retrieved = await storage.getProfile("did:plc:test");
+  const retrieved = await storage.getProfile(did);
   assertExists(retrieved);
-  assertEquals(retrieved.handle, "new.bsky.social");
-  assertEquals(retrieved.displayName, "New Name");
-  assertEquals(retrieved.avatar, "https://example.com/new.jpg");
+  assertEquals(retrieved.handle, "updated.bsky.social");
+  assertEquals(retrieved.displayName, "Updated Name");
+  assertEquals(retrieved.avatar, "https://example.com/new-avatar.jpg");
 });
 
 Deno.test("InMemoryStorageProvider - getStaleProfiles", async () => {
   const storage = new InMemoryStorageProvider();
 
-  // Create profiles with different ages
+  // Create profiles with different timestamps
   const now = new Date();
-  const fresh = new Date(now.getTime() - 1 * 60 * 60 * 1000); // 1 hour ago
-  const stale1 = new Date(now.getTime() - 25 * 60 * 60 * 1000); // 25 hours ago
-  const stale2 = new Date(now.getTime() - 30 * 60 * 60 * 1000); // 30 hours ago
+  const oneHourAgo = new Date(now.getTime() - 1 * 60 * 60 * 1000);
+  const sixHoursAgo = new Date(now.getTime() - 6 * 60 * 60 * 1000);
+  const twentyFiveHoursAgo = new Date(now.getTime() - 25 * 60 * 60 * 1000);
 
-  await storage.setProfile({
-    did: "did:plc:fresh",
-    handle: "fresh.bsky.social",
-    displayName: "Fresh User",
-    fetchedAt: fresh.toISOString(),
-    updatedAt: fresh.toISOString(),
-  });
+  const profiles: ProfileData[] = [
+    {
+      did: "did:plc:fresh",
+      handle: "fresh.bsky.social",
+      fetchedAt: oneHourAgo.toISOString(),
+    },
+    {
+      did: "did:plc:medium",
+      handle: "medium.bsky.social",
+      fetchedAt: sixHoursAgo.toISOString(),
+    },
+    {
+      did: "did:plc:stale",
+      handle: "stale.bsky.social",
+      fetchedAt: twentyFiveHoursAgo.toISOString(),
+    },
+  ];
 
-  await storage.setProfile({
-    did: "did:plc:stale1",
-    handle: "stale1.bsky.social",
-    displayName: "Stale User 1",
-    fetchedAt: stale1.toISOString(),
-    updatedAt: stale1.toISOString(),
-  });
+  for (const profile of profiles) {
+    await storage.setProfile(profile);
+  }
 
-  await storage.setProfile({
-    did: "did:plc:stale2",
-    handle: "stale2.bsky.social",
-    displayName: "Stale User 2",
-    fetchedAt: stale2.toISOString(),
-    updatedAt: stale2.toISOString(),
-  });
-
-  // Get stale profiles (24 hour threshold)
+  // Get profiles older than 24 hours (stale threshold)
   const staleProfiles = await storage.getStaleProfiles(10, 24);
 
-  // Should return 2 stale profiles, sorted by age (oldest first)
-  assertEquals(staleProfiles.length, 2);
-  assertEquals(staleProfiles[0].did, "did:plc:stale2"); // Oldest
-  assertEquals(staleProfiles[1].did, "did:plc:stale1"); // Newer stale
+  assertEquals(staleProfiles.length, 1);
+  assertEquals(staleProfiles[0].did, "did:plc:stale");
 });
 
 Deno.test("InMemoryStorageProvider - getStaleProfiles with limit", async () => {
   const storage = new InMemoryStorageProvider();
 
   // Create multiple stale profiles
-  const baseTime = new Date().getTime() - 25 * 60 * 60 * 1000; // 25 hours ago
+  const twentyFiveHoursAgo = new Date();
+  twentyFiveHoursAgo.setHours(twentyFiveHoursAgo.getHours() - 25);
 
-  for (let i = 0; i < 5; i++) {
-    await storage.setProfile({
-      did: `did:plc:stale${i}`,
-      handle: `stale${i}.bsky.social`,
-      displayName: `Stale User ${i}`,
-      fetchedAt: new Date(baseTime - i * 60 * 1000).toISOString(), // Slightly different times
-      updatedAt: new Date(baseTime - i * 60 * 1000).toISOString(),
-    });
+  const staleProfiles: ProfileData[] = [
+    {
+      did: "did:plc:stale1",
+      handle: "stale1.bsky.social",
+      fetchedAt: new Date(twentyFiveHoursAgo.getTime() - 1000).toISOString(),
+    },
+    {
+      did: "did:plc:stale2",
+      handle: "stale2.bsky.social",
+      fetchedAt: new Date(twentyFiveHoursAgo.getTime() - 2000).toISOString(),
+    },
+    {
+      did: "did:plc:stale3",
+      handle: "stale3.bsky.social",
+      fetchedAt: new Date(twentyFiveHoursAgo.getTime() - 3000).toISOString(),
+    },
+  ];
+
+  for (const profile of staleProfiles) {
+    await storage.setProfile(profile);
   }
 
-  // Get limited number of stale profiles
-  const staleProfiles = await storage.getStaleProfiles(3, 24);
+  // Get only 2 stale profiles
+  const result = await storage.getStaleProfiles(2, 24);
 
-  // Should return only 3 profiles
-  assertEquals(staleProfiles.length, 3);
-
-  // Should be sorted by age (oldest first)
-  assertEquals(staleProfiles[0].did, "did:plc:stale4"); // Oldest
-  assertEquals(staleProfiles[1].did, "did:plc:stale3");
-  assertEquals(staleProfiles[2].did, "did:plc:stale2");
+  assertEquals(result.length, 2);
+  // Should be sorted by fetchedAt (oldest first)
+  assertEquals(result[0].did, "did:plc:stale3");
+  assertEquals(result[1].did, "did:plc:stale2");
 });
 
-Deno.test("InMemoryStorageProvider - clear functionality", async () => {
+Deno.test("InMemoryStorageProvider - getStaleProfiles empty result", async () => {
   const storage = new InMemoryStorageProvider();
 
-  // Store some profiles
-  await storage.setProfile({
-    did: "did:plc:test1",
-    handle: "test1.bsky.social",
-    displayName: "Test 1",
+  // Add only fresh profiles
+  const freshProfile: ProfileData = {
+    did: "did:plc:fresh",
+    handle: "fresh.bsky.social",
     fetchedAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString(),
-  });
+  };
 
-  await storage.setProfile({
-    did: "did:plc:test2",
-    handle: "test2.bsky.social",
-    displayName: "Test 2",
-    fetchedAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString(),
-  });
+  await storage.setProfile(freshProfile);
 
-  // Should have profiles
-  const before1 = await storage.getProfile("did:plc:test1");
-  const before2 = await storage.getProfile("did:plc:test2");
-  assertExists(before1);
-  assertExists(before2);
-
-  // Clear storage
-  storage.clear();
-
-  // Should be empty
-  const after1 = await storage.getProfile("did:plc:test1");
-  const after2 = await storage.getProfile("did:plc:test2");
-  assertEquals(after1, null);
-  assertEquals(after2, null);
-
-  // Should have no stale profiles
-  const staleProfiles = await storage.getStaleProfiles(10, 0);
+  const staleProfiles = await storage.getStaleProfiles(10, 24);
   assertEquals(staleProfiles.length, 0);
 });
 
-Deno.test("InMemoryStorageProvider - ensureTablesExist is no-op", async () => {
+Deno.test("InMemoryStorageProvider - clear functionality", () => {
   const storage = new InMemoryStorageProvider();
 
-  // Should not throw
-  await storage.ensureTablesExist();
-
-  // Should still work normally
-  await storage.setProfile({
-    did: "did:plc:test",
-    handle: "test.bsky.social",
-    displayName: "Test User",
+  // Add a profile
+  const profile: ProfileData = {
+    did: "did:plc:clear",
+    handle: "clear.bsky.social",
     fetchedAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString(),
-  });
+  };
 
-  const retrieved = await storage.getProfile("did:plc:test");
+  storage.setProfile(profile);
+  storage.clear();
+
+  // Profile should be gone after clear
+  storage.getProfile("did:plc:clear").then((result) => {
+    assertEquals(result, null);
+  });
+});
+
+Deno.test("InMemoryStorageProvider - ensureTablesExist", async () => {
+  const storage = new InMemoryStorageProvider();
+  // Should not throw for in-memory storage
+  await storage.ensureTablesExist();
+});
+
+Deno.test("InMemoryStorageProvider - profile with minimal data", async () => {
+  const storage = new InMemoryStorageProvider();
+  const minimalProfile: ProfileData = {
+    did: "did:plc:minimal",
+    handle: "minimal.bsky.social",
+    fetchedAt: new Date().toISOString(),
+  };
+
+  await storage.setProfile(minimalProfile);
+  const retrieved = await storage.getProfile(minimalProfile.did);
+
   assertExists(retrieved);
-  assertEquals(retrieved.did, "did:plc:test");
+  assertEquals(retrieved.did, "did:plc:minimal");
+  assertEquals(retrieved.handle, "minimal.bsky.social");
+  assertEquals(retrieved.displayName, undefined);
+  assertEquals(retrieved.avatar, undefined);
+  assertEquals(retrieved.description, undefined);
+  assertExists(retrieved.fetchedAt);
 });

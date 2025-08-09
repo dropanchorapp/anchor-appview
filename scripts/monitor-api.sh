@@ -3,7 +3,7 @@
 # Anchor AppView API Monitoring Script
 # Monitors the deployed API and shows current status
 
-BASE_URL="https://anchor-feed-generator.val.run"
+BASE_URL="https://dropanchor.app"
 
 echo "📊 Anchor AppView Status Monitor"
 echo "==============================="

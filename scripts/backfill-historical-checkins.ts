@@ -24,7 +24,7 @@ async function getCheckinRecords(did: string): Promise<any[]> {
 
 async function initializeTables(): Promise<void> {
   await sqlite.execute(`
-    CREATE TABLE IF NOT EXISTS checkins_v1 (
+    CREATE TABLE IF NOT EXISTS checkins (
       id TEXT PRIMARY KEY,
       uri TEXT UNIQUE NOT NULL,
       author_did TEXT NOT NULL,
@@ -48,7 +48,7 @@ async function initializeTables(): Promise<void> {
   `);
 
   await sqlite.execute(`
-    CREATE TABLE IF NOT EXISTS address_cache_v1 (
+    CREATE TABLE IF NOT EXISTS address_cache (
       uri TEXT PRIMARY KEY,
       cid TEXT,
       name TEXT,
@@ -66,7 +66,7 @@ async function initializeTables(): Promise<void> {
   `);
 
   await sqlite.execute(`
-    CREATE TABLE IF NOT EXISTS processing_log_v1 (
+    CREATE TABLE IF NOT EXISTS processing_log (
       id INTEGER PRIMARY KEY,
       run_at TEXT NOT NULL,
       events_processed INTEGER DEFAULT 0,
@@ -89,10 +89,10 @@ async function processCheckinRecord(
 
   // Check if already exists
   const existing = await sqlite.execute(
-    `SELECT id FROM checkins_v1 WHERE id = ?`,
+    `SELECT id FROM checkins WHERE id = ?`,
     [rkey],
   );
-  if (existing.length > 0) {
+  if (existing.rows && existing.rows.length > 0) {
     return false; // Already exists
   }
 
@@ -107,7 +107,7 @@ async function processCheckinRecord(
   // Insert checkin with StrongRef
   await sqlite.execute(
     `
-    INSERT OR IGNORE INTO checkins_v1 
+    INSERT OR IGNORE INTO checkins 
     (id, uri, author_did, author_handle, text, created_at, latitude, longitude, address_ref_uri, address_ref_cid)
     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `,
@@ -130,7 +130,7 @@ async function processCheckinRecord(
     try {
       // Import and call the address resolver (if available in this context)
       const { resolveAndCacheAddress } = await import(
-        "../src/utils/address-resolver.ts"
+        "../backend/utils/address-resolver.ts"
       );
       await resolveAndCacheAddress(rkey, record.value.addressRef);
     } catch (error) {
@@ -186,7 +186,7 @@ export default async function (): Promise<Response> {
 
     // Log the backfill run
     await sqlite.execute(
-      `INSERT INTO processing_log_v1 (run_at, events_processed, errors, duration_ms) VALUES (?, ?, ?, ?)`,
+      `INSERT INTO processing_log (run_at, events_processed, errors, duration_ms) VALUES (?, ?, ?, ?)`,
       [new Date().toISOString(), totalAdded, errors, Date.now()],
     );
 

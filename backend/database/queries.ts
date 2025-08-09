@@ -79,14 +79,16 @@ export async function getRecentCheckins(limit = 50) {
       row.cached_address_country || row.cached_address_postal_code;
 
     // Only include address if we have resolved address data from strongrefs
-    const address = hasAddressData ? {
-      name: row.cached_address_name,
-      street: row.cached_address_street,
-      locality: row.cached_address_locality,
-      region: row.cached_address_region,
-      country: row.cached_address_country,
-      postalCode: row.cached_address_postal_code,
-    } : undefined;
+    const address = hasAddressData
+      ? {
+        name: row.cached_address_name,
+        street: row.cached_address_street,
+        locality: row.cached_address_locality,
+        region: row.cached_address_region,
+        country: row.cached_address_country,
+        postalCode: row.cached_address_postal_code,
+      }
+      : undefined;
 
     return {
       id: row.id,

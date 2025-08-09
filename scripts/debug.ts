@@ -8,8 +8,8 @@
  *   deno run --allow-net scripts/debug.ts --test-api
  */
 
-const ANCHOR_APPVIEW = "https://anchor-feed-generator.val.run";
-const DASHBOARD_URL = "https://dropanchor-feed-dashboard.val.run";
+const ANCHOR_APPVIEW = "https://dropanchor.app";
+const DASHBOARD_URL = "https://dropanchor.app";
 const BLUESKY_PDS = "https://bsky.social";
 const TEST_DID = "did:plc:wxex3wx5k4ctciupsv5m5stb";
 

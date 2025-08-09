@@ -90,7 +90,7 @@ The project includes several Deno tasks for common development workflows:
 
 ## API Endpoints
 
-**Base URL**: `https://anchor-feed-generator.val.run`
+**Base URL**: `https://dropanchor.app`
 
 - `/global` - Recent check-ins from all users with pagination
 - `/nearby` - Spatial queries for check-ins within specified radius

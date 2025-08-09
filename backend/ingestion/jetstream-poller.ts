@@ -1,7 +1,7 @@
 // @val-town jetstreamPoller
 // Cron job: Runs every 15 minutes to ingest app.dropanchor.checkin records from Jetstream
-import { sqlite } from "https://esm.town/v/stevekrouse/sqlite";
-import { ATProtocolProfileResolver } from "../utils/profile-resolver-v2.ts";
+import { db, initializeTables } from "../database/db.ts";
+import { ATProtocolProfileResolver } from "../utils/profile-resolver.ts";
 import { SqliteStorageProvider } from "../utils/storage-provider.ts";
 
 export default async function () {
@@ -39,10 +39,10 @@ export default async function () {
     }
   }
 
-  // Always fall back to AT Protocol polling if Jetstream fails or finds no events
-  if (!jetStreamSuccess || eventsProcessed === 0) {
-    console.log("Falling back to AT Protocol polling...");
-    const fallbackResult = await pollATProtocolForNewCheckins();
+  // Fall back to comprehensive discovery if Jetstream fails
+  if (!jetStreamSuccess) {
+    console.log("Jetstream failed, falling back to comprehensive discovery...");
+    const fallbackResult = await runComprehensiveDiscovery();
     eventsProcessed += fallbackResult.eventsProcessed;
     errors += fallbackResult.errors;
   }
@@ -51,9 +51,9 @@ export default async function () {
   const duration = Date.now() - startTime;
 
   // Use basic logging since cursor column doesn't exist yet
-  await sqlite.execute(
+  await db.execute(
     `
-    INSERT INTO processing_log_v1 (run_at, events_processed, errors, duration_ms) 
+    INSERT INTO processing_log (run_at, events_processed, errors, duration_ms) 
     VALUES (?, ?, ?, ?)
   `,
     [
@@ -88,92 +88,7 @@ export default async function () {
   );
 }
 
-async function initializeTables() {
-  // Val Town pattern: Use table name constants for version management
-  const CHECKINS_TABLE = "checkins_v1";
-  const ADDRESS_CACHE_TABLE = "address_cache_v1";
-  const PROCESSING_LOG_TABLE = "processing_log_v1";
-
-  // Ensure profile cache table exists
-  const storage = new SqliteStorageProvider(sqlite);
-  await storage.ensureTablesExist();
-
-  // Main checkins table
-  await sqlite.execute(`
-    CREATE TABLE IF NOT EXISTS ${CHECKINS_TABLE} (
-      id TEXT PRIMARY KEY,
-      uri TEXT UNIQUE NOT NULL,
-      author_did TEXT NOT NULL,
-      author_handle TEXT,
-      text TEXT NOT NULL,
-      created_at TEXT NOT NULL,
-      latitude REAL,
-      longitude REAL,
-      address_ref_uri TEXT,
-      address_ref_cid TEXT,
-      cached_address_name TEXT,
-      cached_address_street TEXT,
-      cached_address_locality TEXT,
-      cached_address_region TEXT,
-      cached_address_country TEXT,
-      cached_address_postal_code TEXT,
-      cached_address_full JSON,
-      address_resolved_at TEXT,
-      indexed_at TEXT DEFAULT CURRENT_TIMESTAMP
-    )
-  `);
-
-  // Address cache table
-  await sqlite.execute(`
-    CREATE TABLE IF NOT EXISTS ${ADDRESS_CACHE_TABLE} (
-      uri TEXT PRIMARY KEY,
-      cid TEXT,
-      name TEXT,
-      street TEXT,
-      locality TEXT,
-      region TEXT,
-      country TEXT,
-      postal_code TEXT,
-      latitude REAL,
-      longitude REAL,
-      full_data JSON,
-      resolved_at TEXT,
-      failed_at TEXT
-    )
-  `);
-
-  // Processing logs table
-  await sqlite.execute(`
-    CREATE TABLE IF NOT EXISTS ${PROCESSING_LOG_TABLE} (
-      id INTEGER PRIMARY KEY,
-      run_at TEXT NOT NULL,
-      events_processed INTEGER DEFAULT 0,
-      errors INTEGER DEFAULT 0,
-      duration_ms INTEGER,
-      last_jetstream_cursor TEXT
-    )
-  `);
-
-  // Add cursor column if it doesn't exist (for existing tables)
-  try {
-    await sqlite.execute(
-      `ALTER TABLE ${PROCESSING_LOG_TABLE} ADD COLUMN last_jetstream_cursor TEXT`,
-    );
-  } catch (_e) {
-    // Column already exists, ignore error
-  }
-
-  // Create indexes for performance
-  await sqlite.execute(
-    `CREATE INDEX IF NOT EXISTS idx_checkins_created ON ${CHECKINS_TABLE}(created_at DESC)`,
-  );
-  await sqlite.execute(
-    `CREATE INDEX IF NOT EXISTS idx_checkins_author ON ${CHECKINS_TABLE}(author_did)`,
-  );
-  await sqlite.execute(
-    `CREATE INDEX IF NOT EXISTS idx_checkins_location ON ${CHECKINS_TABLE}(latitude, longitude)`,
-  );
-}
+// Database initialization now handled by imported initializeTables function
 
 function connectAndProcess(): Promise<
   { eventsProcessed: number; errors: number }
@@ -359,8 +274,8 @@ async function processCheckinEvent(event: any) {
   console.log(`Processing checkin ${commit.rkey} from DID ${did}`);
 
   // Check if already processed (duplicate detection)
-  const existing = await sqlite.execute(
-    `SELECT id FROM checkins_v1 WHERE id = ?`,
+  const existing = await db.execute(
+    `SELECT id FROM checkins WHERE id = ?`,
     [commit.rkey],
   );
 
@@ -383,7 +298,7 @@ async function processCheckinEvent(event: any) {
     : null;
 
   // Resolve profile to get handle and other data
-  const storage = new SqliteStorageProvider(sqlite);
+  const storage = new SqliteStorageProvider(db);
   const profileResolver = new ATProtocolProfileResolver(storage);
   const profile = await profileResolver.resolveProfile(did);
   const authorHandle = profile?.handle || did;
@@ -399,9 +314,9 @@ async function processCheckinEvent(event: any) {
     addressRef: record.addressRef?.uri,
   });
 
-  const insertResult = await sqlite.execute(
+  const insertResult = await db.execute(
     `
-    INSERT OR IGNORE INTO checkins_v1 
+    INSERT OR IGNORE INTO checkins 
     (id, uri, author_did, author_handle, text, created_at, latitude, longitude, address_ref_uri, address_ref_cid)
     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `,
@@ -456,109 +371,105 @@ function updateLastProcessedTimestamp(timeUs: string): void {
   }
 }
 
-async function pollATProtocolForNewCheckins(): Promise<
+async function runComprehensiveDiscovery(): Promise<
   { eventsProcessed: number; errors: number }
 > {
   let eventsProcessed = 0;
   let errors = 0;
 
-  // Known DIDs that create check-ins
-  const knownDids = [
-    "did:plc:wxex3wx5k4ctciupsv5m5stb",
-    "did:plc:z4r4rg2j6eoqqxzkgr36xqzb",
-  ];
+  try {
+    console.log("Running comprehensive discovery for checkin records...");
 
-  for (const did of knownDids) {
-    try {
-      console.log(`Polling AT Protocol for new check-ins from ${did}...`);
+    // Import and run the comprehensive discovery system
+    const { CheckinDiscoveryService } = await import(
+      "../../scripts/comprehensive-checkin-discovery.ts"
+    );
+    const discoveryService = new CheckinDiscoveryService();
 
-      const url = "https://bsky.social/xrpc/com.atproto.repo.listRecords";
-      const params = new URLSearchParams({
-        repo: did,
-        collection: "app.dropanchor.checkin",
-        limit: "20", // Check more recent records since we run every 15 min
-        reverse: "true",
-      });
+    // Discover DIDs across the network
+    const socialGraphDids = await discoveryService.discoverFromSocialGraph();
+    const searchDids = await discoveryService.searchATProtoNetwork();
+    const allDids = [...new Set([...socialGraphDids, ...searchDids])];
 
-      const response = await fetch(`${url}?${params}`);
-      if (!response.ok) {
-        console.error(`Failed to fetch records for ${did}: ${response.status}`);
-        errors++;
-        continue;
-      }
+    console.log(
+      `Comprehensive discovery found ${allDids.length} DIDs to check`,
+    );
 
-      const data = await response.json();
-      const records = data.records || [];
-      console.log(`Found ${records.length} total records for ${did}`);
+    // Crawl all discovered repositories for new checkins
+    const discoveredCheckins = await discoveryService.crawlRepositories(
+      allDids,
+    );
 
-      for (const record of records) {
-        const rkey = record.uri.split("/").pop();
-
-        // Only process new format with addressRef
-        if (!record.value.addressRef) {
-          continue;
-        }
-
+    // Store only new checkins (with duplicate checking)
+    let stored = 0;
+    for (const checkin of discoveredCheckins) {
+      try {
         // Check if already exists
-        const existing = await sqlite.execute(
-          `SELECT id FROM checkins_v1 WHERE id = ?`,
-          [rkey],
+        const existing = await db.execute(
+          "SELECT id FROM checkins WHERE id = ?",
+          [checkin.rkey],
         );
-        if (existing.rows && existing.rows.length > 0) {
-          continue; // Already exists
-        }
 
-        // This is a new check-in! Process it
-        console.log(`Found new check-in via AT Protocol: ${rkey}`);
+        if (existing.rows && existing.rows.length > 0) {
+          continue; // Skip existing
+        }
 
         // Extract coordinates
-        const lat = record.value.coordinates?.latitude
-          ? parseFloat(record.value.coordinates.latitude)
-          : null;
-        const lng = record.value.coordinates?.longitude
-          ? parseFloat(record.value.coordinates.longitude)
-          : null;
+        const lat = checkin.record.value.coordinates?.latitude || null;
+        const lng = checkin.record.value.coordinates?.longitude || null;
 
-        // Insert checkin
-        await sqlite.execute(
+        // Insert new checkin
+        await db.execute(
           `
-          INSERT OR IGNORE INTO checkins_v1 
-          (id, uri, author_did, author_handle, text, created_at, latitude, longitude, address_ref_uri, address_ref_cid)
-          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          INSERT OR IGNORE INTO checkins 
+          (id, uri, author_did, text, created_at, latitude, longitude, address_ref_uri, address_ref_cid)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
         `,
           [
-            rkey,
-            record.uri,
-            did,
-            did, // Will be updated with resolved handle later
-            record.value.text || "",
-            record.value.createdAt || new Date().toISOString(),
+            checkin.rkey,
+            checkin.uri,
+            checkin.authorDid,
+            checkin.record.value.text || "",
+            checkin.record.value.createdAt || new Date().toISOString(),
             lat,
             lng,
-            record.value.addressRef?.uri || null,
-            record.value.addressRef?.cid || null,
+            checkin.record.value.addressRef?.uri || null,
+            checkin.record.value.addressRef?.cid || null,
           ],
         );
 
-        console.log("New checkin stored via AT Protocol polling:", rkey);
-        eventsProcessed++;
+        stored++;
+        console.log(
+          `Stored new checkin via comprehensive discovery: ${checkin.rkey}`,
+        );
 
         // Trigger address resolution
-        if (record.value.addressRef?.uri) {
+        if (checkin.record.value.addressRef?.uri) {
           try {
             const { resolveAndCacheAddress } = await import(
               "../utils/address-resolver.ts"
             );
-            await resolveAndCacheAddress(rkey, record.value.addressRef);
+            await resolveAndCacheAddress(
+              checkin.rkey,
+              checkin.record.value.addressRef,
+            );
           } catch (error) {
             console.error("Address resolution failed:", error);
           }
         }
+      } catch (error) {
+        console.error(`Failed to store checkin ${checkin.rkey}:`, error);
+        errors++;
       }
-    } catch (error) {
-      console.error(`Error polling ${did}:`, error);
-      errors++;
     }
+
+    eventsProcessed = stored;
+    console.log(
+      `Comprehensive discovery completed: ${eventsProcessed} new checkins stored`,
+    );
+  } catch (error) {
+    console.error("Comprehensive discovery failed:", error);
+    errors++;
   }
 
   return { eventsProcessed, errors };

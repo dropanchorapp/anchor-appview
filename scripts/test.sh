@@ -37,7 +37,7 @@ overall_success=true
 
 # Run unit tests with clean architecture
 echo "🔍 Running Unit tests..."
-if deno test --allow-all --quiet tests/unit/handle-resolver.test.ts tests/unit/profile-resolver-v2.test.ts tests/unit/storage-provider.test.ts; then
+if deno test --allow-all --quiet tests/unit/; then
     echo "✅ Unit tests passed"
 else
     echo "❌ Unit tests failed"

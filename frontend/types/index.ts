@@ -1,0 +1,37 @@
+// Shared TypeScript types for the frontend
+
+export interface CheckinData {
+  id: string;
+  uri: string;
+  author: {
+    did: string;
+    handle: string;
+    displayName?: string;
+    avatar?: string;
+  };
+  text: string;
+  createdAt: string;
+  coordinates?: {
+    latitude: number;
+    longitude: number;
+  };
+  address?: {
+    name?: string;
+    street?: string;
+    locality?: string;
+    region?: string;
+    country?: string;
+    postalCode?: string;
+  };
+  distance?: number;
+}
+
+export interface AuthState {
+  isAuthenticated: boolean;
+  userHandle?: string;
+  userDid?: string;
+  userAvatar?: string;
+  userDisplayName?: string;
+}
+
+export type FeedType = "timeline" | "following" | "global";

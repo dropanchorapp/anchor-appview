@@ -43,7 +43,7 @@
     "check": "deno check --allow-import src/",
     "quality": "deno fmt && deno lint && deno test --allow-all tests/",
     "quality:fix": "deno fmt && deno lint --fix && deno test --allow-all tests/",
-    "deploy": "./scripts/deploy.sh",
+    "deploy": "deno task quality && vt push",
     "debug": "deno run --allow-net scripts/debug.ts"
   }
 }

@@ -1,6 +1,6 @@
 // Address resolution utilities for AT Protocol strongrefs
 // Resolves venue/address records and manages caching
-import { sqlite } from "https://esm.town/v/stevekrouse/sqlite";
+import { db } from "../database/db.ts";
 
 export async function resolveAndCacheAddress(
   checkinId: string,
@@ -8,7 +8,7 @@ export async function resolveAndCacheAddress(
 ) {
   try {
     // Check cache first
-    const cached = await sqlite.execute(
+    const cached = await db.execute(
       `
       SELECT * FROM address_cache_v1 
       WHERE uri = ? AND failed_at IS NULL
@@ -17,8 +17,8 @@ export async function resolveAndCacheAddress(
     );
 
     let addressData;
-    if (cached.length > 0) {
-      addressData = JSON.parse(cached[0].full_data as string);
+    if (cached.rows.length > 0) {
+      addressData = JSON.parse(cached.rows[0].full_data as string);
       console.log("Using cached address data for:", addressRef.uri);
     } else {
       // Resolve address from AT Protocol network
@@ -27,7 +27,7 @@ export async function resolveAndCacheAddress(
 
       if (addressData) {
         // Cache the resolved address
-        await sqlite.execute(
+        await db.execute(
           `
           INSERT OR REPLACE INTO address_cache_v1 
           (uri, cid, name, street, locality, region, country, postal_code, latitude, longitude, full_data, resolved_at)
@@ -52,7 +52,7 @@ export async function resolveAndCacheAddress(
         console.log("Address cached successfully:", addressRef.uri);
       } else {
         // Mark as failed
-        await sqlite.execute(
+        await db.execute(
           `
           INSERT OR REPLACE INTO address_cache_v1 (uri, failed_at) 
           VALUES (?, ?)
@@ -69,7 +69,7 @@ export async function resolveAndCacheAddress(
 
     // Update checkin with resolved address data
     if (addressData) {
-      await sqlite.execute(
+      await db.execute(
         `
         UPDATE checkins_v1 SET 
           cached_address_name = ?, 
@@ -102,7 +102,7 @@ export async function resolveAndCacheAddress(
 
     // Mark as failed on error
     try {
-      await sqlite.execute(
+      await db.execute(
         `
         INSERT OR REPLACE INTO address_cache_v1 (uri, failed_at) 
         VALUES (?, ?)
@@ -232,7 +232,7 @@ export async function getUnresolvedAddresses(
 ): Promise<
   Array<{ checkinId: string; addressRef: { uri: string; cid?: string } }>
 > {
-  const results = await sqlite.execute(
+  const results = await db.execute(
     `
     SELECT id, address_ref_uri, address_ref_cid 
     FROM checkins_v1 

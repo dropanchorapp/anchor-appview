@@ -26,7 +26,7 @@ export class SqliteStorageProvider implements StorageProvider {
 
   async getProfile(did: string): Promise<ProfileData | null> {
     const result = await this.sqlite.execute(
-      "SELECT * FROM profile_cache_v1 WHERE did = ?",
+      "SELECT * FROM profile_cache WHERE did = ?",
       [did],
     );
 
@@ -36,9 +36,9 @@ export class SqliteStorageProvider implements StorageProvider {
         did: row.did as string,
         handle: row.handle as string,
         displayName: row.display_name as string | undefined,
-        avatar: row.avatar as string | undefined,
+        avatar: row.avatar_url as string | undefined,
         description: row.description as string | undefined,
-        fetchedAt: row.fetched_at as string,
+        fetchedAt: row.indexed_at as string,
         updatedAt: row.updated_at as string | undefined,
       };
     }
@@ -48,8 +48,8 @@ export class SqliteStorageProvider implements StorageProvider {
 
   async setProfile(profile: ProfileData): Promise<void> {
     await this.sqlite.execute(
-      `INSERT OR REPLACE INTO profile_cache_v1 
-       (did, handle, display_name, avatar, description, fetched_at, updated_at)
+      `INSERT OR REPLACE INTO profile_cache 
+       (did, handle, display_name, avatar_url, description, indexed_at, updated_at)
        VALUES (?, ?, ?, ?, ?, ?, ?)`,
       [
         profile.did,
@@ -71,9 +71,9 @@ export class SqliteStorageProvider implements StorageProvider {
     staleThreshold.setHours(staleThreshold.getHours() - staleThresholdHours);
 
     const result = await this.sqlite.execute(
-      `SELECT * FROM profile_cache_v1 
-       WHERE fetched_at < ? 
-       ORDER BY fetched_at ASC 
+      `SELECT * FROM profile_cache 
+       WHERE indexed_at < ? 
+       ORDER BY indexed_at ASC 
        LIMIT ?`,
       [staleThreshold.toISOString(), limit],
     );
@@ -82,32 +82,34 @@ export class SqliteStorageProvider implements StorageProvider {
       did: row.did as string,
       handle: row.handle as string,
       displayName: row.display_name as string | undefined,
-      avatar: row.avatar as string | undefined,
+      avatar: row.avatar_url as string | undefined,
       description: row.description as string | undefined,
-      fetchedAt: row.fetched_at as string,
+      fetchedAt: row.indexed_at as string,
       updatedAt: row.updated_at as string | undefined,
     }));
   }
 
   async ensureTablesExist(): Promise<void> {
     await this.sqlite.execute(`
-      CREATE TABLE IF NOT EXISTS profile_cache_v1 (
+      CREATE TABLE IF NOT EXISTS profile_cache (
         did TEXT PRIMARY KEY,
-        handle TEXT NOT NULL,
+        handle TEXT,
         display_name TEXT,
-        avatar TEXT,
+        avatar_url TEXT,
         description TEXT,
-        fetched_at TEXT NOT NULL,
-        updated_at TEXT,
-        full_data JSON
+        followers_count INTEGER DEFAULT 0,
+        following_count INTEGER DEFAULT 0,
+        posts_count INTEGER DEFAULT 0,
+        indexed_at TEXT DEFAULT CURRENT_TIMESTAMP,
+        updated_at TEXT DEFAULT CURRENT_TIMESTAMP
       )
     `);
 
     await this.sqlite.execute(
-      `CREATE INDEX IF NOT EXISTS idx_profiles_updated ON profile_cache_v1(updated_at)`,
+      `CREATE INDEX IF NOT EXISTS idx_profiles_updated ON profile_cache(updated_at)`,
     );
     await this.sqlite.execute(
-      `CREATE INDEX IF NOT EXISTS idx_profiles_fetched ON profile_cache_v1(fetched_at)`,
+      `CREATE INDEX IF NOT EXISTS idx_profiles_indexed ON profile_cache(indexed_at)`,
     );
   }
 }

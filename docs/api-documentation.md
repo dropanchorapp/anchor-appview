@@ -6,7 +6,7 @@ check-ins from the AT Protocol network.
 ## Base URL
 
 ```
-https://anchor-feed-generator.val.run
+https://dropanchor.app
 ```
 
 ## Authentication
@@ -86,7 +86,7 @@ Get recent check-ins from all users with pagination support.
 **Example Request:**
 
 ```bash
-curl "https://anchor-feed-generator.val.run/global?limit=10&cursor=2025-07-04T10:00:00Z"
+curl "https://dropanchor.app/global?limit=10&cursor=2025-07-04T10:00:00Z"
 ```
 
 **Example Response:**
@@ -140,7 +140,7 @@ Get check-ins within a specified radius of coordinates using spatial queries.
 **Example Request:**
 
 ```bash
-curl "https://anchor-feed-generator.val.run/nearby?lat=52.3676&lng=4.9041&radius=10&limit=20"
+curl "https://dropanchor.app/nearby?lat=52.3676&lng=4.9041&radius=10&limit=20"
 ```
 
 **Example Response:**
@@ -204,7 +204,7 @@ Get all check-ins from a specific user.
 **Example Request:**
 
 ```bash
-curl "https://anchor-feed-generator.val.run/user?did=did:plc:example123&limit=10"
+curl "https://dropanchor.app/user?did=did:plc:example123&limit=10"
 ```
 
 **Example Response:**
@@ -259,7 +259,7 @@ Get check-ins from users that the specified user follows on Bluesky.
 **Example Request:**
 
 ```bash
-curl "https://anchor-feed-generator.val.run/following?user=did:plc:example123&limit=10"
+curl "https://dropanchor.app/following?user=did:plc:example123&limit=10"
 ```
 
 **Example Response:**
@@ -311,7 +311,7 @@ Get AppView health metrics and processing statistics.
 **Example Request:**
 
 ```bash
-curl "https://anchor-feed-generator.val.run/stats"
+curl "https://dropanchor.app/stats"
 ```
 
 **Example Response:**
@@ -406,7 +406,7 @@ interface Checkin {
 
 ```typescript
 class AnchorAPI {
-  private baseURL = "https://anchor-feed-generator.val.run";
+  private baseURL = "https://dropanchor.app";
 
   async getGlobalFeed(limit = 50, cursor?: string) {
     const params = new URLSearchParams({
@@ -465,7 +465,7 @@ class AnchorAPI {
 import Foundation
 
 class AnchorAPI {
-    private let baseURL = "https://anchor-feed-generator.val.run"
+    private let baseURL = "https://dropanchor.app"
     
     func getGlobalFeed(limit: Int = 50, cursor: String? = nil) async throws -> GlobalFeedResponse {
         var components = URLComponents(string: "\(baseURL)/global")!

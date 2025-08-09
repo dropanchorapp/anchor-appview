@@ -91,12 +91,12 @@ vt create cron socialGraphSync --file src/social/social-graph-sync.ts --schedule
 
 ## 🔌 API Endpoints
 
-**Base URL**: `https://anchor-feed-generator.val.run`
+**Base URL**: `https://dropanchor.app`
 
 ### Global Feed
 
 ```http
-GET https://anchor-feed-generator.val.run/global?limit=50&cursor=2025-06-29T15:00:00Z
+GET https://dropanchor.app/global?limit=50&cursor=2025-06-29T15:00:00Z
 ```
 
 Recent check-ins from all users with pagination.
@@ -104,7 +104,7 @@ Recent check-ins from all users with pagination.
 ### Nearby Checkins
 
 ```http
-GET https://anchor-feed-generator.val.run/nearby?lat=52.0705&lng=4.3007&radius=5&limit=50
+GET https://dropanchor.app/nearby?lat=52.0705&lng=4.3007&radius=5&limit=50
 ```
 
 Spatial query for check-ins within specified radius (km).
@@ -112,7 +112,7 @@ Spatial query for check-ins within specified radius (km).
 ### User Checkins
 
 ```http
-GET https://anchor-feed-generator.val.run/user?did=did:plc:abc123&limit=50
+GET https://dropanchor.app/user?did=did:plc:abc123&limit=50
 ```
 
 All check-ins from a specific user.
@@ -120,7 +120,7 @@ All check-ins from a specific user.
 ### Following Feed
 
 ```http
-GET https://anchor-feed-generator.val.run/following?user=did:plc:abc123&limit=50&cursor=2025-06-29T15:00:00Z
+GET https://dropanchor.app/following?user=did:plc:abc123&limit=50&cursor=2025-06-29T15:00:00Z
 ```
 
 Check-ins from people the specified user follows on Bluesky.
@@ -128,7 +128,7 @@ Check-ins from people the specified user follows on Bluesky.
 ### Statistics
 
 ```http
-GET https://anchor-feed-generator.val.run/stats
+GET https://dropanchor.app/stats
 ```
 
 AppView health metrics and processing statistics.
