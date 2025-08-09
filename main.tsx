@@ -50,33 +50,42 @@ app.get("/oauth/callback", async (c) => {
   });
 });
 
-// AppView API endpoints (original Anchor functionality)
-app.get("/global", async (c) => {
+// ========================================
+// JSON API Routes (under /api/ namespace)
+// ========================================
+app.get("/api/global", async (c) => {
   const response = await anchorApiHandler(c.req.raw);
   return response;
 });
 
-app.get("/nearby", async (c) => {
+app.get("/api/nearby", async (c) => {
   const response = await anchorApiHandler(c.req.raw);
   return response;
 });
 
-app.get("/user", async (c) => {
+app.get("/api/user", async (c) => {
   const response = await anchorApiHandler(c.req.raw);
   return response;
 });
 
-app.get("/following", async (c) => {
+app.get("/api/following", async (c) => {
   const response = await anchorApiHandler(c.req.raw);
   return response;
 });
 
-app.get("/stats", async (c) => {
+app.get("/api/stats", async (c) => {
   const response = await anchorApiHandler(c.req.raw);
   return response;
 });
 
-// Frontend API endpoints (for React app)
+app.get("/api/places/nearby", async (c) => {
+  const response = await anchorApiHandler(c.req.raw);
+  return response;
+});
+
+// ========================================
+// Dashboard API Routes (for React frontend)
+// ========================================
 app.get("/api/feed", async (c) => {
   try {
     const checkins = await getRecentCheckins(50);
@@ -356,6 +365,10 @@ app.post("/api/auth/logout", async (c) => {
     return c.json({ error: "Logout failed" }, 500);
   }
 });
+
+// ========================================
+// Frontend Routes (HTML/React views)
+// ========================================
 
 // Serve main app for all other routes
 app.get("*", (_c) => serveFile("/frontend/index.html", import.meta.url));

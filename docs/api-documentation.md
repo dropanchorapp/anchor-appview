@@ -6,8 +6,11 @@ check-ins from the AT Protocol network.
 ## Base URL
 
 ```
-https://dropanchor.app
+https://dropanchor.app/api
 ```
+
+**Note:** All API endpoints are now under the `/api/` namespace to separate them
+from frontend routes.
 
 ## Authentication
 
@@ -76,7 +79,7 @@ Each check-in in the response includes full profile information:
 
 Get recent check-ins from all users with pagination support.
 
-**Endpoint:** `GET /global`
+**Endpoint:** `GET /api/global`
 
 **Parameters:**
 
@@ -86,7 +89,7 @@ Get recent check-ins from all users with pagination support.
 **Example Request:**
 
 ```bash
-curl "https://dropanchor.app/global?limit=10&cursor=2025-07-04T10:00:00Z"
+curl "https://dropanchor.app/api/global?limit=10&cursor=2025-07-04T10:00:00Z"
 ```
 
 **Example Response:**
@@ -125,7 +128,7 @@ curl "https://dropanchor.app/global?limit=10&cursor=2025-07-04T10:00:00Z"
 
 Get check-ins within a specified radius of coordinates using spatial queries.
 
-**Endpoint:** `GET /nearby`
+**Endpoint:** `GET /api/nearby`
 
 **Required Parameters:**
 
@@ -140,7 +143,7 @@ Get check-ins within a specified radius of coordinates using spatial queries.
 **Example Request:**
 
 ```bash
-curl "https://dropanchor.app/nearby?lat=52.3676&lng=4.9041&radius=10&limit=20"
+curl "https://dropanchor.app/api/nearby?lat=52.3676&lng=4.9041&radius=10&limit=20"
 ```
 
 **Example Response:**
@@ -190,7 +193,7 @@ curl "https://dropanchor.app/nearby?lat=52.3676&lng=4.9041&radius=10&limit=20"
 
 Get all check-ins from a specific user.
 
-**Endpoint:** `GET /user`
+**Endpoint:** `GET /api/user`
 
 **Required Parameters:**
 
@@ -204,7 +207,7 @@ Get all check-ins from a specific user.
 **Example Request:**
 
 ```bash
-curl "https://dropanchor.app/user?did=did:plc:example123&limit=10"
+curl "https://dropanchor.app/api/user?did=did:plc:example123&limit=10"
 ```
 
 **Example Response:**
@@ -245,7 +248,7 @@ curl "https://dropanchor.app/user?did=did:plc:example123&limit=10"
 
 Get check-ins from users that the specified user follows on Bluesky.
 
-**Endpoint:** `GET /following`
+**Endpoint:** `GET /api/following`
 
 **Required Parameters:**
 
@@ -259,7 +262,7 @@ Get check-ins from users that the specified user follows on Bluesky.
 **Example Request:**
 
 ```bash
-curl "https://dropanchor.app/following?user=did:plc:example123&limit=10"
+curl "https://dropanchor.app/api/following?user=did:plc:example123&limit=10"
 ```
 
 **Example Response:**
@@ -300,18 +303,112 @@ curl "https://dropanchor.app/following?user=did:plc:example123&limit=10"
 **Note:** Social graph data is synced daily from Bluesky. If no follows are
 found, returns an empty array.
 
-### 5. Statistics
+### 5. Place Discovery
+
+Search for nearby places using OpenStreetMap data via the Overpass API. This
+endpoint enables location-based place discovery for check-ins.
+
+**Endpoint:** `GET /api/places/nearby`
+
+**Required Parameters:**
+
+- `lat`: Latitude coordinate (-90 to 90)
+- `lng`: Longitude coordinate (-180 to 180)
+
+**Optional Parameters:**
+
+- `radius`: Search radius in meters (default: 300, max: 2000)
+- `categories`: Comma-separated list of OSM categories (e.g.,
+  "amenity=cafe,amenity=restaurant")
+
+**Example Request:**
+
+```bash
+curl "https://dropanchor.app/api/places/nearby?lat=37.7749&lng=-122.4194&radius=500&categories=amenity%3Dcafe,amenity%3Drestaurant"
+```
+
+**Example Response:**
+
+```json
+{
+  "places": [
+    {
+      "id": "node:2895323815",
+      "elementType": "node",
+      "elementId": 2895323815,
+      "name": "Blue Bottle Coffee",
+      "latitude": 37.7749,
+      "longitude": -122.4194,
+      "address": {
+        "$type": "community.lexicon.location.address",
+        "name": "Blue Bottle Coffee",
+        "street": "315 Linden St",
+        "locality": "San Francisco",
+        "region": "CA",
+        "country": "US",
+        "postalCode": "94102"
+      },
+      "category": "cafe",
+      "categoryGroup": "food_and_drink",
+      "icon": "☕",
+      "distanceMeters": 45.8,
+      "formattedDistance": "46m",
+      "tags": {
+        "amenity": "cafe",
+        "name": "Blue Bottle Coffee",
+        "addr:street": "Linden St",
+        "addr:housenumber": "315",
+        "addr:city": "San Francisco",
+        "addr:state": "CA",
+        "addr:country": "US",
+        "addr:postcode": "94102"
+      }
+    }
+  ],
+  "totalCount": 23,
+  "searchRadius": 500,
+  "categories": ["amenity=cafe", "amenity=restaurant"],
+  "searchCoordinate": {
+    "latitude": 37.7749,
+    "longitude": -122.4194
+  }
+}
+```
+
+**Place Categories:**
+
+Common category filters include:
+
+- **Food & Drink:** `amenity=restaurant`, `amenity=cafe`, `amenity=bar`,
+  `shop=supermarket`
+- **Entertainment:** `amenity=cinema`, `tourism=attraction`, `leisure=park`
+- **Sports:** `leisure=fitness_centre`, `leisure=climbing`,
+  `leisure=swimming_pool`
+- **Shopping:** `shop=clothes`, `shop=electronics`, `shop=books`
+- **Accommodation:** `tourism=hotel`, `tourism=hostel`
+- **Transportation:** `amenity=bus_station`, `amenity=fuel`
+
+**Notes:**
+
+- Results include complete address information extracted from OpenStreetMap data
+- Places are sorted by distance (closest first)
+- Address data follows the AT Protocol `community.lexicon.location.address`
+  format
+- Results are cached for 5 minutes per location to improve performance
+- Uses Overpass API for real-time OpenStreetMap data
+
+### 6. Statistics
 
 Get AppView health metrics and processing statistics.
 
-**Endpoint:** `GET /stats`
+**Endpoint:** `GET /api/stats`
 
 **Parameters:** None
 
 **Example Request:**
 
 ```bash
-curl "https://dropanchor.app/stats"
+curl "https://dropanchor.app/api/stats"
 ```
 
 **Example Response:**
@@ -406,7 +503,7 @@ interface Checkin {
 
 ```typescript
 class AnchorAPI {
-  private baseURL = "https://dropanchor.app";
+  private baseURL = "https://dropanchor.app/api";
 
   async getGlobalFeed(limit = 50, cursor?: string) {
     const params = new URLSearchParams({
@@ -452,6 +549,23 @@ class AnchorAPI {
     return response.json();
   }
 
+  async getNearbyPlaces(
+    lat: number,
+    lng: number,
+    radius = 300,
+    categories?: string[],
+  ) {
+    const params = new URLSearchParams({
+      lat: lat.toString(),
+      lng: lng.toString(),
+      radius: radius.toString(),
+      ...(categories && { categories: categories.join(",") }),
+    });
+
+    const response = await fetch(`${this.baseURL}/places/nearby?${params}`);
+    return response.json();
+  }
+
   async getStats() {
     const response = await fetch(`${this.baseURL}/stats`);
     return response.json();
@@ -465,7 +579,7 @@ class AnchorAPI {
 import Foundation
 
 class AnchorAPI {
-    private let baseURL = "https://dropanchor.app"
+    private let baseURL = "https://dropanchor.app/api"
     
     func getGlobalFeed(limit: Int = 50, cursor: String? = nil) async throws -> GlobalFeedResponse {
         var components = URLComponents(string: "\(baseURL)/global")!

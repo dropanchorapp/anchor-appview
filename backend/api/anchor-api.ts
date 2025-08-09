@@ -6,6 +6,8 @@ import {
   ProfileData,
   SqliteStorageProvider,
 } from "../utils/storage-provider.ts";
+import { OverpassService } from "../services/overpass-service.ts";
+import { PlacesNearbyResponse } from "../models/place-models.ts";
 
 // Types for better TypeScript support
 interface CorsHeaders {
@@ -61,15 +63,17 @@ export default async function (req: Request): Promise<Response> {
 
   // Route to appropriate handler - let errors bubble up
   switch (url.pathname) {
-    case "/global":
+    case "/api/global":
       return await getGlobalFeed(url, corsHeaders);
-    case "/nearby":
+    case "/api/nearby":
       return await getNearbyCheckins(url, corsHeaders);
-    case "/user":
+    case "/api/user":
       return await getUserCheckins(url, corsHeaders);
-    case "/following":
+    case "/api/following":
       return await getFollowingFeed(url, corsHeaders);
-    case "/stats":
+    case "/api/places/nearby":
+      return await getNearbyPlaces(url, corsHeaders);
+    case "/api/stats":
       return await getStats(corsHeaders);
     default:
       return new Response(JSON.stringify({ error: "Not Found" }), {
@@ -351,6 +355,74 @@ async function getStats(corsHeaders: CorsHeaders): Promise<Response> {
   };
 
   return new Response(JSON.stringify(stats), { headers: corsHeaders });
+}
+
+async function getNearbyPlaces(
+  url: URL,
+  corsHeaders: CorsHeaders,
+): Promise<Response> {
+  const lat = parseFloat(url.searchParams.get("lat") || "0");
+  const lng = parseFloat(url.searchParams.get("lng") || "0");
+  const radius = Math.min(
+    parseFloat(url.searchParams.get("radius") || "300"),
+    2000, // max 2km for places search
+  );
+  const categoriesParam = url.searchParams.get("categories");
+  const categories = categoriesParam ? categoriesParam.split(",") : [];
+
+  // Validate coordinates
+  if (!lat || !lng || Math.abs(lat) > 90 || Math.abs(lng) > 180) {
+    return new Response(
+      JSON.stringify({
+        error:
+          "Valid lat and lng parameters required (lat: -90 to 90, lng: -180 to 180)",
+      }),
+      {
+        status: 400,
+        headers: corsHeaders,
+      },
+    );
+  }
+
+  try {
+    // Initialize Overpass service
+    const overpassService = new OverpassService();
+
+    // Search for nearby places
+    const placesWithDistance = await overpassService
+      .findNearbyPlacesWithDistance(
+        { latitude: lat, longitude: lng },
+        radius,
+        categories,
+      );
+
+    // Format response
+    const response: PlacesNearbyResponse = {
+      places: placesWithDistance,
+      totalCount: placesWithDistance.length,
+      searchRadius: radius,
+      categories: categories.length > 0 ? categories : undefined,
+      searchCoordinate: {
+        latitude: lat,
+        longitude: lng,
+      },
+    };
+
+    return new Response(JSON.stringify(response), { headers: corsHeaders });
+  } catch (error) {
+    console.error("Places search error:", error);
+
+    return new Response(
+      JSON.stringify({
+        error: "Failed to search for nearby places",
+        details: error instanceof Error ? error.message : "Unknown error",
+      }),
+      {
+        status: 500,
+        headers: corsHeaders,
+      },
+    );
+  }
 }
 
 function formatCheckin(
