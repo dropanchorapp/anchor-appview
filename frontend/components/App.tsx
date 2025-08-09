@@ -98,13 +98,13 @@ export function App() {
       setError(null);
 
       try {
-        let url = "/global";
+        let url = "/api/global";
         if (feedType === "following" && auth.isAuthenticated && auth.userDid) {
-          url = `/following?user=${auth.userDid}`;
+          url = `/api/following?user=${auth.userDid}`;
         } else if (
           feedType === "timeline" && auth.isAuthenticated && auth.userDid
         ) {
-          url = `/user?did=${auth.userDid}`;
+          url = `/api/user?did=${auth.userDid}`;
         }
 
         const response = await fetch(url);
