@@ -120,7 +120,9 @@ async function getGlobalFeed(
   const profileResolver = new ATProtocolProfileResolver(storage);
   const profiles = await profileResolver.batchResolveProfiles(dids);
 
-  const checkins = rows.map((row) => formatCheckin(row, profiles));
+  const checkins = await Promise.all(
+    rows.map((row) => formatCheckinWithPlaces(row, profiles)),
+  );
 
   return new Response(
     JSON.stringify({
@@ -195,7 +197,9 @@ async function getNearbyCheckins(
   const profileResolver = new ATProtocolProfileResolver(storage);
   const profiles = await profileResolver.batchResolveProfiles(dids);
 
-  const nearbyCheckins = nearbyRows.map((row) => formatCheckin(row, profiles));
+  const nearbyCheckins = await Promise.all(
+    nearbyRows.map((row) => formatCheckinWithPlaces(row, profiles)),
+  );
 
   return new Response(
     JSON.stringify({
@@ -243,7 +247,9 @@ async function getUserCheckins(
   const profileResolver = new ATProtocolProfileResolver(storage);
   const profiles = await profileResolver.batchResolveProfiles(dids);
 
-  const checkins = rows.map((row) => formatCheckin(row, profiles));
+  const checkins = await Promise.all(
+    rows.map((row) => formatCheckinWithPlaces(row, profiles)),
+  );
 
   return new Response(
     JSON.stringify({
@@ -320,7 +326,9 @@ async function getFollowingFeed(
   const profileResolver = new ATProtocolProfileResolver(storage);
   const profiles = await profileResolver.batchResolveProfiles(dids);
 
-  const checkins = rows.map((row) => formatCheckin(row, profiles));
+  const checkins = await Promise.all(
+    rows.map((row) => formatCheckinWithPlaces(row, profiles)),
+  );
 
   return new Response(
     JSON.stringify({
@@ -428,10 +436,13 @@ async function getNearbyPlaces(
   }
 }
 
-function formatCheckin(
+// Create a single OverpassService instance to reuse
+const overpassService = new OverpassService();
+
+async function formatCheckinWithPlaces(
   row: any,
   profiles: Map<string, ProfileData>,
-): CheckinRecord {
+): Promise<CheckinRecord> {
   const profile = profiles.get(row.did as string);
 
   const checkin: any = {
@@ -469,6 +480,33 @@ function formatCheckin(
       country: row.cached_address_country,
       postalCode: row.cached_address_postal_code,
     };
+  } else if (row.latitude && row.longitude) {
+    // If no cached address data, try to find the nearest place via Overpass
+    try {
+      const nearbyPlaces = await overpassService.findNearbyPlaces(
+        { latitude: row.latitude, longitude: row.longitude },
+        100, // 100 meter radius
+        [], // All categories
+      );
+
+      if (nearbyPlaces.length > 0) {
+        // Use the first (closest) place found
+        const nearestPlace = nearbyPlaces[0];
+        checkin.address = {
+          name: nearestPlace.name, // Use the actual venue name from OSM
+          street: nearestPlace.tags?.["addr:street"] || undefined,
+          locality: nearestPlace.tags?.["addr:city"] ||
+            nearestPlace.tags?.["addr:locality"] || undefined,
+          region: nearestPlace.tags?.["addr:state"] ||
+            nearestPlace.tags?.["addr:province"] || undefined,
+          country: nearestPlace.tags?.["addr:country"] || undefined,
+          postalCode: nearestPlace.tags?.["addr:postcode"] || undefined,
+        };
+      }
+    } catch (error) {
+      console.warn("Failed to lookup nearby place:", error);
+      // Continue without address data - this is non-critical
+    }
   }
 
   // Add distance if calculated

@@ -3,9 +3,17 @@ import React, { useEffect, useRef, useState } from "https://esm.sh/react";
 import { Header } from "./Header.tsx";
 import { Feed } from "./Feed.tsx";
 import { LoginForm } from "./LoginForm.tsx";
+import { MobileAuth } from "./MobileAuth.tsx";
 import { AuthState, CheckinData, FeedType } from "../types/index.ts";
 
 export function App() {
+  // Check if we're on the mobile-auth route first, before any hooks
+  const isMobileAuth = globalThis.location?.pathname === "/mobile-auth";
+
+  if (isMobileAuth) {
+    return <MobileAuth />;
+  }
+
   const [checkins, setCheckins] = useState<CheckinData[]>([]);
   const [loading, setLoading] = useState(false);
   const [feedType, setFeedType] = useState<FeedType>("timeline");
@@ -98,6 +106,17 @@ export function App() {
       setError(null);
 
       try {
+        // For timeline and following feeds, require authentication
+        if (
+          (feedType === "timeline" || feedType === "following") &&
+          !auth.isAuthenticated
+        ) {
+          // Don't fetch data, show login prompt instead
+          setCheckins([]);
+          setLoading(false);
+          return;
+        }
+
         let url = "/api/global";
         if (feedType === "following" && auth.isAuthenticated && auth.userDid) {
           url = `/api/following?user=${auth.userDid}`;
@@ -206,6 +225,8 @@ export function App() {
           setFeedType={setFeedType}
           checkins={checkins}
           loading={loading}
+          auth={auth}
+          onLogin={handleLogin}
         />
       </div>
 

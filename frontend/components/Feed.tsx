@@ -1,5 +1,5 @@
 /** @jsxImportSource https://esm.sh/react */
-import { CheckinData, FeedType } from "../types/index.ts";
+import { AuthState, CheckinData, FeedType } from "../types/index.ts";
 import { CheckinCard } from "./CheckinCard.tsx";
 
 interface FeedProps {
@@ -7,9 +7,13 @@ interface FeedProps {
   setFeedType: (type: FeedType) => void;
   checkins: CheckinData[];
   loading: boolean;
+  auth: AuthState;
+  onLogin: () => void;
 }
 
-export function Feed({ feedType, setFeedType, checkins, loading }: FeedProps) {
+export function Feed(
+  { feedType, setFeedType, checkins, loading, auth, onLogin }: FeedProps,
+) {
   return (
     <>
       <div
@@ -157,44 +161,121 @@ export function Feed({ feedType, setFeedType, checkins, loading }: FeedProps) {
             justifyContent: "center",
           }}
         >
-          <img
-            src="https://res.cloudinary.com/dru3aznlk/image/upload/v1754731275/seagull-looking_yanxxb.png"
-            alt="Seagull looking around"
-            style={{
-              width: "400px",
-              height: "auto",
-              marginBottom: "40px",
-            }}
-          />
-          <h3
-            style={{
-              fontSize: "20px",
-              fontWeight: "600",
-              color: "#1c1c1e",
-              margin: "0 0 8px 0",
-            }}
-          >
-            {feedType === "global"
-              ? "No check-ins yet"
-              : feedType === "following"
-              ? "No check-ins from people you follow"
-              : "Your timeline is empty"}
-          </h3>
-          <p
-            style={{
-              fontSize: "15px",
-              color: "#8e8e93",
-              margin: "0 auto",
-              maxWidth: "400px",
-              lineHeight: "1.4",
-            }}
-          >
-            {feedType === "global"
-              ? "Check-ins from the community will appear here as people start sharing their locations."
-              : feedType === "following"
-              ? "Check-ins from people you follow will appear here."
-              : "Your personalized timeline is empty. Check back later!"}
-          </p>
+          {/* Show login illustration for timeline and following when not authenticated */}
+          {(feedType === "timeline" || feedType === "following") &&
+              !auth.isAuthenticated
+            ? (
+              <div
+                style={{
+                  background: "white",
+                  borderRadius: "12px",
+                  padding: "60px 40px",
+                  boxShadow: "0 1px 3px rgba(0,0,0,0.1)",
+                  margin: "0 20px",
+                }}
+              >
+                <img
+                  src="https://res.cloudinary.com/dru3aznlk/image/upload/v1754731274/seagull-chest_oc7rjd.png"
+                  alt="Login required"
+                  style={{
+                    width: "400px",
+                    height: "auto",
+                    marginBottom: "40px",
+                  }}
+                />
+                <h3
+                  style={{
+                    fontSize: "20px",
+                    fontWeight: "600",
+                    color: "#1c1c1e",
+                    margin: "0 0 8px 0",
+                  }}
+                >
+                  Sign in to see your {feedType}
+                </h3>
+                <p
+                  style={{
+                    fontSize: "15px",
+                    color: "#8e8e93",
+                    margin: "0 auto 24px auto",
+                    maxWidth: "400px",
+                    lineHeight: "1.4",
+                  }}
+                >
+                  {feedType === "following"
+                    ? "Connect with your Bluesky account to see check-ins from people you follow."
+                    : "Connect with your Bluesky account to see your personalized timeline."}
+                </p>
+                <button
+                  type="button"
+                  onClick={onLogin}
+                  style={{
+                    background: "#007aff",
+                    color: "white",
+                    border: "none",
+                    borderRadius: "22px",
+                    padding: "12px 24px",
+                    fontSize: "16px",
+                    fontWeight: "600",
+                    cursor: "pointer",
+                    transition: "all 0.2s ease",
+                  }}
+                  onMouseEnter={(e) => {
+                    e.currentTarget.style.background = "#0056b3";
+                    e.currentTarget.style.transform = "translateY(-1px)";
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.background = "#007aff";
+                    e.currentTarget.style.transform = "translateY(0)";
+                  }}
+                >
+                  Sign in with Bluesky
+                </button>
+              </div>
+            )
+            : (
+              /* Show regular empty state for global feed or authenticated empty feeds */
+              <>
+                <img
+                  src="https://res.cloudinary.com/dru3aznlk/image/upload/v1754731275/seagull-looking_yanxxb.png"
+                  alt="Seagull looking around"
+                  style={{
+                    width: "400px",
+                    height: "auto",
+                    marginBottom: "40px",
+                  }}
+                />
+                <h3
+                  style={{
+                    fontSize: "20px",
+                    fontWeight: "600",
+                    color: "#1c1c1e",
+                    margin: "0 0 8px 0",
+                  }}
+                >
+                  {feedType === "global"
+                    ? "No check-ins yet"
+                    : feedType === "following"
+                    ? "No check-ins from people you follow"
+                    : "Your timeline is empty"}
+                </h3>
+                <p
+                  style={{
+                    fontSize: "15px",
+                    color: "#8e8e93",
+                    margin: "0 auto",
+                    maxWidth: "400px",
+                    lineHeight: "1.4",
+                  }}
+                >
+                  {feedType === "global"
+                    ? "Check-ins from the community will appear here as people start sharing their locations."
+                    : feedType === "following"
+                    ? "Check-ins from people you follow will appear here."
+                    : "Your personalized timeline is empty. Check back later!"}
+                </p>
+              </>
+            )}
         </div>
       )}
 
