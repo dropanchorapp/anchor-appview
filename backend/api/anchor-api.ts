@@ -8,6 +8,7 @@ import {
 } from "../utils/storage-provider.ts";
 import { OverpassService } from "../services/overpass-service.ts";
 import { PlacesNearbyResponse } from "../models/place-models.ts";
+import { createCheckin } from "./checkins.ts";
 
 // Types for better TypeScript support
 interface CorsHeaders {
@@ -48,8 +49,8 @@ export default async function (req: Request): Promise<Response> {
   const url = new URL(req.url);
   const corsHeaders: CorsHeaders = {
     "Access-Control-Allow-Origin": "*",
-    "Access-Control-Allow-Methods": "GET, OPTIONS",
-    "Access-Control-Allow-Headers": "Content-Type",
+    "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
+    "Access-Control-Allow-Headers": "Content-Type, Cookie",
     "Content-Type": "application/json",
   };
 
@@ -75,6 +76,8 @@ export default async function (req: Request): Promise<Response> {
       return await getNearbyPlaces(url, corsHeaders);
     case "/api/stats":
       return await getStats(corsHeaders);
+    case "/api/checkins":
+      return await handleCreateCheckin(req, corsHeaders);
     default:
       return new Response(JSON.stringify({ error: "Not Found" }), {
         status: 404,
@@ -490,4 +493,32 @@ function calculateDistance(
       Math.sin(dLng / 2) * Math.sin(dLng / 2);
   const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
   return R * c;
+}
+
+async function handleCreateCheckin(
+  req: Request,
+  corsHeaders: CorsHeaders,
+): Promise<Response> {
+  // Only handle POST requests for checkin creation
+  if (req.method !== "POST") {
+    return new Response(JSON.stringify({ error: "Method not allowed" }), {
+      status: 405,
+      headers: corsHeaders,
+    });
+  }
+
+  // Create a mock Hono Context for the createCheckin function
+  const context = {
+    req: {
+      header: (name: string) => req.headers.get(name),
+      json: () => req.json(),
+    },
+    json: (data: any, status?: number) =>
+      new Response(JSON.stringify(data), {
+        status: status || 200,
+        headers: corsHeaders,
+      }),
+  };
+
+  return await createCheckin(context as any);
 }

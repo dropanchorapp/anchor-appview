@@ -51,37 +51,16 @@ app.get("/oauth/callback", async (c) => {
 });
 
 // ========================================
-// JSON API Routes (under /api/ namespace)
+// Core Anchor API Routes (handled by anchor-api.ts)
+// These routes provide the main API functionality with consistent CORS handling
 // ========================================
-app.get("/api/global", async (c) => {
-  const response = await anchorApiHandler(c.req.raw);
-  return response;
-});
-
-app.get("/api/nearby", async (c) => {
-  const response = await anchorApiHandler(c.req.raw);
-  return response;
-});
-
-app.get("/api/user", async (c) => {
-  const response = await anchorApiHandler(c.req.raw);
-  return response;
-});
-
-app.get("/api/following", async (c) => {
-  const response = await anchorApiHandler(c.req.raw);
-  return response;
-});
-
-app.get("/api/stats", async (c) => {
-  const response = await anchorApiHandler(c.req.raw);
-  return response;
-});
-
-app.get("/api/places/nearby", async (c) => {
-  const response = await anchorApiHandler(c.req.raw);
-  return response;
-});
+app.all("/api/global", (c) => anchorApiHandler(c.req.raw));
+app.all("/api/nearby", (c) => anchorApiHandler(c.req.raw));
+app.all("/api/user", (c) => anchorApiHandler(c.req.raw));
+app.all("/api/following", (c) => anchorApiHandler(c.req.raw));
+app.all("/api/stats", (c) => anchorApiHandler(c.req.raw));
+app.all("/api/places/nearby", (c) => anchorApiHandler(c.req.raw));
+app.all("/api/checkins", (c) => anchorApiHandler(c.req.raw));
 
 // ========================================
 // Dashboard API Routes (for React frontend)
