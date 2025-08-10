@@ -448,7 +448,138 @@ export async function handleOAuthCallback(request: Request): Promise<Response> {
       ],
     );
 
-    // Redirect back to app with success and set session cookie
+    // Check if this is a mobile app request
+    const userAgent = request.headers.get("User-Agent") || "";
+    const referer = request.headers.get("Referer") || "";
+    const isMobileApp = userAgent.includes("AnchorApp") ||
+      referer.includes("/mobile-auth") ||
+      userAgent.includes("iPhone") && userAgent.includes("Mobile");
+
+    if (isMobileApp) {
+      // For mobile apps, redirect using custom URL scheme with auth data
+      const mobileRedirectUrl = new URL("anchor-app://auth-callback");
+      mobileRedirectUrl.searchParams.set("access_token", tokens.access_token);
+      mobileRedirectUrl.searchParams.set("refresh_token", tokens.refresh_token);
+      mobileRedirectUrl.searchParams.set("did", did);
+      mobileRedirectUrl.searchParams.set("handle", handle);
+      mobileRedirectUrl.searchParams.set("session_id", sessionId);
+
+      if (userProfile?.avatar) {
+        mobileRedirectUrl.searchParams.set("avatar", userProfile.avatar);
+      }
+      if (userProfile?.displayName) {
+        mobileRedirectUrl.searchParams.set(
+          "display_name",
+          userProfile.displayName,
+        );
+      }
+
+      // Return a success page that triggers the mobile redirect
+      return new Response(
+        `
+        <!DOCTYPE html>
+        <html>
+          <head>
+            <title>Authentication Successful</title>
+            <meta name="viewport" content="width=device-width, initial-scale=1.0">
+            <style>
+              * {
+                margin: 0;
+                padding: 0;
+                box-sizing: border-box;
+              }
+              
+              body {
+                font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+                background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+                min-height: 100vh;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                padding: 20px;
+                color: white;
+                text-align: center;
+              }
+
+              .container {
+                background: rgba(255, 255, 255, 0.1);
+                backdrop-filter: blur(10px);
+                border-radius: 20px;
+                padding: 40px 30px;
+                max-width: 400px;
+                width: 100%;
+                border: 1px solid rgba(255, 255, 255, 0.2);
+              }
+
+              .success-icon {
+                width: 80px;
+                height: 80px;
+                margin: 0 auto 24px;
+                background: rgba(255, 255, 255, 0.2);
+                border-radius: 50%;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                font-size: 40px;
+              }
+
+              h1 {
+                font-size: 24px;
+                font-weight: 700;
+                margin-bottom: 16px;
+              }
+
+              p {
+                opacity: 0.9;
+                margin-bottom: 24px;
+              }
+
+              .redirect-info {
+                background: rgba(255, 255, 255, 0.1);
+                border-radius: 12px;
+                padding: 16px;
+                margin-top: 20px;
+                font-size: 14px;
+                opacity: 0.8;
+              }
+            </style>
+          </head>
+          <body>
+            <div class="container">
+              <div class="success-icon">✅</div>
+              <h1>Authentication Successful!</h1>
+              <p>You're being redirected back to the Anchor app...</p>
+              <div class="redirect-info">
+                If you're not redirected automatically, please return to the Anchor app.
+              </div>
+            </div>
+            
+            <script>
+              // Immediately redirect to the mobile app
+              window.location.href = "${mobileRedirectUrl.toString()}";
+              
+              // Fallback: try again after a short delay
+              setTimeout(() => {
+                window.location.href = "${mobileRedirectUrl.toString()}";
+              }, 1000);
+            </script>
+          </body>
+        </html>
+      `,
+        {
+          status: 200,
+          headers: {
+            "Content-Type": "text/html",
+            "Set-Cookie":
+              `anchor_session=${sessionId}; HttpOnly; Secure; SameSite=Strict; Max-Age=${
+                30 * 24 * 60 * 60
+              }; Path=/`,
+          },
+        },
+      );
+    }
+
+    // For web browsers, redirect back to app with success and set session cookie
     const redirectUrl = new URL("/", request.url);
     redirectUrl.searchParams.set("login", "success");
     redirectUrl.searchParams.set("handle", handle);

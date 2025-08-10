@@ -367,6 +367,323 @@ app.post("/api/auth/logout", async (c) => {
 });
 
 // ========================================
+// Mobile OAuth Routes
+// ========================================
+
+// Mobile authentication page for WebView integration
+app.get("/mobile-auth", (c) => {
+  return c.html(`<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sign in to Anchor</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+            line-height: 1.5;
+            color: #1c1c1e;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+        }
+
+        .container {
+            background: white;
+            border-radius: 20px;
+            padding: 40px 30px;
+            max-width: 400px;
+            width: 100%;
+            box-shadow: 0 20px 40px rgba(0, 0, 0, 0.1);
+            text-align: center;
+        }
+
+        .logo {
+            width: 80px;
+            height: 80px;
+            margin: 0 auto 24px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            border-radius: 20px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 40px;
+        }
+
+        h1 {
+            font-size: 28px;
+            font-weight: 700;
+            margin-bottom: 8px;
+            color: #1c1c1e;
+        }
+
+        .subtitle {
+            color: #8e8e93;
+            margin-bottom: 32px;
+            font-size: 16px;
+        }
+
+        .form {
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+        }
+
+        .input-group {
+            text-align: left;
+        }
+
+        label {
+            display: block;
+            font-weight: 600;
+            margin-bottom: 8px;
+            color: #1c1c1e;
+        }
+
+        input {
+            width: 100%;
+            padding: 16px;
+            border: 2px solid #f2f2f7;
+            border-radius: 12px;
+            font-size: 16px;
+            background: #f9f9f9;
+            transition: all 0.2s ease;
+        }
+
+        input:focus {
+            outline: none;
+            border-color: #667eea;
+            background: white;
+            box-shadow: 0 0 0 4px rgba(102, 126, 234, 0.1);
+        }
+
+        .btn {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            padding: 16px;
+            border-radius: 12px;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            position: relative;
+        }
+
+        .btn:hover {
+            transform: translateY(-1px);
+            box-shadow: 0 8px 25px rgba(102, 126, 234, 0.3);
+        }
+
+        .btn:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        .spinner {
+            display: none;
+            width: 20px;
+            height: 20px;
+            border: 2px solid transparent;
+            border-top: 2px solid white;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin: 0 auto;
+        }
+
+        .btn.loading .btn-text { display: none; }
+        .btn.loading .spinner { display: block; }
+
+        .error {
+            background: #ff3b30;
+            color: white;
+            padding: 12px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            font-size: 14px;
+            display: none;
+        }
+
+        .footer {
+            margin-top: 32px;
+            padding-top: 24px;
+            border-top: 1px solid #f2f2f7;
+            color: #8e8e93;
+            font-size: 14px;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="logo">⚓</div>
+        <h1>Sign in to Anchor</h1>
+        <p class="subtitle">Connect with your Bluesky account</p>
+        
+        <div class="error" id="error"></div>
+        
+        <form class="form" id="auth-form">
+            <div class="input-group">
+                <label for="handle">Bluesky Handle</label>
+                <input 
+                    type="text" 
+                    id="handle" 
+                    name="handle" 
+                    placeholder="yourhandle.bsky.social"
+                    autocomplete="username"
+                    required
+                >
+            </div>
+            
+            <button type="submit" class="btn" id="submit-btn">
+                <span class="btn-text">Sign in with Bluesky</span>
+                <div class="spinner"></div>
+            </button>
+        </form>
+        
+        <div class="footer">
+            Powered by AT Protocol
+        </div>
+    </div>
+
+    <script>
+        const form = document.getElementById('auth-form');
+        const submitBtn = document.getElementById('submit-btn');
+        const errorDiv = document.getElementById('error');
+        const handleInput = document.getElementById('handle');
+
+        function showError(message) {
+            errorDiv.textContent = message;
+            errorDiv.style.display = 'block';
+        }
+
+        function hideError() {
+            errorDiv.style.display = 'none';
+        }
+
+        function setLoading(loading) {
+            if (loading) {
+                submitBtn.classList.add('loading');
+                submitBtn.disabled = true;
+            } else {
+                submitBtn.classList.remove('loading');
+                submitBtn.disabled = false;
+            }
+        }
+
+        // Auto-format handle input
+        handleInput.addEventListener('input', (e) => {
+            let value = e.target.value.trim();
+            if (value && !value.includes('.') && !value.includes('@')) {
+                value = value + '.bsky.social';
+                e.target.value = value;
+            }
+        });
+
+        form.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            
+            const handle = handleInput.value.trim();
+            if (!handle) {
+                showError('Please enter your Bluesky handle');
+                return;
+            }
+
+            hideError();
+            setLoading(true);
+
+            try {
+                const response = await fetch('/api/auth/start', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({ handle })
+                });
+
+                if (!response.ok) {
+                    throw new Error('Failed to start authentication');
+                }
+
+                const data = await response.json();
+                
+                if (data.authUrl) {
+                    // Redirect to OAuth authorization
+                    window.location.href = data.authUrl;
+                } else {
+                    throw new Error('No authorization URL received');
+                }
+            } catch (error) {
+                console.error('Login failed:', error);
+                showError('Login failed. Please check your handle and try again.');
+                setLoading(false);
+            }
+        });
+
+        // Focus on handle input when page loads
+        window.addEventListener('load', () => {
+            handleInput.focus();
+        });
+    </script>
+</body>
+</html>`);
+});
+
+// Mobile token validation endpoint
+app.post("/api/auth/validate-mobile-session", async (c) => {
+  try {
+    const { access_token, refresh_token, did, handle, session_id } = await c.req
+      .json();
+
+    if (!access_token || !refresh_token || !did || !handle) {
+      return c.json(
+        { valid: false, error: "Missing required parameters" },
+        400,
+      );
+    }
+
+    // Validate that the tokens are properly formatted JWTs
+    const isValidJWT = (token: string) => {
+      try {
+        const parts = token.split(".");
+        return parts.length === 3 && parts.every((part) => part.length > 0);
+      } catch {
+        return false;
+      }
+    };
+
+    if (!isValidJWT(access_token) || !isValidJWT(refresh_token)) {
+      return c.json({ valid: false, error: "Invalid token format" }, 400);
+    }
+
+    return c.json({
+      valid: true,
+      user: {
+        did,
+        handle,
+        sessionId: session_id,
+      },
+    });
+  } catch (error) {
+    console.error("Mobile session validation error:", error);
+    return c.json({ valid: false, error: "Validation failed" }, 500);
+  }
+});
+
+// ========================================
 // Frontend Routes (HTML/React views)
 // ========================================
 

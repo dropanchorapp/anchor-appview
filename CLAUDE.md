@@ -5,38 +5,70 @@ code in this repository.
 
 ## Project Overview
 
-This is the **Anchor AppView** - a location-based social feed generator for the
-Anchor app, built on the AT Protocol (Bluesky) infrastructure. The system
-ingests check-in data from the decentralized AT Protocol network and provides
-spatial and social feeds for location-based social interactions.
+This is the **Anchor AppView** - a location-based social feed generator and
+OAuth authentication system for the Anchor app, built on the AT Protocol
+(Bluesky) infrastructure. The system ingests check-in data from the
+decentralized AT Protocol network, provides spatial and social feeds, and
+includes a complete OAuth WebView implementation for mobile app integration.
 
 ## Architecture
 
-The system consists of three main components:
+### Entry Point and Deployment
 
-1. **Jetstream WebSocket Poller** - Filters and ingests `app.dropanchor.checkin`
-   records from the AT Protocol network
-2. **Val Town AppView** - Handles address resolution, data storage, and API
-   serving
-3. **Anchor Client APIs** - Provides feeds for global, nearby, user-specific,
-   and following-based check-ins
+- **Main Entry**: `main.tsx` (Val Town HTTP function with
+  `// @val-town anchordashboard` comment)
+- **Base URL**: `https://dropanchor.app` (configurable via `ANCHOR_BASE_URL` env
+  var)
+- **Platform**: Single Hono-based web server deployed on Val Town using Deno
+  runtime
+
+### Core Components
+
+1. **HTTP Server (main.tsx)** - Unified Hono server handling all routes:
+   - OAuth authentication endpoints
+   - AppView API endpoints (global, nearby, user, following feeds)
+   - Mobile OAuth WebView pages
+   - React frontend serving
+   - Admin API endpoints
+
+2. **OAuth Authentication System (`backend/oauth/`)** - Complete OAuth 2.0 +
+   DPoP implementation:
+   - PKCE flow with automatic handle resolution and PDS discovery
+   - Mobile app detection for WebView integration
+   - Custom URL scheme redirect: `anchor-app://auth-callback`
+   - Session management with SQLite storage
+
+3. **AppView Data Layer (`backend/api/anchor-api.ts`)** - AT Protocol compliant
+   feed system:
+   - Real-time ingestion from Jetstream
+   - StrongRef address resolution and caching
+   - Spatial queries using Haversine distance calculations
+   - Social graph integration with Bluesky
+
+4. **React Dashboard (`frontend/`)** - Web interface for authentication and feed
+   management
 
 ### Key Technologies
 
-- **AT Protocol** - Decentralized social networking protocol (Bluesky ecosystem)
-- **Val Town** - Serverless platform for deployment
-- **SQLite** - Database for check-ins, addresses, and social graph data
+- **AT Protocol** - Decentralized social networking with OAuth 2.0 + DPoP
+  authentication
+- **Val Town** - Serverless platform deployment with Deno runtime
+- **SQLite** - Database for check-ins, addresses, social graph, and OAuth
+  sessions
 - **Jetstream** - Real-time AT Protocol firehose for data ingestion
-- **Haversine distance** - Spatial calculations for nearby check-ins
+- **Hono** - Lightweight web framework for unified API serving
+- **React 18.2.0** - Frontend dashboard with TypeScript
 
 ## Database Schema
 
-The system uses four main tables:
+The system uses five main tables:
 
 - `checkins_v1` - Main check-ins with coordinates and cached address data
-- `address_cache_v1` - Cached venue/address information (currently unused -
-  location data is embedded in check-ins)
+- `address_cache_v1` - Cached venue/address information from StrongRef
+  resolution
+- `profile_cache_v1` - Cached user profile data (display names, avatars)
 - `user_follows_v1` - Social graph data for following-based feeds
+- `oauth_sessions` - OAuth session storage with DPoP keys and user profiles
 - `processing_log_v1` - Monitoring and operational logging
 
 ## Development Commands
@@ -92,11 +124,75 @@ The project includes several Deno tasks for common development workflows:
 
 **Base URL**: `https://dropanchor.app`
 
-- `/global` - Recent check-ins from all users with pagination
-- `/nearby` - Spatial queries for check-ins within specified radius
-- `/user` - User-specific check-ins
-- `/following` - Check-ins from followed users (requires social graph sync)
-- `/stats` - AppView health and statistics
+### AppView API
+
+- `/api/global` - Recent check-ins from all users with pagination
+- `/api/nearby` - Spatial queries for check-ins within specified radius
+- `/api/user` - User-specific check-ins
+- `/api/following` - Check-ins from followed users (requires social graph sync)
+- `/api/stats` - AppView health and statistics
+- `/api/places/nearby` - OpenStreetMap POI discovery via Overpass API
+
+### OAuth Authentication API
+
+- `/client-metadata.json` - OAuth client metadata endpoint
+- `/api/auth/start` - Initiate OAuth flow (POST with handle)
+- `/oauth/callback` - Complete OAuth token exchange
+- `/api/auth/session` - Session validation for web and mobile
+- `/api/auth/logout` - Session cleanup
+- `/api/auth/validate-mobile-session` - Mobile token validation
+
+### Mobile OAuth WebView
+
+- `/mobile-auth` - Mobile-optimized OAuth login page for WebView integration
+
+### Frontend API (Dashboard)
+
+- `/api/feed` - Dashboard feed data
+- `/api/admin/stats` - Administrative statistics
+- `/api/admin/backfill` - Manual data backfill operations
+- `/api/admin/discover-checkins` - Comprehensive checkin discovery
+- `/api/admin/backfill-profiles` - Profile data backfill
+- `/api/admin/resolve-addresses` - Address resolution operations
+
+## Mobile OAuth WebView Integration
+
+The system includes a complete OAuth authentication flow designed for mobile app
+WebView integration:
+
+### Mobile Authentication Flow
+
+1. **iOS app loads WebView**: `https://dropanchor.app/mobile-auth`
+2. **User completes OAuth**: Beautiful mobile-optimized login interface with
+   auto-completion
+3. **Mobile app detection**: Server detects WebView context via User-Agent and
+   Referer headers
+4. **Custom URL scheme redirect**: Success page triggers
+   `anchor-app://auth-callback` with tokens
+5. **iOS app handles callback**: Parse authentication data from URL parameters
+
+### Mobile App Detection Logic
+
+- User-Agent contains "AnchorApp"
+- Referer from `/mobile-auth` endpoint
+- iPhone Mobile user agents
+- Automatically routes mobile vs web authentication flows
+
+### Authentication Data Format
+
+The mobile callback URL includes all necessary authentication data:
+
+```
+anchor-app://auth-callback?access_token=...&refresh_token=...&did=...&handle=...&session_id=...&avatar=...&display_name=...
+```
+
+### iOS Integration Requirements
+
+- **URL Scheme Registration**: `anchor-app` in Info.plist
+- **WebView Configuration**: Set User-Agent to "AnchorApp" for detection
+- **Secure Storage**: Store tokens in iOS Keychain for production apps
+- **Session Management**: Use session validation endpoints for token
+  verification
 
 ## Implementation Phases
 
@@ -109,11 +205,23 @@ The project is structured in phases:
 
 ## Val Town Deployment
 
-Components deploy as separate Val Town functions:
+The system deploys as a single unified HTTP function on Val Town:
 
-- `jetstreamPoller` - Cron job for data ingestion (5-minute intervals)
-- `anchorAPI` - HTTP function for client queries
-- `socialGraphSync` - Daily cron for follow relationship sync
+- **Main Function**: `anchordashboard` (main.tsx) - Unified Hono server handling
+  all routes
+- **Deployment Command**: `deno task deploy` - Runs quality checks and pushes to
+  Val Town
+- **Platform Integration**: Uses Val Town CLI (`vt push`) for deployment
+- **Database Initialization**: Automatic SQLite table creation on startup
+
+### Key Deployment Notes
+
+- **Single Entry Point**: All functionality consolidated in main.tsx for
+  simplified deployment
+- **Static File Serving**: Frontend files served via Val Town utils with
+  `serveFile`
+- **Environment Variables**: Base URL configurable via `ANCHOR_BASE_URL`
+- **Database Schema**: Version-based table naming for schema evolution
 
 ## Val Town Development Guidelines
 
