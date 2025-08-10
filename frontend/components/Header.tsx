@@ -1,5 +1,4 @@
 /** @jsxImportSource https://esm.sh/react */
-import React from "https://esm.sh/react";
 import { AuthState } from "../types/index.ts";
 
 interface HeaderProps {

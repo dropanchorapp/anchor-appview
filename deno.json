@@ -23,7 +23,9 @@
     }
   },
   "include": [
-    "src/",
+    "backend/",
+    "frontend/",
+    "scripts/",
     "tests/"
   ],
   "node_modules_dir": false,
