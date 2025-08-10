@@ -24,6 +24,7 @@ export interface OAuthStateData {
   authorizationEndpoint: string;
   tokenEndpoint: string;
   timestamp: number;
+  isMobileApp?: boolean;
 }
 
 export interface DPoPProofParams {

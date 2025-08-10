@@ -542,7 +542,7 @@ app.get("/mobile-auth", (c) => {
                     type="text" 
                     id="handle" 
                     name="handle" 
-                    placeholder="yourhandle.bsky.social"
+                    placeholder="yourhandle.bsky.social or custom.domain"
                     autocomplete="username"
                     required
                 >
@@ -584,13 +584,10 @@ app.get("/mobile-auth", (c) => {
             }
         }
 
-        // Auto-format handle input
+        // Handle input validation (removed auto-format to allow custom handles)
         handleInput.addEventListener('input', (e) => {
-            let value = e.target.value.trim();
-            if (value && !value.includes('.') && !value.includes('@')) {
-                value = value + '.bsky.social';
-                e.target.value = value;
-            }
+            // Just trim whitespace, don't auto-format to allow custom handles like tijs.org
+            e.target.value = e.target.value.trim();
         });
 
         form.addEventListener('submit', async (e) => {

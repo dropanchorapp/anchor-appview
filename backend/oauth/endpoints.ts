@@ -44,6 +44,17 @@ export async function handleOAuthStart(request: Request): Promise<Response> {
       });
     }
 
+    // Detect mobile app context
+    const userAgent = request.headers.get("User-Agent") || "";
+    const referer = request.headers.get("Referer") || "";
+    const isMobileApp = userAgent.includes("AnchorApp") ||
+      referer.includes("/mobile-auth") ||
+      (userAgent.includes("iPhone") && userAgent.includes("Mobile"));
+
+    console.log(
+      `🔍 Mobile app detection - User-Agent: ${userAgent}, Referer: ${referer}, IsMobile: ${isMobileApp}`,
+    );
+
     // Resolve handle to DID
     let did: string | null = null;
     const handleParts = handle.split(".");
@@ -180,6 +191,7 @@ export async function handleOAuthStart(request: Request): Promise<Response> {
       authorizationEndpoint,
       tokenEndpoint,
       timestamp: Date.now(),
+      isMobileApp,
     };
 
     const state = btoa(JSON.stringify(stateData));
@@ -193,6 +205,7 @@ export async function handleOAuthStart(request: Request): Promise<Response> {
     authUrl.searchParams.set("state", state);
     authUrl.searchParams.set("code_challenge", codeChallenge);
     authUrl.searchParams.set("code_challenge_method", codeChallengeMethod);
+    authUrl.searchParams.set("login_hint", handle); // Prefill the handle in OAuth form
 
     return new Response(JSON.stringify({ authUrl: authUrl.toString() }), {
       status: 200,
@@ -448,12 +461,9 @@ export async function handleOAuthCallback(request: Request): Promise<Response> {
       ],
     );
 
-    // Check if this is a mobile app request
-    const userAgent = request.headers.get("User-Agent") || "";
-    const referer = request.headers.get("Referer") || "";
-    const isMobileApp = userAgent.includes("AnchorApp") ||
-      referer.includes("/mobile-auth") ||
-      userAgent.includes("iPhone") && userAgent.includes("Mobile");
+    // Use stored mobile app flag from OAuth state
+    const isMobileApp = stateData.isMobileApp || false;
+    console.log(`📱 Using stored mobile app flag: ${isMobileApp}`);
 
     if (isMobileApp) {
       // For mobile apps, redirect using custom URL scheme with auth data
