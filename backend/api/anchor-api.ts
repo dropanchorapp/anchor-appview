@@ -94,7 +94,7 @@ async function getGlobalFeed(
   const cursor = url.searchParams.get("cursor");
 
   let query = `
-    SELECT id, uri, author_did, author_handle, text, created_at, 
+    SELECT id, uri, did, handle, text, created_at, 
            latitude, longitude, cached_address_name, cached_address_street,
            cached_address_locality, cached_address_region, cached_address_country,
            cached_address_postal_code, cached_address_full
@@ -115,7 +115,7 @@ async function getGlobalFeed(
   const rows = results.rows || [];
 
   // Resolve profiles for all authors
-  const dids = [...new Set(rows.map((row) => row.author_did as string))];
+  const dids = [...new Set(rows.map((row) => row.did as string))];
   const storage = new SqliteStorageProvider(db);
   const profileResolver = new ATProtocolProfileResolver(storage);
   const profiles = await profileResolver.batchResolveProfiles(dids);
@@ -158,7 +158,7 @@ async function getNearbyCheckins(
   // Get all checkins with coordinates
   const results = await db.execute(
     `
-    SELECT id, uri, author_did, author_handle, text, created_at, 
+    SELECT id, uri, did, handle, text, created_at, 
            latitude, longitude, cached_address_name, cached_address_street,
            cached_address_locality, cached_address_region, cached_address_country,
            cached_address_postal_code, cached_address_full
@@ -189,7 +189,7 @@ async function getNearbyCheckins(
 
   // Resolve profiles for filtered results
   const dids = [
-    ...new Set(nearbyRows.map((row: any) => row.author_did as string)),
+    ...new Set(nearbyRows.map((row: any) => row.did as string)),
   ];
   const storage = new SqliteStorageProvider(db);
   const profileResolver = new ATProtocolProfileResolver(storage);
@@ -223,12 +223,12 @@ async function getUserCheckins(
 
   const results = await db.execute(
     `
-    SELECT id, uri, author_did, author_handle, text, created_at, 
+    SELECT id, uri, did, handle, text, created_at, 
            latitude, longitude, cached_address_name, cached_address_street,
            cached_address_locality, cached_address_region, cached_address_country,
            cached_address_postal_code, cached_address_full
     FROM checkins
-    WHERE author_did = ?
+    WHERE did = ?
     ORDER BY created_at DESC
     LIMIT ?
   `,
@@ -238,7 +238,7 @@ async function getUserCheckins(
   const rows = results.rows || [];
 
   // Resolve profiles
-  const dids = [...new Set(rows.map((row) => row.author_did as string))];
+  const dids = [...new Set(rows.map((row) => row.did as string))];
   const storage = new SqliteStorageProvider(db);
   const profileResolver = new ATProtocolProfileResolver(storage);
   const profiles = await profileResolver.batchResolveProfiles(dids);
@@ -293,12 +293,12 @@ async function getFollowingFeed(
   const placeholders = followingDids.map(() => "?").join(",");
 
   let query = `
-    SELECT id, uri, author_did, author_handle, text, created_at, 
+    SELECT id, uri, did, handle, text, created_at, 
            latitude, longitude, cached_address_name, cached_address_street,
            cached_address_locality, cached_address_region, cached_address_country,
            cached_address_postal_code, cached_address_full
     FROM checkins
-    WHERE author_did IN (${placeholders})
+    WHERE did IN (${placeholders})
   `;
 
   const params: any[] = [...followingDids];
@@ -315,7 +315,7 @@ async function getFollowingFeed(
   const rows = results.rows || [];
 
   // Resolve profiles
-  const dids = [...new Set(rows.map((row) => row.author_did as string))];
+  const dids = [...new Set(rows.map((row) => row.did as string))];
   const storage = new SqliteStorageProvider(db);
   const profileResolver = new ATProtocolProfileResolver(storage);
   const profiles = await profileResolver.batchResolveProfiles(dids);
@@ -339,7 +339,7 @@ async function getStats(corsHeaders: CorsHeaders): Promise<Response> {
     await Promise.all([
       db.execute(`SELECT COUNT(*) as count FROM checkins`),
       db.execute(
-        `SELECT COUNT(DISTINCT author_did) as count FROM checkins`,
+        `SELECT COUNT(DISTINCT did) as count FROM checkins`,
       ),
       db.execute(
         `SELECT COUNT(*) as count FROM checkins WHERE created_at > datetime('now', '-24 hours')`,
@@ -432,14 +432,14 @@ function formatCheckin(
   row: any,
   profiles: Map<string, ProfileData>,
 ): CheckinRecord {
-  const profile = profiles.get(row.author_did as string);
+  const profile = profiles.get(row.did as string);
 
   const checkin: any = {
     id: row.id,
     uri: row.uri,
     author: {
-      did: row.author_did,
-      handle: profile?.handle || row.author_handle || row.author_did,
+      did: row.did,
+      handle: profile?.handle || row.handle || row.did,
       displayName: profile?.displayName,
       avatar: profile?.avatar,
     },

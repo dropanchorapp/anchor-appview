@@ -242,6 +242,148 @@ app.get("/api/admin/test-profile", async (c) => {
   }
 });
 
+app.get("/api/admin/check-users", async (c) => {
+  try {
+    console.log("Running user migration diagnostic check...");
+
+    const checkModule = await import("./scripts/check-existing-users.ts");
+    await checkModule.default();
+
+    return c.json({
+      success: true,
+      message:
+        "User diagnostic check completed successfully. See server logs for details.",
+      timestamp: new Date().toISOString(),
+    });
+  } catch (error) {
+    console.error("User check error:", error);
+    return c.json({
+      success: false,
+      error: "User check failed",
+      details: error.message,
+    }, 500);
+  }
+});
+
+app.post("/api/admin/migrate-users", async (c) => {
+  try {
+    console.log("Running user migration to PDS tracking system...");
+
+    const migrateModule = await import(
+      "./scripts/migrate-users-to-tracking.ts"
+    );
+    await migrateModule.default();
+
+    return c.json({
+      success: true,
+      message:
+        "User migration completed successfully. See server logs for details.",
+      timestamp: new Date().toISOString(),
+    });
+  } catch (error) {
+    console.error("User migration error:", error);
+    return c.json({
+      success: false,
+      error: "User migration failed",
+      details: error.message,
+    }, 500);
+  }
+});
+
+app.post("/api/admin/cleanup-invalid-checkins", async (c) => {
+  try {
+    console.log("Running cleanup of invalid checkins...");
+
+    const cleanupModule = await import("./scripts/cleanup-invalid-checkins.ts");
+    await cleanupModule.default();
+
+    return c.json({
+      success: true,
+      message:
+        "Invalid checkins cleanup completed successfully. See server logs for details.",
+      timestamp: new Date().toISOString(),
+    });
+  } catch (error) {
+    console.error("Cleanup error:", error);
+    return c.json({
+      success: false,
+      error: "Cleanup failed",
+      details: error.message,
+    }, 500);
+  }
+});
+
+app.post("/api/admin/crawl-followers", async (c) => {
+  try {
+    console.log("Starting followers crawler...");
+
+    const crawlerModule = await import(
+      "./backend/ingestion/followers-crawler.ts"
+    );
+    const response = await crawlerModule.default();
+
+    if (response.status === 200) {
+      const result = await response.text();
+      return c.text(result);
+    } else {
+      const error = await response.text();
+      return c.text(error, response.status);
+    }
+  } catch (error) {
+    console.error("Followers crawler error:", error);
+    return c.json({
+      error: "Followers crawler failed",
+      details: error.message,
+    }, 500);
+  }
+});
+
+// ========================================
+// Cron-ready crawler endpoints
+// ========================================
+
+app.post("/api/cron/checkins", async (c) => {
+  try {
+    const cronModule = await import("./scripts/cron-crawlers.ts");
+    const response = await cronModule.cronCheckins();
+
+    if (response.status === 200) {
+      const result = await response.text();
+      return c.text(result);
+    } else {
+      const error = await response.text();
+      return c.text(error, response.status);
+    }
+  } catch (error) {
+    console.error("Cron checkins crawler error:", error);
+    return c.json({
+      error: "Cron checkins crawler failed",
+      details: error.message,
+    }, 500);
+  }
+});
+
+app.post("/api/cron/followers", async (c) => {
+  try {
+    const cronModule = await import("./scripts/cron-crawlers.ts");
+    const response = await cronModule.cronFollowers();
+
+    if (response.status === 200) {
+      const result = await response.text();
+      return c.text(result);
+    } else {
+      const error = await response.text();
+      return c.text(error, response.status);
+    }
+  } catch (error) {
+    console.error("Cron followers crawler error:", error);
+    return c.json({
+      error: "Cron followers crawler failed",
+      details: error.message,
+    }, 500);
+  }
+});
+
 app.post("/api/admin/resolve-addresses", async (c) => {
   try {
     console.log("Starting address resolution...");

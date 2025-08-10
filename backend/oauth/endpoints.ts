@@ -443,6 +443,16 @@ export async function handleOAuthCallback(request: Request): Promise<Response> {
 
     console.log(`Session stored successfully for DID: ${did}`);
 
+    // Register user for PDS crawling
+    try {
+      const { registerUser } = await import("../database/user-tracking.ts");
+      await registerUser(did, handle, pdsEndpoint);
+      console.log(`📝 Registered user ${handle} for PDS crawling`);
+    } catch (error) {
+      console.error(`❌ Failed to register user for crawling:`, error);
+      // Don't fail the OAuth flow if user registration fails
+    }
+
     // Fetch user's profile to get avatar and display name
     const profileFetcher = new BlueskyProfileFetcher();
     const userProfile = await profileFetcher.fetchProfile(did);

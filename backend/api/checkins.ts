@@ -37,8 +37,8 @@ interface GeoCoordinates {
 
 interface Place {
   name: string;
-  latitude: number;
-  longitude: number;
+  latitude: number | string; // Allow strings for parsing
+  longitude: number | string; // Allow strings for parsing
   tags: Record<string, string>;
 }
 
@@ -85,6 +85,43 @@ export async function createCheckin(c: Context): Promise<Response> {
 
     const { place, message } = body;
 
+    // Validate coordinates are numbers and within valid bounds
+    const lat = typeof place.latitude === "number"
+      ? place.latitude
+      : parseFloat(String(place.latitude));
+    const lng = typeof place.longitude === "number"
+      ? place.longitude
+      : parseFloat(String(place.longitude));
+
+    if (
+      typeof lat !== "number" || typeof lng !== "number" ||
+      isNaN(lat) || isNaN(lng) ||
+      Math.abs(lat) > 90 || Math.abs(lng) > 180
+    ) {
+      return c.json({
+        success: false,
+        error:
+          `Invalid coordinates: lat=${place.latitude}, lng=${place.longitude}. Must be valid numbers within bounds (lat: -90 to 90, lng: -180 to 180)`,
+      }, 400);
+    }
+
+    // Validate place name is not empty string
+    if (!place.name.trim()) {
+      return c.json({
+        success: false,
+        error: "Place name cannot be empty",
+      }, 400);
+    }
+
+    // Validate message length if provided
+    const checkinMessage = message?.trim() || "";
+    if (checkinMessage.length > 1000) { // Reasonable limit for checkin messages
+      return c.json({
+        success: false,
+        error: "Message too long. Maximum 1000 characters allowed.",
+      }, 400);
+    }
+
     // Build address record from place data
     const addressRecord: CommunityAddressRecord = {
       $type: "community.lexicon.location.address",
@@ -97,10 +134,10 @@ export async function createCheckin(c: Context): Promise<Response> {
       postalCode: place.tags?.["addr:postcode"],
     };
 
-    // Build coordinates
+    // Build coordinates using validated values
     const coordinates: GeoCoordinates = {
-      latitude: place.latitude,
-      longitude: place.longitude,
+      latitude: lat,
+      longitude: lng,
     };
 
     // Extract place category information
@@ -137,7 +174,7 @@ export async function createCheckin(c: Context): Promise<Response> {
     // Step 2: Create checkin record with StrongRef to address
     const checkinRecord: CheckinRecord = {
       $type: "app.dropanchor.checkin",
-      text: message ?? "",
+      text: checkinMessage,
       createdAt: new Date().toISOString(),
       addressRef: {
         uri: addressResult.uri,

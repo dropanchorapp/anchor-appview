@@ -49,7 +49,7 @@ export async function getRecentCheckins(limit = 50) {
     SELECT 
       c.id,
       c.uri,
-      c.author_did,
+      c.did,
       c.text,
       c.created_at,
       c.latitude,
@@ -64,7 +64,7 @@ export async function getRecentCheckins(limit = 50) {
       p.display_name,
       p.avatar_url
     FROM checkins c
-    LEFT JOIN profile_cache p ON c.author_did = p.did
+    LEFT JOIN profile_cache p ON c.did = p.did
     ORDER BY c.created_at DESC
     LIMIT ?
   `,
@@ -94,7 +94,7 @@ export async function getRecentCheckins(limit = 50) {
       id: row.id,
       uri: row.uri,
       author: {
-        did: row.author_did,
+        did: row.did,
         handle: row.handle || "unknown",
         displayName: row.display_name,
         avatar: row.avatar_url,
@@ -115,7 +115,7 @@ export async function getRecentCheckins(limit = 50) {
 export async function insertCheckin(checkin: {
   id: string;
   uri: string;
-  author_did: string;
+  did: string;
   text: string;
   latitude?: number;
   longitude?: number;
@@ -131,7 +131,7 @@ export async function insertCheckin(checkin: {
   await db.execute(
     `
     INSERT INTO checkins (
-      id, uri, author_did, text, latitude, longitude,
+      id, uri, did, text, latitude, longitude,
       cached_address_name, cached_address_street, cached_address_locality, cached_address_region,
       cached_address_country, cached_address_postal_code, created_at, indexed_at
     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
@@ -139,7 +139,7 @@ export async function insertCheckin(checkin: {
     [
       checkin.id,
       checkin.uri,
-      checkin.author_did,
+      checkin.did,
       checkin.text,
       checkin.latitude,
       checkin.longitude,
@@ -161,16 +161,16 @@ export async function getDashboardStats() {
     "SELECT COUNT(*) as count FROM checkins",
   );
   const uniqueUsersResult = await db.execute(
-    "SELECT COUNT(DISTINCT author_did) as count FROM checkins",
+    "SELECT COUNT(DISTINCT did) as count FROM checkins",
   );
 
   const recentCheckinsResult = await db.execute(`
     SELECT 
-      c.id, c.uri, c.author_did, c.text, c.created_at,
+      c.id, c.uri, c.did, c.text, c.created_at,
       c.cached_address_name, c.cached_address_locality, c.cached_address_region, c.cached_address_country,
       p.handle, p.display_name
     FROM checkins c
-    LEFT JOIN profile_cache p ON c.author_did = p.did
+    LEFT JOIN profile_cache p ON c.did = p.did
     ORDER BY c.created_at DESC
     LIMIT 20
   `);
@@ -179,7 +179,7 @@ export async function getDashboardStats() {
     id: row.id,
     uri: row.uri,
     author: {
-      did: row.author_did,
+      did: row.did,
       handle: row.handle || "unknown",
       displayName: row.display_name,
     },
@@ -215,8 +215,8 @@ export async function deleteOAuthSession(did: string) {
 
 export async function getAllCheckinDids(): Promise<string[]> {
   const result = await db.execute(
-    "SELECT DISTINCT author_did FROM checkins ORDER BY author_did",
+    "SELECT DISTINCT did FROM checkins ORDER BY did",
     [],
   );
-  return result.rows?.map((row) => row.author_did as string) || [];
+  return result.rows?.map((row) => row.did as string) || [];
 }

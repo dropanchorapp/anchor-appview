@@ -199,9 +199,14 @@ export async function makeDPoPRequest(
   body?: string,
   retryWithRefresh = true,
 ): Promise<{ response: Response; session: OAuthSession }> {
-  // Import the stored DPoP keys
+  // Import the stored DPoP keys with extractable flag
   const privateKeyJWK = JSON.parse(session.dpopPrivateKey);
   const publicKeyJWK = JSON.parse(session.dpopPublicKey);
+
+  // Set extractable flag in JWK
+  privateKeyJWK.ext = true;
+  publicKeyJWK.ext = true;
+
   const privateKey = await importJWK(privateKeyJWK, "ES256") as CryptoKey;
   const publicKey = await importJWK(publicKeyJWK, "ES256") as CryptoKey;
 
