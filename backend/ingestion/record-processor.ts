@@ -1,11 +1,12 @@
 // Record processor for checkin events from PDS crawler
 // Handles both Jetstream events and direct PDS records
 import { db } from "../database/db.ts";
+import { checkinsTable } from "../database/schema.ts";
 import {
   ATProtocolProfileResolver,
   BlueskyProfileFetcher,
 } from "../utils/profile-resolver.ts";
-import { SqliteStorageProvider } from "../utils/storage-provider.ts";
+import { DrizzleStorageProvider } from "../utils/storage-provider.ts";
 
 export interface CheckinEvent {
   did: string;
@@ -19,9 +20,9 @@ export interface CheckinEvent {
   };
 }
 
-// Initialize profile resolver with SQLite storage
+// Initialize profile resolver with Drizzle storage
 const profileResolver = new ATProtocolProfileResolver(
-  new SqliteStorageProvider(db),
+  new DrizzleStorageProvider(db), // Use Drizzle db instance
   new BlueskyProfileFetcher(),
 );
 
@@ -69,8 +70,8 @@ export async function processCheckinEvent(event: CheckinEvent): Promise<void> {
       typeof lat !== "number" || typeof lng !== "number" || isNaN(lat) ||
       isNaN(lng)
     ) {
-      console.error(
-        `Invalid coordinates for checkin ${rkey}: lat=${lat}, lng=${lng}`,
+      console.log(
+        `⚠️ Skipping checkin ${rkey}: missing coordinates (lat=${lat}, lng=${lng})`,
       );
       return;
     }
@@ -104,32 +105,53 @@ export async function processCheckinEvent(event: CheckinEvent): Promise<void> {
       }
     }
 
-    // Store checkin in database
-    await db.execute(
-      `
-      INSERT OR REPLACE INTO checkins (
-        uri, rkey, did, handle, display_name, avatar, text, 
-        latitude, longitude, place_name, category, category_group, category_icon,
-        created_at, indexed_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
-      `,
-      [
-        `at://${event.did}/app.dropanchor.checkin/${rkey}`,
-        rkey,
-        event.did,
-        handle,
-        displayName,
-        avatar,
-        record.text || "",
-        lat,
-        lng,
-        placeName,
-        record.category || null,
-        record.categoryGroup || null,
-        record.categoryIcon || null,
-        record.createdAt || new Date().toISOString(),
-      ],
-    );
+    // Store checkin in database using Drizzle ORM
+    const now = new Date().toISOString();
+    await db.insert(checkinsTable)
+      .values({
+        id: rkey,
+        uri: `at://${event.did}/app.dropanchor.checkin/${rkey}`,
+        rkey: rkey,
+        did: event.did,
+        handle: handle,
+        displayName: displayName,
+        avatar: avatar,
+        text: record.text || "",
+        latitude: lat,
+        longitude: lng,
+        venueName: placeName,
+        addressStreet: addressData?.street || null,
+        addressLocality: addressData?.locality || null,
+        addressRegion: addressData?.region || null,
+        addressCountry: addressData?.country || null,
+        addressPostalCode: addressData?.postalCode || null,
+        category: record.category || null,
+        categoryGroup: record.categoryGroup || null,
+        categoryIcon: record.categoryIcon || null,
+        createdAt: record.createdAt || now,
+        indexedAt: now,
+      })
+      .onConflictDoUpdate({
+        target: checkinsTable.id,
+        set: {
+          text: record.text || "",
+          latitude: lat,
+          longitude: lng,
+          venueName: placeName,
+          addressStreet: addressData?.street || null,
+          addressLocality: addressData?.locality || null,
+          addressRegion: addressData?.region || null,
+          addressCountry: addressData?.country || null,
+          addressPostalCode: addressData?.postalCode || null,
+          category: record.category || null,
+          categoryGroup: record.categoryGroup || null,
+          categoryIcon: record.categoryIcon || null,
+          handle: handle,
+          displayName: displayName,
+          avatar: avatar,
+          indexedAt: now,
+        },
+      });
 
     console.log(`✅ Stored checkin: ${displayName} at ${placeName}`);
   } catch (error) {

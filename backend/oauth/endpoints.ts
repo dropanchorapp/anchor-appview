@@ -483,6 +483,7 @@ export async function handleOAuthCallback(request: Request): Promise<Response> {
       mobileRedirectUrl.searchParams.set("did", did);
       mobileRedirectUrl.searchParams.set("handle", handle);
       mobileRedirectUrl.searchParams.set("session_id", sessionId);
+      mobileRedirectUrl.searchParams.set("pds_url", pdsEndpoint);
 
       if (userProfile?.avatar) {
         mobileRedirectUrl.searchParams.set("avatar", userProfile.avatar);

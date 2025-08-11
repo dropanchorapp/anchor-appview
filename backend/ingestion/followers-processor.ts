@@ -1,5 +1,7 @@
 // Followers processor - handles syncing following relationships to database
 import { db } from "../database/db.ts";
+import { anchorUsersTable, userFollowsTable } from "../database/schema.ts";
+import { and, count, eq, inArray, sql } from "https://esm.sh/drizzle-orm";
 
 interface FollowRelationship {
   did: string;
@@ -17,14 +19,15 @@ export async function syncUserFollows(
   console.log(`🔄 Syncing ${follows.length} follows for ${userDid}`);
 
   try {
-    // Get existing follows from database
-    const existingResult = await db.execute(
-      `SELECT following_did FROM user_follows WHERE follower_did = ?`,
-      [userDid],
-    );
+    // Get existing follows from database using Drizzle
+    const existingResult = await db.select({
+      followingDid: userFollowsTable.followingDid,
+    })
+      .from(userFollowsTable)
+      .where(eq(userFollowsTable.followerDid, userDid));
 
     const existingFollows = new Set(
-      existingResult.rows?.map((row) => row.following_did as string) || [],
+      existingResult.map((row) => row.followingDid),
     );
 
     const newFollows = new Set(follows.map((f) => f.did));
@@ -35,46 +38,45 @@ export async function syncUserFollows(
       !newFollows.has(did)
     );
 
-    // Remove unfollows (without transaction for Val Town compatibility)
+    // Remove unfollows using Drizzle
     if (toRemove.length > 0) {
       // Process in smaller batches to avoid query limits
       const batchSize = 50;
       for (let i = 0; i < toRemove.length; i += batchSize) {
         const batch = toRemove.slice(i, i + batchSize);
-        const placeholders = batch.map(() => "?").join(",");
-        await db.execute(
-          `DELETE FROM user_follows WHERE follower_did = ? AND following_did IN (${placeholders})`,
-          [userDid, ...batch],
-        );
+        await db.delete(userFollowsTable)
+          .where(
+            and(
+              eq(userFollowsTable.followerDid, userDid),
+              inArray(userFollowsTable.followingDid, batch),
+            ),
+          );
       }
       console.log(`🗑️ Removed ${toRemove.length} unfollows for ${userDid}`);
     }
 
-    // Add new follows in batches (without transaction for Val Town compatibility)
+    // Add new follows in batches using Drizzle
     if (toAdd.length > 0) {
       const batchSize = 50; // Smaller batches for Val Town
       let inserted = 0;
 
       for (let i = 0; i < toAdd.length; i += batchSize) {
         const batch = toAdd.slice(i, i + batchSize);
+        const now = new Date().toISOString();
 
-        // Prepare batch insert
-        const values = batch.map(() => "(?, ?, ?, CURRENT_TIMESTAMP)").join(
-          ", ",
-        );
-        const params: string[] = [];
-
-        for (const follow of batch) {
-          params.push(userDid, follow.did, follow.createdAt);
-        }
-
-        const query = `
-          INSERT OR IGNORE INTO user_follows (follower_did, following_did, created_at, synced_at)
-          VALUES ${values}
-        `;
+        // Prepare batch insert values
+        const values = batch.map((follow) => ({
+          followerDid: userDid,
+          followingDid: follow.did,
+          createdAt: follow.createdAt,
+          syncedAt: now,
+        }));
 
         try {
-          await db.execute(query, params);
+          await db.insert(userFollowsTable)
+            .values(values)
+            .onConflictDoNothing();
+
           inserted += batch.length;
 
           console.log(
@@ -118,20 +120,22 @@ export async function getFollowsStats(): Promise<{
   lastSyncedUser?: string;
 }> {
   const [totalResult, usersResult, lastSyncResult] = await Promise.all([
-    db.execute("SELECT COUNT(*) as count FROM user_follows"),
-    db.execute(
-      "SELECT COUNT(DISTINCT follower_did) as count FROM user_follows",
-    ),
-    db.execute(`
-      SELECT follower_did, synced_at 
-      FROM user_follows 
-      ORDER BY synced_at DESC 
-      LIMIT 1
-    `),
+    db.select({ count: count() }).from(userFollowsTable),
+    db.select({
+      count: sql<number>`count(distinct ${userFollowsTable.followerDid})`,
+    })
+      .from(userFollowsTable),
+    db.select({
+      followerDid: userFollowsTable.followerDid,
+      syncedAt: userFollowsTable.syncedAt,
+    })
+      .from(userFollowsTable)
+      .orderBy(sql`${userFollowsTable.syncedAt} DESC`)
+      .limit(1),
   ]);
 
-  const totalFollowRelationships = totalResult.rows?.[0]?.count || 0;
-  const usersWithFollows = usersResult.rows?.[0]?.count || 0;
+  const totalFollowRelationships = totalResult[0]?.count || 0;
+  const usersWithFollows = usersResult[0]?.count || 0;
   const averageFollowsPerUser = usersWithFollows > 0
     ? Math.round(totalFollowRelationships / usersWithFollows)
     : 0;
@@ -140,7 +144,7 @@ export async function getFollowsStats(): Promise<{
     totalFollowRelationships,
     usersWithFollows,
     averageFollowsPerUser,
-    lastSyncedUser: lastSyncResult.rows?.[0]?.follower_did,
+    lastSyncedUser: lastSyncResult[0]?.followerDid,
   };
 }
 
@@ -155,21 +159,21 @@ export async function getUsersNeedingFollowsRefresh(
   const cutoffTime = new Date(Date.now() - maxAgeHours * 60 * 60 * 1000)
     .toISOString();
 
-  const result = await db.execute(
-    `
-    SELECT did, handle, last_follower_crawl
-    FROM anchor_users
-    WHERE last_follower_crawl IS NULL 
-       OR last_follower_crawl < ?
-    ORDER BY last_follower_crawl ASC NULLS FIRST
-    LIMIT ?
-    `,
-    [cutoffTime, limit],
-  );
+  const result = await db.select({
+    did: anchorUsersTable.did,
+    handle: anchorUsersTable.handle,
+    lastFollowerCrawl: anchorUsersTable.lastFollowerCrawl,
+  })
+    .from(anchorUsersTable)
+    .where(
+      sql`${anchorUsersTable.lastFollowerCrawl} IS NULL OR ${anchorUsersTable.lastFollowerCrawl} < ${cutoffTime}`,
+    )
+    .orderBy(sql`${anchorUsersTable.lastFollowerCrawl} ASC NULLS FIRST`)
+    .limit(limit);
 
-  return result.rows?.map((row) => ({
-    did: row.did as string,
-    handle: row.handle as string,
-    lastFollowerCrawl: row.last_follower_crawl as string | undefined,
-  })) || [];
+  return result.map((row) => ({
+    did: row.did,
+    handle: row.handle || "",
+    lastFollowerCrawl: row.lastFollowerCrawl || undefined,
+  }));
 }

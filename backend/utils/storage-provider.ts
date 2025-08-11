@@ -21,8 +21,102 @@ export interface StorageProvider {
   ensureTablesExist(): Promise<void>;
 }
 
+export class DrizzleStorageProvider implements StorageProvider {
+  constructor(private db: any) {} // Drizzle db instance
+
+  async getProfile(did: string): Promise<ProfileData | null> {
+    const { profileCacheTable } = await import("../database/schema.ts");
+    const { eq } = await import("https://esm.sh/drizzle-orm");
+
+    const result = await this.db
+      .select()
+      .from(profileCacheTable)
+      .where(eq(profileCacheTable.did, did))
+      .limit(1);
+
+    if (result.length > 0) {
+      const row = result[0];
+      return {
+        did: row.did,
+        handle: row.handle || "",
+        displayName: row.displayName || undefined,
+        avatar: row.avatarUrl || undefined,
+        description: row.description || undefined,
+        fetchedAt: row.indexedAt || "",
+        updatedAt: row.updatedAt || undefined,
+      };
+    }
+
+    return null;
+  }
+
+  async setProfile(profile: ProfileData): Promise<void> {
+    const { profileCacheTable } = await import("../database/schema.ts");
+
+    await this.db
+      .insert(profileCacheTable)
+      .values({
+        did: profile.did,
+        handle: profile.handle,
+        displayName: profile.displayName || null,
+        avatarUrl: profile.avatar || null,
+        description: profile.description || null,
+        indexedAt: profile.fetchedAt,
+        updatedAt: profile.updatedAt || profile.fetchedAt,
+      })
+      .onConflictDoUpdate({
+        target: profileCacheTable.did,
+        set: {
+          handle: profile.handle,
+          displayName: profile.displayName || null,
+          avatarUrl: profile.avatar || null,
+          description: profile.description || null,
+          updatedAt: profile.updatedAt || profile.fetchedAt,
+        },
+      });
+  }
+
+  async getStaleProfiles(
+    limit: number,
+    staleThresholdHours: number,
+  ): Promise<ProfileData[]> {
+    const { profileCacheTable } = await import("../database/schema.ts");
+    const { lt } = await import("https://esm.sh/drizzle-orm");
+
+    const staleThreshold = new Date();
+    staleThreshold.setHours(staleThreshold.getHours() - staleThresholdHours);
+
+    const result = await this.db
+      .select()
+      .from(profileCacheTable)
+      .where(lt(profileCacheTable.indexedAt, staleThreshold.toISOString()))
+      .orderBy(profileCacheTable.indexedAt)
+      .limit(limit);
+
+    return result.map((row: any) => ({
+      did: row.did,
+      handle: row.handle || "",
+      displayName: row.displayName || undefined,
+      avatar: row.avatarUrl || undefined,
+      description: row.description || undefined,
+      fetchedAt: row.indexedAt || "",
+      updatedAt: row.updatedAt || undefined,
+    }));
+  }
+
+  ensureTablesExist(): Promise<void> {
+    // Tables are created by migrations, so this is a no-op for Drizzle
+    return Promise.resolve();
+  }
+}
+
+// Legacy class for backward compatibility - DO NOT USE IN NEW CODE
 export class SqliteStorageProvider implements StorageProvider {
-  constructor(private sqlite: any) {}
+  constructor(private sqlite: any) {
+    console.warn(
+      "⚠️ SqliteStorageProvider is deprecated. Use DrizzleStorageProvider instead.",
+    );
+  }
 
   async getProfile(did: string): Promise<ProfileData | null> {
     const result = await this.sqlite.execute(

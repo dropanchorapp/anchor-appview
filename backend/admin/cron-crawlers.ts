@@ -1,8 +1,8 @@
 // Unified cron script for all Anchor crawlers
 // Can be scheduled with different intervals for different crawler types
 
-import pdsCrawler from "../backend/ingestion/pds-crawler.ts";
-import followersCrawler from "../backend/ingestion/followers-crawler.ts";
+import pdsCrawler from "../ingestion/pds-crawler.ts";
+import followersCrawler from "../ingestion/followers-crawler.ts";
 
 interface CrawlerResult {
   success: boolean;

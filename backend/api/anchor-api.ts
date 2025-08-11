@@ -1,6 +1,12 @@
 // @val-town anchorAPI
 // Main HTTP API handler for Anchor AppView
-import { db, initializeTables } from "../database/db.ts";
+import { db, initializeTables, rawDb } from "../database/db.ts";
+import {
+  checkinsTable,
+  processingLogTable,
+  userFollowsTable,
+} from "../database/schema.ts";
+import { and, desc, eq, inArray, lt, sql } from "https://esm.sh/drizzle-orm";
 import { ATProtocolProfileResolver } from "../utils/profile-resolver.ts";
 import {
   ProfileData,
@@ -9,6 +15,7 @@ import {
 import { OverpassService } from "../services/overpass-service.ts";
 import { PlacesNearbyResponse } from "../models/place-models.ts";
 import { createCheckin } from "./checkins.ts";
+import { getCheckinCounts, getRecentActivity } from "../database/queries.ts";
 
 // Types for better TypeScript support
 interface CorsHeaders {
@@ -93,30 +100,36 @@ async function getGlobalFeed(
   const limit = Math.min(parseInt(url.searchParams.get("limit") || "50"), 100);
   const cursor = url.searchParams.get("cursor");
 
-  let query = `
-    SELECT id, uri, did, handle, text, created_at, 
-           latitude, longitude, cached_address_name, cached_address_street,
-           cached_address_locality, cached_address_region, cached_address_country,
-           cached_address_postal_code, cached_address_full
-    FROM checkins
-  `;
+  // Type-safe Drizzle query - no more field name confusion!
+  const baseQuery = db.select({
+    id: checkinsTable.id,
+    uri: checkinsTable.uri,
+    did: checkinsTable.did,
+    handle: checkinsTable.handle,
+    text: checkinsTable.text,
+    createdAt: checkinsTable.createdAt,
+    latitude: checkinsTable.latitude,
+    longitude: checkinsTable.longitude,
+    venueName: checkinsTable.venueName, // UNIFIED venue name field
+    addressStreet: checkinsTable.addressStreet,
+    addressLocality: checkinsTable.addressLocality,
+    addressRegion: checkinsTable.addressRegion,
+    addressCountry: checkinsTable.addressCountry,
+    addressPostalCode: checkinsTable.addressPostalCode,
+  }).from(checkinsTable);
 
-  const params: any[] = [];
-
-  if (cursor) {
-    query += ` WHERE created_at < ?`;
-    params.push(cursor);
-  }
-
-  query += ` ORDER BY created_at DESC LIMIT ?`;
-  params.push(limit);
-
-  const results = await db.execute(query, params);
-  const rows = results.rows || [];
+  const rows = cursor
+    ? await baseQuery
+      .where(sql`${checkinsTable.createdAt} < ${cursor}`)
+      .orderBy(desc(checkinsTable.createdAt))
+      .limit(limit)
+    : await baseQuery
+      .orderBy(desc(checkinsTable.createdAt))
+      .limit(limit);
 
   // Resolve profiles for all authors
-  const dids = [...new Set(rows.map((row) => row.did as string))];
-  const storage = new SqliteStorageProvider(db);
+  const dids = [...new Set(rows.map((row) => row.did))];
+  const storage = new SqliteStorageProvider(rawDb); // Use rawDb not Drizzle db
   const profileResolver = new ATProtocolProfileResolver(storage);
   const profiles = await profileResolver.batchResolveProfiles(dids);
 
@@ -157,22 +170,29 @@ async function getNearbyCheckins(
     );
   }
 
-  // Get all checkins with coordinates
-  const results = await db.execute(
-    `
-    SELECT id, uri, did, handle, text, created_at, 
-           latitude, longitude, cached_address_name, cached_address_street,
-           cached_address_locality, cached_address_region, cached_address_country,
-           cached_address_postal_code, cached_address_full
-    FROM checkins
-    WHERE latitude IS NOT NULL AND longitude IS NOT NULL
-    ORDER BY created_at DESC
-    LIMIT ?
-  `,
-    [limit * 3],
-  ); // Get more to filter by distance
-
-  const rows = results.rows || [];
+  // Get all checkins with coordinates using type-safe Drizzle query
+  const rows = await db.select({
+    id: checkinsTable.id,
+    uri: checkinsTable.uri,
+    did: checkinsTable.did,
+    handle: checkinsTable.handle,
+    text: checkinsTable.text,
+    createdAt: checkinsTable.createdAt,
+    latitude: checkinsTable.latitude,
+    longitude: checkinsTable.longitude,
+    venueName: checkinsTable.venueName, // UNIFIED venue name field
+    addressStreet: checkinsTable.addressStreet,
+    addressLocality: checkinsTable.addressLocality,
+    addressRegion: checkinsTable.addressRegion,
+    addressCountry: checkinsTable.addressCountry,
+    addressPostalCode: checkinsTable.addressPostalCode,
+  }).from(checkinsTable)
+    .where(and(
+      sql`${checkinsTable.latitude} IS NOT NULL`,
+      sql`${checkinsTable.longitude} IS NOT NULL`,
+    ))
+    .orderBy(desc(checkinsTable.createdAt))
+    .limit(limit * 3); // Get more to filter by distance
 
   // Calculate distances and filter
   const nearbyRows = rows
@@ -193,7 +213,7 @@ async function getNearbyCheckins(
   const dids = [
     ...new Set(nearbyRows.map((row: any) => row.did as string)),
   ];
-  const storage = new SqliteStorageProvider(db);
+  const storage = new SqliteStorageProvider(rawDb);
   const profileResolver = new ATProtocolProfileResolver(storage);
   const profiles = await profileResolver.batchResolveProfiles(dids);
 
@@ -225,25 +245,29 @@ async function getUserCheckins(
     });
   }
 
-  const results = await db.execute(
-    `
-    SELECT id, uri, did, handle, text, created_at, 
-           latitude, longitude, cached_address_name, cached_address_street,
-           cached_address_locality, cached_address_region, cached_address_country,
-           cached_address_postal_code, cached_address_full
-    FROM checkins
-    WHERE did = ?
-    ORDER BY created_at DESC
-    LIMIT ?
-  `,
-    [did, limit],
-  );
-
-  const rows = results.rows || [];
+  const rows = await db.select({
+    id: checkinsTable.id,
+    uri: checkinsTable.uri,
+    did: checkinsTable.did,
+    handle: checkinsTable.handle,
+    text: checkinsTable.text,
+    createdAt: checkinsTable.createdAt,
+    latitude: checkinsTable.latitude,
+    longitude: checkinsTable.longitude,
+    venueName: checkinsTable.venueName, // UNIFIED venue name field
+    addressStreet: checkinsTable.addressStreet,
+    addressLocality: checkinsTable.addressLocality,
+    addressRegion: checkinsTable.addressRegion,
+    addressCountry: checkinsTable.addressCountry,
+    addressPostalCode: checkinsTable.addressPostalCode,
+  }).from(checkinsTable)
+    .where(eq(checkinsTable.did, did))
+    .orderBy(desc(checkinsTable.createdAt))
+    .limit(limit);
 
   // Resolve profiles
-  const dids = [...new Set(rows.map((row) => row.did as string))];
-  const storage = new SqliteStorageProvider(db);
+  const dids = [...new Set(rows.map((row) => row.did))];
+  const storage = new SqliteStorageProvider(rawDb);
   const profileResolver = new ATProtocolProfileResolver(storage);
   const profiles = await profileResolver.batchResolveProfiles(dids);
 
@@ -275,15 +299,13 @@ async function getFollowingFeed(
     });
   }
 
-  // Get users this person follows
-  const follows = await db.execute(
-    `
-    SELECT following_did FROM user_follows WHERE follower_did = ?
-  `,
-    [userDid],
-  );
+  // Get users this person follows using type-safe Drizzle query
+  const follows = await db.select({
+    followingDid: userFollowsTable.followingDid,
+  }).from(userFollowsTable)
+    .where(eq(userFollowsTable.followerDid, userDid));
 
-  if (!follows.rows || follows.rows.length === 0) {
+  if (follows.length === 0) {
     return new Response(
       JSON.stringify({
         checkins: [],
@@ -293,36 +315,42 @@ async function getFollowingFeed(
     );
   }
 
-  const followingDids = follows.rows
-    ? follows.rows.map((row) => row.following_did)
-    : [];
-  const placeholders = followingDids.map(() => "?").join(",");
+  const followingDids = follows.map((row) => row.followingDid);
 
-  let query = `
-    SELECT id, uri, did, handle, text, created_at, 
-           latitude, longitude, cached_address_name, cached_address_street,
-           cached_address_locality, cached_address_region, cached_address_country,
-           cached_address_postal_code, cached_address_full
-    FROM checkins
-    WHERE did IN (${placeholders})
-  `;
+  // Get checkins from followed users using type-safe Drizzle query
+  const baseFollowingQuery = db.select({
+    id: checkinsTable.id,
+    uri: checkinsTable.uri,
+    did: checkinsTable.did,
+    handle: checkinsTable.handle,
+    text: checkinsTable.text,
+    createdAt: checkinsTable.createdAt,
+    latitude: checkinsTable.latitude,
+    longitude: checkinsTable.longitude,
+    venueName: checkinsTable.venueName, // UNIFIED venue name field
+    addressStreet: checkinsTable.addressStreet,
+    addressLocality: checkinsTable.addressLocality,
+    addressRegion: checkinsTable.addressRegion,
+    addressCountry: checkinsTable.addressCountry,
+    addressPostalCode: checkinsTable.addressPostalCode,
+  }).from(checkinsTable);
 
-  const params: any[] = [...followingDids];
-
-  if (cursor) {
-    query += ` AND created_at < ?`;
-    params.push(cursor);
-  }
-
-  query += ` ORDER BY created_at DESC LIMIT ?`;
-  params.push(limit);
-
-  const results = await db.execute(query, params);
-  const rows = results.rows || [];
+  const rows = cursor
+    ? await baseFollowingQuery
+      .where(and(
+        inArray(checkinsTable.did, followingDids),
+        lt(checkinsTable.createdAt, cursor),
+      ))
+      .orderBy(desc(checkinsTable.createdAt))
+      .limit(limit)
+    : await baseFollowingQuery
+      .where(inArray(checkinsTable.did, followingDids))
+      .orderBy(desc(checkinsTable.createdAt))
+      .limit(limit);
 
   // Resolve profiles
-  const dids = [...new Set(rows.map((row) => row.did as string))];
-  const storage = new SqliteStorageProvider(db);
+  const dids = [...new Set(rows.map((row) => row.did))];
+  const storage = new SqliteStorageProvider(rawDb);
   const profileResolver = new ATProtocolProfileResolver(storage);
   const profiles = await profileResolver.batchResolveProfiles(dids);
 
@@ -343,25 +371,20 @@ async function getFollowingFeed(
 }
 
 async function getStats(corsHeaders: CorsHeaders): Promise<Response> {
-  const [totalCheckins, totalUsers, recentActivity, processingStats] =
-    await Promise.all([
-      db.execute(`SELECT COUNT(*) as count FROM checkins`),
-      db.execute(
-        `SELECT COUNT(DISTINCT did) as count FROM checkins`,
-      ),
-      db.execute(
-        `SELECT COUNT(*) as count FROM checkins WHERE created_at > datetime('now', '-24 hours')`,
-      ),
-      db.execute(
-        `SELECT * FROM processing_log ORDER BY run_at DESC LIMIT 1`,
-      ),
-    ]);
+  // Use shared query functions to eliminate duplication
+  const [counts, recentActivity, processingStats] = await Promise.all([
+    getCheckinCounts(),
+    getRecentActivity(),
+    db.select().from(processingLogTable)
+      .orderBy(desc(processingLogTable.runAt))
+      .limit(1),
+  ]);
 
   const stats = {
-    totalCheckins: totalCheckins.rows?.[0]?.count || 0,
-    totalUsers: totalUsers.rows?.[0]?.count || 0,
-    recentActivity: recentActivity.rows?.[0]?.count || 0,
-    lastProcessingRun: processingStats.rows?.[0] || null,
+    totalCheckins: counts.totalCheckins,
+    totalUsers: counts.uniqueUsers,
+    recentActivity,
+    lastProcessingRun: processingStats[0] || null,
     timestamp: new Date().toISOString(),
   };
 
@@ -455,7 +478,7 @@ async function formatCheckinWithPlaces(
       avatar: profile?.avatar,
     },
     text: row.text,
-    createdAt: row.created_at,
+    createdAt: row.createdAt, // Fixed field name - Drizzle returns createdAt not created_at
   };
 
   // Add coordinates if available
@@ -466,19 +489,18 @@ async function formatCheckinWithPlaces(
     };
   }
 
-  // Add address if available from strongref resolution
+  // Add address if available - using unified venueName field (no more confusion!)
   if (
-    row.cached_address_name || row.cached_address_street ||
-    row.cached_address_locality || row.cached_address_region ||
-    row.cached_address_country || row.cached_address_postal_code
+    row.venueName || row.addressStreet || row.addressLocality ||
+    row.addressRegion || row.addressCountry || row.addressPostalCode
   ) {
     checkin.address = {
-      name: row.cached_address_name,
-      street: row.cached_address_street,
-      locality: row.cached_address_locality,
-      region: row.cached_address_region,
-      country: row.cached_address_country,
-      postalCode: row.cached_address_postal_code,
+      name: row.venueName, // UNIFIED venue name field - always consistent
+      street: row.addressStreet,
+      locality: row.addressLocality,
+      region: row.addressRegion,
+      country: row.addressCountry,
+      postalCode: row.addressPostalCode,
     };
   } else if (row.latitude && row.longitude) {
     // If no cached address data, try to find the nearest place via Overpass

@@ -77,17 +77,15 @@ The system uses five main tables:
 
 The project includes several Deno tasks for common development workflows:
 
-- `deno task quality` - Run formatter, linter, and all tests in sequence
-- `deno task quality:fix` - Same as quality but auto-fixes linting issues
+- `deno task quality` - Run formatter, linter, type checking, and all tests in sequence
+- `deno task deploy` - Deploy to Val Town (runs quality checks first)
 - `deno task fmt` - Format code using deno fmt
 - `deno task lint` - Run linter to check code quality
 - `deno task check` - TypeScript type checking for all source files
-- `deno task test` - Run all tests
+- `deno task test` - Run all tests with `--allow-all` permissions
 - `deno task test:unit` - Run unit tests only
-- `deno task test:integration` - Run integration tests only
-- `deno task test:watch` - Run tests in watch mode
-- `deno task deploy` - Deploy to Val Town using deploy script
-- `deno task debug` - Run debug script to check data and API status
+- `deno task test:integration` - Run integration tests only  
+- `deno task test:watch` - Run tests in watch mode for development
 
 ### Testing
 
@@ -372,6 +370,63 @@ The project includes comprehensive testing:
 - Mock external services comprehensively but realistically
 - Test error conditions and edge cases (coordinate validation, cache expiry)
 - Validate TypeScript interfaces with proper type casting
+
+## Mobile App Integration
+
+### OAuth WebView Flow
+
+The system provides complete OAuth authentication for the Anchor iOS app:
+
+- **Mobile detection**: Automatically detects iOS WebView requests via User-Agent
+- **PDS URL resolution**: Resolves user's actual PDS from DID document (supports personal PDS servers)
+- **User registration**: Automatically registers authenticated users for PDS crawling
+- **Custom URL scheme**: Returns auth data via `anchor-app://auth-callback` with all required parameters
+
+### Critical OAuth Implementation Details
+
+- **PDS URL parameter**: Backend includes resolved `pds_url` in mobile callback (line 486 in `endpoints.ts`)
+- **Handle resolution**: Tries multiple resolution services before falling back to defaults
+- **Session storage**: Stores complete OAuth session data including PDS endpoints in SQLite
+- **Error handling**: Graceful handling of OAuth failures without breaking mobile app flow
+
+### Mobile Callback URL Format
+
+```
+anchor-app://auth-callback?access_token=...&refresh_token=...&did=...&handle=...&session_id=...&pds_url=...&avatar=...&display_name=...
+```
+
+## Development Workflow with iOS App
+
+### Common Development Pattern
+
+1. Make changes to backend OAuth/API logic
+2. Run `deno task quality` to verify all tests pass
+3. Deploy with `deno task deploy`
+4. Test iOS app integration with new backend
+5. Verify OAuth flow works with personal PDS servers
+
+### Troubleshooting OAuth Issues
+
+- **Missing PDS URL**: Check if `pds_url` parameter is included in mobile redirect
+- **Personal PDS failures**: Verify DID document resolution and PDS endpoint extraction
+- **Session issues**: Check `oauth_sessions` table for proper session storage
+
+## Date Format Compatibility
+
+### API Response Format
+
+The system returns ISO8601 timestamps in two formats:
+
+- **With fractional seconds**: `"2025-08-11T18:34:55.966Z"` (real-time data)
+- **Without fractional seconds**: `"2025-08-11T18:34:55Z"` (legacy/processed data)
+
+### iOS App Compatibility
+
+Ensure consistent date formatting for iOS client consumption:
+
+- Backend stores timestamps with full precision when available
+- API responses maintain original timestamp format from AT Protocol records
+- iOS client handles both formats via flexible parsing utility
 
 The system is designed to scale within Val Town's resource limits while
 maintaining full AT Protocol compatibility for decentralized social networking.

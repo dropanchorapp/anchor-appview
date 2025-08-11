@@ -1,13 +1,20 @@
-// Query functions using raw SQL with Val Town's sqlite
+// Query functions using Drizzle ORM for type safety
 import { db } from "./db.ts";
+import {
+  checkinsTable,
+  oauthSessionsTable,
+  profileCacheTable,
+} from "./schema.ts";
+import { count, desc, eq, sql } from "https://esm.sh/drizzle-orm";
+import { ATProtocolProfileResolver } from "../utils/profile-resolver.ts";
+import { SqliteStorageProvider } from "../utils/storage-provider.ts";
 
 // Profile queries
 export async function getProfileByDid(did: string) {
-  const result = await db.execute(
-    "SELECT * FROM profile_cache WHERE did = ?",
-    [did],
-  );
-  return result.rows[0] || null;
+  const result = await db.select().from(profileCacheTable)
+    .where(eq(profileCacheTable.did, did))
+    .limit(1);
+  return result[0] || null;
 }
 
 export async function upsertProfile(profile: {
@@ -17,100 +24,27 @@ export async function upsertProfile(profile: {
   avatarUrl?: string;
 }) {
   const now = new Date().toISOString();
-  await db.execute(
-    `
-    INSERT INTO profile_cache (did, handle, display_name, avatar_url, indexed_at, updated_at)
-    VALUES (?, ?, ?, ?, ?, ?)
-    ON CONFLICT(did) DO UPDATE SET
-      handle = ?,
-      display_name = ?,
-      avatar_url = ?,
-      updated_at = ?
-  `,
-    [
-      profile.did,
-      profile.handle,
-      profile.displayName,
-      profile.avatarUrl,
-      now,
-      now,
-      profile.handle,
-      profile.displayName,
-      profile.avatarUrl,
-      now,
-    ],
-  );
-}
-
-// Checkin queries
-export async function getRecentCheckins(limit = 50) {
-  const result = await db.execute(
-    `
-    SELECT 
-      c.id,
-      c.uri,
-      c.did,
-      c.text,
-      c.created_at,
-      c.latitude,
-      c.longitude,
-      c.cached_address_name,
-      c.cached_address_street,
-      c.cached_address_locality,
-      c.cached_address_region,
-      c.cached_address_country,
-      c.cached_address_postal_code,
-      p.handle,
-      p.display_name,
-      p.avatar_url
-    FROM checkins c
-    LEFT JOIN profile_cache p ON c.did = p.did
-    ORDER BY c.created_at DESC
-    LIMIT ?
-  `,
-    [limit],
-  );
-
-  return result.rows.map((row: any) => {
-    // Check if we have resolved address data
-    const hasAddressData = row.cached_address_name ||
-      row.cached_address_street ||
-      row.cached_address_locality || row.cached_address_region ||
-      row.cached_address_country || row.cached_address_postal_code;
-
-    // Only include address if we have resolved address data from strongrefs
-    const address = hasAddressData
-      ? {
-        name: row.cached_address_name,
-        street: row.cached_address_street,
-        locality: row.cached_address_locality,
-        region: row.cached_address_region,
-        country: row.cached_address_country,
-        postalCode: row.cached_address_postal_code,
-      }
-      : undefined;
-
-    return {
-      id: row.id,
-      uri: row.uri,
-      author: {
-        did: row.did,
-        handle: row.handle || "unknown",
-        displayName: row.display_name,
-        avatar: row.avatar_url,
+  await db.insert(profileCacheTable)
+    .values({
+      did: profile.did,
+      handle: profile.handle,
+      displayName: profile.displayName,
+      avatarUrl: profile.avatarUrl,
+      indexedAt: now,
+      updatedAt: now,
+    })
+    .onConflictDoUpdate({
+      target: profileCacheTable.did,
+      set: {
+        handle: profile.handle,
+        displayName: profile.displayName,
+        avatarUrl: profile.avatarUrl,
+        updatedAt: now,
       },
-      text: row.text,
-      createdAt: row.created_at,
-      coordinates: row.latitude && row.longitude
-        ? {
-          latitude: row.latitude,
-          longitude: row.longitude,
-        }
-        : undefined,
-      address,
-    };
-  });
+    });
 }
+
+// Removed getRecentCheckins function - was only used by duplicate /api/feed endpoint
 
 export async function insertCheckin(checkin: {
   id: string;
@@ -119,104 +53,129 @@ export async function insertCheckin(checkin: {
   text: string;
   latitude?: number;
   longitude?: number;
-  cached_address_name?: string;
-  cached_address_street?: string;
-  cached_address_locality?: string;
-  cached_address_region?: string;
-  cached_address_country?: string;
-  cached_address_postal_code?: string;
+  venue_name?: string;
+  address_street?: string;
+  address_locality?: string;
+  address_region?: string;
+  address_country?: string;
+  address_postal_code?: string;
   created_at: string;
 }) {
   const now = new Date().toISOString();
-  await db.execute(
-    `
-    INSERT INTO checkins (
-      id, uri, did, text, latitude, longitude,
-      cached_address_name, cached_address_street, cached_address_locality, cached_address_region,
-      cached_address_country, cached_address_postal_code, created_at, indexed_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-  `,
-    [
-      checkin.id,
-      checkin.uri,
-      checkin.did,
-      checkin.text,
-      checkin.latitude,
-      checkin.longitude,
-      checkin.cached_address_name,
-      checkin.cached_address_street,
-      checkin.cached_address_locality,
-      checkin.cached_address_region,
-      checkin.cached_address_country,
-      checkin.cached_address_postal_code,
-      checkin.created_at,
-      now,
-    ],
-  );
+
+  // Extract rkey from URI
+  const rkey = checkin.uri.split("/").pop() || checkin.id;
+
+  await db.insert(checkinsTable)
+    .values({
+      id: checkin.id,
+      uri: checkin.uri,
+      rkey,
+      did: checkin.did,
+      text: checkin.text,
+      latitude: checkin.latitude,
+      longitude: checkin.longitude,
+      venueName: checkin.venue_name,
+      addressStreet: checkin.address_street,
+      addressLocality: checkin.address_locality,
+      addressRegion: checkin.address_region,
+      addressCountry: checkin.address_country,
+      addressPostalCode: checkin.address_postal_code,
+      createdAt: checkin.created_at,
+      indexedAt: now,
+    });
 }
 
-// Dashboard stats
-export async function getDashboardStats() {
-  const totalCheckinsResult = await db.execute(
-    "SELECT COUNT(*) as count FROM checkins",
-  );
-  const uniqueUsersResult = await db.execute(
-    "SELECT COUNT(DISTINCT did) as count FROM checkins",
-  );
-
-  const recentCheckinsResult = await db.execute(`
-    SELECT 
-      c.id, c.uri, c.did, c.text, c.created_at,
-      c.cached_address_name, c.cached_address_locality, c.cached_address_region, c.cached_address_country,
-      p.handle, p.display_name
-    FROM checkins c
-    LEFT JOIN profile_cache p ON c.did = p.did
-    ORDER BY c.created_at DESC
-    LIMIT 20
-  `);
-
-  const recentCheckins = recentCheckinsResult.rows.map((row: any) => ({
-    id: row.id,
-    uri: row.uri,
-    author: {
-      did: row.did,
-      handle: row.handle || "unknown",
-      displayName: row.display_name,
-    },
-    text: row.text,
-    createdAt: row.created_at,
-    address: {
-      name: row.cached_address_name,
-      locality: row.cached_address_locality,
-      region: row.cached_address_region,
-      country: row.cached_address_country,
-    },
-  }));
+// Shared statistics queries to eliminate duplication
+export async function getCheckinCounts() {
+  const [totalCheckinsResult, uniqueUsersResult] = await Promise.all([
+    db.select({ count: count() }).from(checkinsTable),
+    db.select({ count: sql<number>`count(distinct ${checkinsTable.did})` })
+      .from(checkinsTable),
+  ]);
 
   return {
-    totalCheckins: totalCheckinsResult.rows[0]?.count || 0,
-    uniqueUsers: uniqueUsersResult.rows[0]?.count || 0,
+    totalCheckins: totalCheckinsResult[0]?.count || 0,
+    uniqueUsers: uniqueUsersResult[0]?.count || 0,
+  };
+}
+
+export async function getRecentActivity() {
+  const result = await db.select({ count: count() })
+    .from(checkinsTable)
+    .where(sql`${checkinsTable.createdAt} > datetime('now', '-24 hours')`);
+  return result[0]?.count || 0;
+}
+
+// Dashboard stats using Drizzle for type safety
+export async function getDashboardStats() {
+  const counts = await getCheckinCounts();
+
+  // Use Drizzle query for recent checkins with type safety
+  const rows = await db.select({
+    id: checkinsTable.id,
+    uri: checkinsTable.uri,
+    did: checkinsTable.did,
+    text: checkinsTable.text,
+    createdAt: checkinsTable.createdAt,
+    venueName: checkinsTable.venueName,
+    addressLocality: checkinsTable.addressLocality,
+    addressRegion: checkinsTable.addressRegion,
+    addressCountry: checkinsTable.addressCountry,
+  }).from(checkinsTable)
+    .orderBy(desc(checkinsTable.createdAt))
+    .limit(20);
+
+  // Get all unique DIDs for profile resolution
+  const dids = [...new Set(rows.map((row) => row.did))];
+  const storage = new SqliteStorageProvider(db);
+  const profileResolver = new ATProtocolProfileResolver(storage);
+  const profiles = await profileResolver.batchResolveProfiles(dids);
+
+  const recentCheckins = rows.map((row) => {
+    const profile = profiles.get(row.did);
+    return {
+      id: row.id,
+      uri: row.uri,
+      author: {
+        did: row.did,
+        handle: profile?.handle || row.did,
+        displayName: profile?.displayName,
+      },
+      text: row.text,
+      createdAt: row.createdAt,
+      address: {
+        name: row.venueName,
+        locality: row.addressLocality,
+        region: row.addressRegion,
+        country: row.addressCountry,
+      },
+    };
+  });
+
+  return {
+    totalCheckins: counts.totalCheckins,
+    uniqueUsers: counts.uniqueUsers,
     recentCheckins,
   };
 }
 
 // OAuth session queries
 export async function getSessionBySessionId(sessionId: string) {
-  const result = await db.execute(
-    "SELECT * FROM oauth_sessions WHERE session_id = ?",
-    [sessionId],
-  );
-  return result.rows[0] || null;
+  const result = await db.select().from(oauthSessionsTable)
+    .where(eq(oauthSessionsTable.sessionId, sessionId))
+    .limit(1);
+  return result[0] || null;
 }
 
 export async function deleteOAuthSession(did: string) {
-  await db.execute("DELETE FROM oauth_sessions WHERE did = ?", [did]);
+  await db.delete(oauthSessionsTable)
+    .where(eq(oauthSessionsTable.did, did));
 }
 
 export async function getAllCheckinDids(): Promise<string[]> {
-  const result = await db.execute(
-    "SELECT DISTINCT did FROM checkins ORDER BY did",
-    [],
-  );
-  return result.rows?.map((row) => row.did as string) || [];
+  const result = await db.selectDistinct({ did: checkinsTable.did })
+    .from(checkinsTable)
+    .orderBy(checkinsTable.did);
+  return result.map((row) => row.did);
 }

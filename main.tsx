@@ -1,12 +1,11 @@
 // @val-town anchordashboard
-// Main HTTP entry point for Anchor AppView
+// Main HTTP entry point for Anchor AppView - unified endpoints
 import { Hono } from "https://esm.sh/hono";
 import { serveFile } from "https://esm.town/v/std/utils@85-main/index.ts";
 import { initializeTables } from "./backend/database/db.ts";
 import {
   deleteOAuthSession,
   getDashboardStats,
-  getRecentCheckins,
   getSessionBySessionId as _getSessionBySessionId,
 } from "./backend/database/queries.ts";
 import {
@@ -65,20 +64,7 @@ app.all("/api/checkins", (c) => anchorApiHandler(c.req.raw));
 // ========================================
 // Dashboard API Routes (for React frontend)
 // ========================================
-app.get("/api/feed", async (c) => {
-  try {
-    const checkins = await getRecentCheckins(50);
-    return c.json({
-      checkins,
-      cursor: checkins.length > 0
-        ? checkins[checkins.length - 1].id
-        : undefined,
-    });
-  } catch (error) {
-    console.error("Feed error:", error);
-    return c.json({ error: "Failed to load feed" }, 500);
-  }
-});
+// Removed duplicate /api/feed endpoint - web and mobile both use /api/global
 
 app.get("/api/admin/stats", async (c) => {
   try {
@@ -90,50 +76,41 @@ app.get("/api/admin/stats", async (c) => {
   }
 });
 
-app.post("/api/admin/backfill", async (c) => {
+app.post("/api/admin/backfill-addresses", async (c) => {
   try {
-    // Import and run the backfill function
-    const backfillModule = await import(
-      "./scripts/backfill-historical-checkins.ts"
+    console.log("Starting address backfill...");
+
+    // Parse query parameters
+    const url = new URL(c.req.url);
+    const limit = parseInt(url.searchParams.get("limit") || "50");
+    const isDryRun = url.searchParams.get("dry_run") === "true";
+
+    // Import and run backfill
+    const { backfillAddresses } = await import(
+      "./backend/admin/backfill-addresses-api.ts"
     );
-    const response = await backfillModule.default();
+    const result = await backfillAddresses(limit, isDryRun);
 
-    if (response.status === 200) {
-      const result = await response.text();
-      return c.text(result);
-    } else {
-      const error = await response.text();
-      return c.text(error, response.status);
-    }
-  } catch (error) {
-    console.error("Backfill error:", error);
-    return c.json({ error: "Backfill failed", details: error.message }, 500);
-  }
-});
-
-app.post("/api/admin/discover-checkins", async (c) => {
-  try {
-    // Import and run the comprehensive discovery
-    const discoveryModule = await import(
-      "./scripts/comprehensive-checkin-discovery.ts"
+    console.log(
+      `Address backfill completed: ${result.stats?.updated || 0} updated, ${
+        result.stats?.errors || 0
+      } errors`,
     );
-    const response = await discoveryModule.default();
 
-    if (response.status === 200) {
-      const result = await response.text();
-      return c.text(result);
-    } else {
-      const error = await response.text();
-      return c.text(error, response.status);
-    }
+    return c.json(result);
   } catch (error) {
-    console.error("Discovery error:", error);
+    console.error("Address backfill error:", error);
     return c.json({
-      error: "Discovery failed",
-      details: error.message,
+      success: false,
+      error: "Failed to run address backfill",
+      message: error.message,
     }, 500);
   }
 });
+
+// Removed old backfill endpoint - use /api/admin/clean-and-backfill instead
+
+// Removed old discovery endpoint - use /api/admin/clean-and-backfill instead
 
 app.post("/api/admin/backfill-profiles", async (c) => {
   try {
@@ -246,7 +223,7 @@ app.get("/api/admin/check-users", async (c) => {
   try {
     console.log("Running user migration diagnostic check...");
 
-    const checkModule = await import("./scripts/check-existing-users.ts");
+    const checkModule = await import("./backend/admin/check-existing-users.ts");
     await checkModule.default();
 
     return c.json({
@@ -265,52 +242,137 @@ app.get("/api/admin/check-users", async (c) => {
   }
 });
 
-app.post("/api/admin/migrate-users", async (c) => {
+app.get("/api/admin/simple-user-check", async (c) => {
   try {
-    console.log("Running user migration to PDS tracking system...");
+    console.log("Running simple user check...");
 
-    const migrateModule = await import(
-      "./scripts/migrate-users-to-tracking.ts"
-    );
-    await migrateModule.default();
+    const checkModule = await import("./backend/admin/simple-user-check.ts");
+    const result = await checkModule.default();
 
     return c.json({
-      success: true,
-      message:
-        "User migration completed successfully. See server logs for details.",
+      success: result.success,
+      data: result,
       timestamp: new Date().toISOString(),
     });
   } catch (error) {
-    console.error("User migration error:", error);
+    console.error("Simple user check error:", error);
     return c.json({
       success: false,
-      error: "User migration failed",
+      error: "Simple user check failed",
       details: error.message,
     }, 500);
   }
 });
 
-app.post("/api/admin/cleanup-invalid-checkins", async (c) => {
+app.get("/api/admin/db-diagnostic", async (c) => {
   try {
-    console.log("Running cleanup of invalid checkins...");
+    console.log("Running database diagnostic...");
 
-    const cleanupModule = await import("./scripts/cleanup-invalid-checkins.ts");
-    await cleanupModule.default();
+    const diagnosticModule = await import("./backend/admin/db-diagnostic.ts");
+    const result = await diagnosticModule.default();
 
     return c.json({
-      success: true,
-      message:
-        "Invalid checkins cleanup completed successfully. See server logs for details.",
+      success: result.success,
+      data: result,
       timestamp: new Date().toISOString(),
     });
   } catch (error) {
-    console.error("Cleanup error:", error);
+    console.error("Database diagnostic error:", error);
     return c.json({
       success: false,
-      error: "Cleanup failed",
+      error: "Database diagnostic failed",
       details: error.message,
     }, 500);
   }
+});
+
+app.get("/api/admin/user-sync-diagnostic", async (c) => {
+  try {
+    console.log("Running user sync diagnostic...");
+
+    const diagnosticModule = await import(
+      "./backend/admin/user-sync-diagnostic.ts"
+    );
+    const result = await diagnosticModule.default();
+
+    return c.json({
+      success: result.success,
+      data: result,
+      timestamp: new Date().toISOString(),
+    });
+  } catch (error) {
+    console.error("User sync diagnostic error:", error);
+    return c.json({
+      success: false,
+      error: "User sync diagnostic failed",
+      details: error.message,
+    }, 500);
+  }
+});
+
+app.post("/api/admin/sync-missing-users", async (c) => {
+  try {
+    console.log("Starting user sync repair...");
+
+    const body = await c.req.json().catch(() => ({}));
+    const dryRun = body.dry_run !== false; // Default to dry run
+
+    const syncModule = await import("./backend/admin/sync-missing-users.ts");
+    const result = await syncModule.default(dryRun);
+
+    return c.json({
+      success: result.success,
+      data: result,
+      timestamp: new Date().toISOString(),
+    });
+  } catch (error) {
+    console.error("User sync repair error:", error);
+    return c.json({
+      success: false,
+      error: "User sync repair failed",
+      details: error.message,
+    }, 500);
+  }
+});
+
+app.post("/api/admin/run-migrations", async (c) => {
+  try {
+    console.log("Running database migrations manually...");
+
+    const migrationModule = await import("./backend/admin/run-migrations.ts");
+    const result = await migrationModule.default();
+
+    return c.json({
+      success: result.success,
+      data: result,
+      timestamp: new Date().toISOString(),
+    });
+  } catch (error) {
+    console.error("Migration error:", error);
+    return c.json({
+      success: false,
+      error: "Migration failed",
+      details: error.message,
+    }, 500);
+  }
+});
+
+app.post("/api/admin/migrate-users", (c) => {
+  // TODO: Implement user migration script
+  return c.json({
+    success: false,
+    error: "User migration endpoint not yet implemented",
+    timestamp: new Date().toISOString(),
+  });
+});
+
+app.post("/api/admin/cleanup-invalid-checkins", (c) => {
+  // TODO: Implement cleanup script
+  return c.json({
+    success: false,
+    error: "Cleanup endpoint not yet implemented",
+    timestamp: new Date().toISOString(),
+  });
 });
 
 app.post("/api/admin/crawl-followers", async (c) => {
@@ -327,7 +389,7 @@ app.post("/api/admin/crawl-followers", async (c) => {
       return c.text(result);
     } else {
       const error = await response.text();
-      return c.text(error, response.status);
+      return c.text(error, { status: response.status as any });
     }
   } catch (error) {
     console.error("Followers crawler error:", error);
@@ -344,7 +406,7 @@ app.post("/api/admin/crawl-followers", async (c) => {
 
 app.post("/api/cron/checkins", async (c) => {
   try {
-    const cronModule = await import("./scripts/cron-crawlers.ts");
+    const cronModule = await import("./backend/admin/cron-crawlers.ts");
     const response = await cronModule.cronCheckins();
 
     if (response.status === 200) {
@@ -352,7 +414,7 @@ app.post("/api/cron/checkins", async (c) => {
       return c.text(result);
     } else {
       const error = await response.text();
-      return c.text(error, response.status);
+      return c.text(error, { status: response.status as any });
     }
   } catch (error) {
     console.error("Cron checkins crawler error:", error);
@@ -365,7 +427,7 @@ app.post("/api/cron/checkins", async (c) => {
 
 app.post("/api/cron/followers", async (c) => {
   try {
-    const cronModule = await import("./scripts/cron-crawlers.ts");
+    const cronModule = await import("./backend/admin/cron-crawlers.ts");
     const response = await cronModule.cronFollowers();
 
     if (response.status === 200) {
@@ -373,7 +435,7 @@ app.post("/api/cron/followers", async (c) => {
       return c.text(result);
     } else {
       const error = await response.text();
-      return c.text(error, response.status);
+      return c.text(error, { status: response.status as any });
     }
   } catch (error) {
     console.error("Cron followers crawler error:", error);
@@ -384,72 +446,30 @@ app.post("/api/cron/followers", async (c) => {
   }
 });
 
-app.post("/api/admin/resolve-addresses", async (c) => {
+// Address resolution endpoint removed - address resolver was using removed database tables
+
+// Backfill endpoints using the consolidated script
+app.post("/api/admin/backfill", async (c) => {
   try {
-    console.log("Starting address resolution...");
+    const body = await c.req.json().catch(() => ({}));
+    const mode = body.mode || "incremental"; // default to incremental
 
-    // Import the address resolution functions
-    const { getUnresolvedAddresses, batchResolveAddresses } = await import(
-      "./backend/utils/address-resolver.ts"
-    );
+    console.log(`Starting ${mode} backfill...`);
 
-    // Get unresolved addresses (limit to 20 to avoid overwhelming)
-    const unresolvedAddresses = await getUnresolvedAddresses(20);
-
-    if (unresolvedAddresses.length === 0) {
-      return c.json({
-        success: true,
-        message: "No unresolved addresses found",
-        resolved: 0,
-        errors: 0,
-      });
-    }
-
-    console.log(`Found ${unresolvedAddresses.length} unresolved addresses`);
-
-    // Resolve them in batches
-    const result = await batchResolveAddresses(unresolvedAddresses);
-
-    console.log(
-      `Address resolution complete: ${result.resolved} resolved, ${result.errors} errors`,
-    );
-
-    return c.json({
-      success: true,
-      message: "Address resolution completed",
-      unresolved_found: unresolvedAddresses.length,
-      resolved: result.resolved,
-      errors: result.errors,
-    });
-  } catch (error) {
-    console.error("Address resolution error:", error);
-    return c.json({
-      success: false,
-      error: "Address resolution failed",
-      details: error.message,
-    }, 500);
-  }
-});
-
-app.post("/api/admin/backfill-venue-names", async (c) => {
-  try {
-    console.log("Starting venue name backfill...");
-
-    // Import and run the venue name backfill function
-    const backfillModule = await import("./scripts/backfill-venue-names.ts");
-    const response = await backfillModule.default();
+    const backfillModule = await import("./backend/admin/backfill-checkins.ts");
+    const response = await backfillModule.default({ mode });
 
     if (response.status === 200) {
       const result = await response.text();
       return c.text(result);
     } else {
       const error = await response.text();
-      return c.text(error, response.status);
+      return c.text(error, { status: response.status as any });
     }
   } catch (error) {
-    console.error("Venue name backfill error:", error);
+    console.error("Backfill error:", error);
     return c.json({
-      error: "Venue name backfill failed",
+      error: "Backfill failed",
       details: error.message,
     }, 500);
   }
@@ -477,8 +497,8 @@ app.get("/api/auth/session", async (c) => {
       authenticated: true,
       userHandle: session.handle,
       userDid: session.did,
-      userDisplayName: session.display_name,
-      userAvatar: session.avatar_url,
+      // Note: displayName and avatar would need to be fetched from profile cache
+      // For now, just returning basic session info
     });
   } catch (error) {
     console.error("Session check error:", error);

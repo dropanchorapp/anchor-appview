@@ -25,7 +25,6 @@
   "include": [
     "backend/",
     "frontend/",
-    "scripts/",
     "tests/"
   ],
   "node_modules_dir": false,
@@ -40,12 +39,7 @@
     "test:unit": "deno test --allow-all tests/unit/",
     "test:integration": "deno test --allow-all tests/integration/",
     "test:watch": "deno test --allow-all --watch tests/",
-    "fmt": "deno fmt",
-    "lint": "deno lint",
-    "check": "deno check --allow-import src/",
-    "quality": "deno fmt && deno lint && deno test --allow-all tests/",
-    "quality:fix": "deno fmt && deno lint --fix && deno test --allow-all tests/",
-    "deploy": "deno task quality && vt push",
-    "debug": "deno run --allow-net scripts/debug.ts"
+    "quality": "deno fmt && deno lint && deno check --allow-import && deno test --allow-all tests/",
+    "deploy": "deno task quality && vt push"
   }
 }

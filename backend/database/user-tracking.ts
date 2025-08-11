@@ -1,5 +1,13 @@
 // User and PDS tracking for privacy-focused crawling
-import { db } from "./db.ts";
+import { db, rawDb } from "./db.ts";
+import {
+  anchorUsersTable,
+  checkinsTable,
+  oauthSessionsTable,
+  profileCacheTable,
+  userPdsesTable,
+} from "./schema.ts";
+import { count, eq, sql } from "https://esm.sh/drizzle-orm";
 
 export interface AnchorUser {
   did: string;
@@ -21,7 +29,7 @@ export async function initializeUserTables(): Promise<void> {
   console.log("Initializing user tracking tables...");
 
   // Create anchor_users table
-  await db.execute(`
+  await rawDb.execute(`
     CREATE TABLE IF NOT EXISTS anchor_users (
       did TEXT PRIMARY KEY,
       handle TEXT NOT NULL,
@@ -33,7 +41,7 @@ export async function initializeUserTables(): Promise<void> {
   `);
 
   // Create user_pdses table for reference counting
-  await db.execute(`
+  await rawDb.execute(`
     CREATE TABLE IF NOT EXISTS user_pdses (
       pds_url TEXT PRIMARY KEY,
       user_count INTEGER DEFAULT 1,
@@ -43,11 +51,11 @@ export async function initializeUserTables(): Promise<void> {
   `);
 
   // Create indexes for efficient querying
-  await db.execute(`
+  await rawDb.execute(`
     CREATE INDEX IF NOT EXISTS idx_anchor_users_pds_url ON anchor_users(pds_url)
   `);
 
-  await db.execute(`
+  await rawDb.execute(`
     CREATE INDEX IF NOT EXISTS idx_anchor_users_last_crawled ON anchor_users(last_crawled_at)
   `);
 
@@ -62,45 +70,41 @@ export async function registerUser(
 ): Promise<void> {
   console.log(`📝 Registering user ${handle} (${did}) on PDS ${pdsUrl}`);
 
-  // Start transaction for atomic operation
-  await db.execute("BEGIN");
-
   try {
-    // Insert or update user
-    await db.execute(
-      `
-      INSERT INTO anchor_users (did, handle, pds_url, registered_at)
-      VALUES (?, ?, ?, CURRENT_TIMESTAMP)
-      ON CONFLICT(did) DO UPDATE SET
-        handle = excluded.handle,
-        pds_url = excluded.pds_url,
-        registered_at = excluded.registered_at
-      `,
-      [did, handle, pdsUrl],
-    );
+    const now = new Date().toISOString();
 
-    // Update PDS reference count
-    await db.execute(
-      `
-      INSERT INTO user_pdses (pds_url, user_count, created_at)
-      VALUES (?, 1, CURRENT_TIMESTAMP)
-      ON CONFLICT(pds_url) DO UPDATE SET
-        user_count = user_count + 1
-      `,
-      [pdsUrl],
-    );
+    // Insert or update user using Drizzle (no transaction - Val Town SQLite doesn't support them)
+    await db.insert(anchorUsersTable)
+      .values({
+        did,
+        handle,
+        pdsUrl: pdsUrl,
+        registeredAt: now,
+      })
+      .onConflictDoUpdate({
+        target: anchorUsersTable.did,
+        set: {
+          handle,
+          pdsUrl: pdsUrl,
+        },
+      });
 
-    await db.execute("COMMIT");
+    // Update PDS reference count using Drizzle
+    await db.insert(userPdsesTable)
+      .values({
+        pdsUrl,
+        userCount: 1,
+        createdAt: now,
+      })
+      .onConflictDoUpdate({
+        target: userPdsesTable.pdsUrl,
+        set: {
+          userCount: sql`${userPdsesTable.userCount} + 1`,
+        },
+      });
+
     console.log(`✅ Successfully registered user ${handle}`);
   } catch (error) {
-    try {
-      await db.execute("ROLLBACK");
-    } catch (rollbackError) {
-      console.warn(
-        `⚠️ Rollback failed (transaction may have already ended):`,
-        rollbackError,
-      );
-    }
     console.error(`❌ Failed to register user ${handle}:`, error);
     throw error;
   }
@@ -110,59 +114,45 @@ export async function registerUser(
 export async function removeUser(did: string): Promise<void> {
   console.log(`🗑️ Removing user ${did}`);
 
-  // Start transaction for atomic cleanup
-  await db.execute("BEGIN");
-
   try {
-    // Get user's PDS before deletion
-    const userResult = await db.execute(
-      "SELECT pds_url FROM anchor_users WHERE did = ?",
-      [did],
-    );
+    // Get user's PDS before deletion using Drizzle (no transaction - Val Town SQLite doesn't support them)
+    const userResult = await db.select({ pdsUrl: anchorUsersTable.pdsUrl })
+      .from(anchorUsersTable)
+      .where(eq(anchorUsersTable.did, did))
+      .limit(1);
 
-    if (!userResult.rows || userResult.rows.length === 0) {
+    if (userResult.length === 0) {
       console.log(`User ${did} not found, nothing to remove`);
-      try {
-        await db.execute("ROLLBACK");
-      } catch (rollbackError) {
-        console.warn(
-          `⚠️ Rollback failed (transaction may have already ended):`,
-          rollbackError,
-        );
-      }
       return;
     }
 
-    const pdsUrl = userResult.rows[0].pds_url as string;
+    const pdsUrl = userResult[0].pdsUrl;
+    if (!pdsUrl) {
+      console.log(`User ${did} has no PDS URL, only removing user record`);
+      await db.delete(anchorUsersTable)
+        .where(eq(anchorUsersTable.did, did));
+      return;
+    }
 
-    // Remove user
-    await db.execute("DELETE FROM anchor_users WHERE did = ?", [did]);
+    // Remove user using Drizzle
+    await db.delete(anchorUsersTable)
+      .where(eq(anchorUsersTable.did, did));
 
-    // Decrease PDS reference count
-    await db.execute(
-      "UPDATE user_pdses SET user_count = user_count - 1 WHERE pds_url = ?",
-      [pdsUrl],
-    );
+    // Decrease PDS reference count using Drizzle
+    await db.update(userPdsesTable)
+      .set({ userCount: sql`${userPdsesTable.userCount} - 1` })
+      .where(eq(userPdsesTable.pdsUrl, pdsUrl));
 
-    // Remove PDS if no users left
-    await db.execute(
-      "DELETE FROM user_pdses WHERE pds_url = ? AND user_count <= 0",
-      [pdsUrl],
-    );
+    // Remove PDS if no users left using Drizzle
+    await db.delete(userPdsesTable)
+      .where(
+        sql`${userPdsesTable.pdsUrl} = ${pdsUrl} AND ${userPdsesTable.userCount} <= 0`,
+      );
 
-    await db.execute("COMMIT");
     console.log(
       `✅ Successfully removed user ${did} and cleaned up PDS ${pdsUrl}`,
     );
   } catch (error) {
-    try {
-      await db.execute("ROLLBACK");
-    } catch (rollbackError) {
-      console.warn(
-        `⚠️ Rollback failed (transaction may have already ended):`,
-        rollbackError,
-      );
-    }
     console.error(`❌ Failed to remove user ${did}:`, error);
     throw error;
   }
@@ -170,64 +160,59 @@ export async function removeUser(did: string): Promise<void> {
 
 // Get all registered users for crawling
 export async function getRegisteredUsers(): Promise<AnchorUser[]> {
-  const result = await db.execute(`
-    SELECT did, handle, pds_url, registered_at, last_crawled_at
-    FROM anchor_users
-    ORDER BY last_crawled_at ASC NULLS FIRST
-  `);
+  const result = await db.select({
+    did: anchorUsersTable.did,
+    handle: anchorUsersTable.handle,
+    pdsUrl: anchorUsersTable.pdsUrl,
+    registeredAt: anchorUsersTable.registeredAt,
+    lastCheckinCrawl: anchorUsersTable.lastCheckinCrawl,
+  })
+    .from(anchorUsersTable)
+    .orderBy(sql`${anchorUsersTable.lastCheckinCrawl} ASC NULLS FIRST`);
 
-  if (!result.rows) return [];
-
-  return result.rows.map((row) => ({
-    did: row.did as string,
-    handle: row.handle as string,
-    pdsUrl: row.pds_url as string,
-    registeredAt: row.registered_at as string,
-    lastCrawledAt: row.last_crawled_at as string || undefined,
+  return result.map((row) => ({
+    did: row.did,
+    handle: row.handle || "",
+    pdsUrl: row.pdsUrl || "",
+    registeredAt: row.registeredAt || "",
+    lastCrawledAt: row.lastCheckinCrawl || undefined,
   }));
 }
 
 // Get all monitored PDS servers
 export async function getMonitoredPDSes(): Promise<UserPDS[]> {
-  const result = await db.execute(`
-    SELECT pds_url, user_count, last_crawled_at, created_at
-    FROM user_pdses
-    WHERE user_count > 0
-    ORDER BY last_crawled_at ASC NULLS FIRST
-  `);
+  const result = await db.select()
+    .from(userPdsesTable)
+    .where(sql`${userPdsesTable.userCount} > 0`)
+    .orderBy(sql`${userPdsesTable.lastCrawledAt} ASC NULLS FIRST`);
 
-  if (!result.rows) return [];
-
-  return result.rows.map((row) => ({
-    pdsUrl: row.pds_url as string,
-    userCount: row.user_count as number,
-    lastCrawledAt: row.last_crawled_at as string || undefined,
-    createdAt: row.created_at as string,
+  return result.map((row) => ({
+    pdsUrl: row.pdsUrl,
+    userCount: row.userCount || 1,
+    lastCrawledAt: row.lastCrawledAt || undefined,
+    createdAt: row.createdAt || "",
   }));
 }
 
 // Update user's last crawled timestamp
 export async function updateUserLastCrawled(did: string): Promise<void> {
-  await db.execute(
-    "UPDATE anchor_users SET last_crawled_at = CURRENT_TIMESTAMP WHERE did = ?",
-    [did],
-  );
+  await db.update(anchorUsersTable)
+    .set({ lastCheckinCrawl: new Date().toISOString() })
+    .where(eq(anchorUsersTable.did, did));
 }
 
 // Update user's last follower crawl timestamp
 export async function updateUserLastFollowerCrawl(did: string): Promise<void> {
-  await db.execute(
-    "UPDATE anchor_users SET last_follower_crawl = CURRENT_TIMESTAMP WHERE did = ?",
-    [did],
-  );
+  await db.update(anchorUsersTable)
+    .set({ lastFollowerCrawl: new Date().toISOString() })
+    .where(eq(anchorUsersTable.did, did));
 }
 
 // Update PDS last crawled timestamp
 export async function updatePDSLastCrawled(pdsUrl: string): Promise<void> {
-  await db.execute(
-    "UPDATE user_pdses SET last_crawled_at = CURRENT_TIMESTAMP WHERE pds_url = ?",
-    [pdsUrl],
-  );
+  await db.update(userPdsesTable)
+    .set({ lastCrawledAt: new Date().toISOString() })
+    .where(eq(userPdsesTable.pdsUrl, pdsUrl));
 }
 
 // Get user statistics
@@ -236,21 +221,22 @@ export async function getUserStats(): Promise<{
   totalPDSes: number;
   recentlyActive: number;
 }> {
-  const usersResult = await db.execute(
-    "SELECT COUNT(*) as count FROM anchor_users",
-  );
-  const pdsResult = await db.execute(
-    "SELECT COUNT(*) as count FROM user_pdses WHERE user_count > 0",
-  );
-  const activeResult = await db.execute(`
-    SELECT COUNT(*) as count FROM anchor_users 
-    WHERE last_crawled_at > datetime('now', '-1 hour')
-  `);
+  const [usersResult, pdsResult, activeResult] = await Promise.all([
+    db.select({ count: count() }).from(anchorUsersTable),
+    db.select({ count: count() })
+      .from(userPdsesTable)
+      .where(sql`${userPdsesTable.userCount} > 0`),
+    db.select({ count: count() })
+      .from(anchorUsersTable)
+      .where(
+        sql`${anchorUsersTable.lastCheckinCrawl} > datetime('now', '-1 hour')`,
+      ),
+  ]);
 
   return {
-    totalUsers: (usersResult.rows?.[0]?.count as number) || 0,
-    totalPDSes: (pdsResult.rows?.[0]?.count as number) || 0,
-    recentlyActive: (activeResult.rows?.[0]?.count as number) || 0,
+    totalUsers: usersResult[0]?.count || 0,
+    totalPDSes: pdsResult[0]?.count || 0,
+    recentlyActive: activeResult[0]?.count || 0,
   };
 }
 
@@ -261,26 +247,30 @@ export async function getMigrationStats(): Promise<{
   cachedProfiles: number;
   currentlyTracked: number;
 }> {
-  const oauthResult = await db.execute(
-    "SELECT COUNT(*) as count FROM oauth_sessions WHERE did IS NOT NULL AND handle IS NOT NULL AND pds_url IS NOT NULL",
-  );
-
-  const authorsResult = await db.execute(
-    "SELECT COUNT(DISTINCT author_did) as count FROM checkins WHERE author_did IS NOT NULL AND author_handle IS NOT NULL",
-  );
-
-  const profilesResult = await db.execute(
-    "SELECT COUNT(*) as count FROM profile_cache WHERE did IS NOT NULL AND handle IS NOT NULL",
-  );
-
-  const trackedResult = await db.execute(
-    "SELECT COUNT(*) as count FROM anchor_users",
-  );
+  const [oauthResult, authorsResult, profilesResult, trackedResult] =
+    await Promise.all([
+      db.select({ count: count() })
+        .from(oauthSessionsTable)
+        .where(
+          sql`${oauthSessionsTable.did} IS NOT NULL AND ${oauthSessionsTable.handle} IS NOT NULL AND ${oauthSessionsTable.pdsUrl} IS NOT NULL`,
+        ),
+      db.select({ count: sql<number>`count(distinct ${checkinsTable.did})` })
+        .from(checkinsTable)
+        .where(
+          sql`${checkinsTable.did} IS NOT NULL AND ${checkinsTable.handle} IS NOT NULL`,
+        ),
+      db.select({ count: count() })
+        .from(profileCacheTable)
+        .where(
+          sql`${profileCacheTable.did} IS NOT NULL AND ${profileCacheTable.handle} IS NOT NULL`,
+        ),
+      db.select({ count: count() }).from(anchorUsersTable),
+    ]);
 
   return {
-    oauthSessions: (oauthResult.rows?.[0]?.count as number) || 0,
-    uniqueCheckinAuthors: (authorsResult.rows?.[0]?.count as number) || 0,
-    cachedProfiles: (profilesResult.rows?.[0]?.count as number) || 0,
-    currentlyTracked: (trackedResult.rows?.[0]?.count as number) || 0,
+    oauthSessions: oauthResult[0]?.count || 0,
+    uniqueCheckinAuthors: authorsResult[0]?.count || 0,
+    cachedProfiles: profilesResult[0]?.count || 0,
+    currentlyTracked: trackedResult[0]?.count || 0,
   };
 }
