@@ -60,6 +60,7 @@ app.all("/api/following", (c) => anchorApiHandler(c.req.raw));
 app.all("/api/stats", (c) => anchorApiHandler(c.req.raw));
 app.all("/api/places/nearby", (c) => anchorApiHandler(c.req.raw));
 app.all("/api/checkins", (c) => anchorApiHandler(c.req.raw));
+app.all("/api/checkin/*", (c) => anchorApiHandler(c.req.raw));
 
 // ========================================
 // Dashboard API Routes (for React frontend)
@@ -540,6 +541,84 @@ app.get(
   "/mobile-auth",
   (_c) => serveFile("/frontend/index.html", import.meta.url),
 );
+
+// Checkin detail pages with dynamic meta tags
+app.get("/checkin/*", async (c) => {
+  const url = new URL(c.req.url);
+  const checkinId = url.pathname.split("/checkin/")[1];
+
+  if (!checkinId) {
+    return serveFile("/frontend/index.html", import.meta.url);
+  }
+
+  try {
+    // Fetch checkin data for meta tags
+    const checkinResponse = await fetch(
+      `${url.origin}/api/checkin/${checkinId}`,
+    );
+
+    if (checkinResponse.ok) {
+      const checkin = await checkinResponse.json();
+
+      // Create dynamic HTML with meta tags
+      const baseHtml = await serveFile("/frontend/index.html", import.meta.url);
+      const htmlText = await baseHtml.text();
+
+      const description = checkin.text
+        ? `${checkin.text} - Check-in by ${
+          checkin.author.displayName || checkin.author.handle
+        }`
+        : `Check-in by ${checkin.author.displayName || checkin.author.handle}`;
+
+      const locationText = checkin.address?.name
+        ? `at ${checkin.address.name}`
+        : checkin.coordinates
+        ? `at ${checkin.coordinates.latitude.toFixed(4)}, ${
+          checkin.coordinates.longitude.toFixed(4)
+        }`
+        : "";
+
+      const title = `${
+        checkin.author.displayName || checkin.author.handle
+      } ${locationText} - Anchor`;
+
+      // Inject meta tags
+      const metaTags = `
+        <meta property="og:title" content="${title.replace(/"/g, "&quot;")}" />
+        <meta property="og:description" content="${
+        description.replace(/"/g, "&quot;")
+      }" />
+        <meta property="og:type" content="article" />
+        <meta property="og:url" content="${url.origin}/checkin/${checkinId}" />
+        <meta property="og:site_name" content="Anchor" />
+        <meta name="twitter:card" content="summary" />
+        <meta name="twitter:title" content="${title.replace(/"/g, "&quot;")}" />
+        <meta name="twitter:description" content="${
+        description.replace(/"/g, "&quot;")
+      }" />
+        ${
+        checkin.author.avatar
+          ? `<meta property="og:image" content="${checkin.author.avatar}" />`
+          : ""
+      }
+      `;
+
+      const enhancedHtml = htmlText.replace(
+        "<title>Anchor</title>",
+        `<title>${title.replace(/"/g, "&quot;")}</title>${metaTags}`,
+      );
+
+      return new Response(enhancedHtml, {
+        headers: { "Content-Type": "text/html" },
+      });
+    }
+  } catch (error) {
+    console.error("Failed to generate checkin meta tags:", error);
+  }
+
+  // Fallback to regular HTML
+  return serveFile("/frontend/index.html", import.meta.url);
+});
 
 // Mobile token validation endpoint
 app.post("/api/auth/validate-mobile-session", async (c) => {

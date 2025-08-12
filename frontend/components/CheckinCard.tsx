@@ -6,13 +6,38 @@ interface CheckinCardProps {
 }
 
 export function CheckinCard({ checkin }: CheckinCardProps) {
+  const handleClick = () => {
+    globalThis.location.href = `/checkin/${checkin.id}`;
+  };
+
   return (
     <div
+      onClick={handleClick}
       style={{
         background: "white",
         borderRadius: "12px",
         boxShadow: "0 1px 3px rgba(0,0,0,0.1)",
         padding: "16px",
+        cursor: "pointer",
+        transition: "transform 0.1s ease-in-out, box-shadow 0.1s ease-in-out",
+      }}
+      onMouseEnter={(e) => {
+        e.currentTarget.style.transform = "translateY(-1px)";
+        e.currentTarget.style.boxShadow = "0 4px 12px rgba(0,0,0,0.15)";
+        // Change arrow color on hover
+        const arrow = e.currentTarget.querySelector(
+          "[data-arrow]",
+        ) as HTMLElement;
+        if (arrow) arrow.style.color = "#007aff";
+      }}
+      onMouseLeave={(e) => {
+        e.currentTarget.style.transform = "translateY(0)";
+        e.currentTarget.style.boxShadow = "0 1px 3px rgba(0,0,0,0.1)";
+        // Reset arrow color
+        const arrow = e.currentTarget.querySelector(
+          "[data-arrow]",
+        ) as HTMLElement;
+        if (arrow) arrow.style.color = "#c7c7cc";
       }}
     >
       <div
@@ -76,28 +101,46 @@ export function CheckinCard({ checkin }: CheckinCardProps) {
           </div>
         </div>
 
-        <time
+        <div
           style={{
-            fontSize: "13px",
-            color: "#8e8e93",
+            display: "flex",
+            alignItems: "center",
+            gap: "8px",
           }}
         >
-          {(() => {
-            const date = new Date(checkin.createdAt);
-            const now = new Date();
-            const diffMs = now.getTime() - date.getTime();
-            const diffSecs = Math.floor(diffMs / 1000);
-            const diffMins = Math.floor(diffSecs / 60);
-            const diffHours = Math.floor(diffMins / 60);
-            const diffDays = Math.floor(diffHours / 24);
+          <time
+            style={{
+              fontSize: "13px",
+              color: "#8e8e93",
+            }}
+          >
+            {(() => {
+              const date = new Date(checkin.createdAt);
+              const now = new Date();
+              const diffMs = now.getTime() - date.getTime();
+              const diffSecs = Math.floor(diffMs / 1000);
+              const diffMins = Math.floor(diffSecs / 60);
+              const diffHours = Math.floor(diffMins / 60);
+              const diffDays = Math.floor(diffHours / 24);
 
-            if (diffSecs < 60) return "now";
-            if (diffMins < 60) return diffMins + "m";
-            if (diffHours < 24) return diffHours + "h";
-            if (diffDays < 7) return diffDays + "d";
-            return date.toLocaleDateString();
-          })()}
-        </time>
+              if (diffSecs < 60) return "now";
+              if (diffMins < 60) return diffMins + "m";
+              if (diffHours < 24) return diffHours + "h";
+              if (diffDays < 7) return diffDays + "d";
+              return date.toLocaleDateString();
+            })()}
+          </time>
+          <span
+            data-arrow
+            style={{
+              fontSize: "12px",
+              color: "#c7c7cc",
+              transition: "color 0.1s ease-in-out",
+            }}
+          >
+            →
+          </span>
+        </div>
       </div>
 
       <div style={{ marginBottom: "12px" }}>

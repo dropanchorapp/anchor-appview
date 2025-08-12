@@ -4,14 +4,24 @@ import { Header } from "./Header.tsx";
 import { Feed } from "./Feed.tsx";
 import { LoginForm } from "./LoginForm.tsx";
 import { MobileAuth } from "./MobileAuth.tsx";
+import { CheckinDetail } from "./CheckinDetail.tsx";
 import { AuthState, CheckinData, FeedType } from "../types/index.ts";
 
 export function App() {
   // Check if we're on the mobile-auth route first, before any hooks
   const isMobileAuth = globalThis.location?.pathname === "/mobile-auth";
 
+  // Check if we're on a checkin detail route
+  const checkinMatch = globalThis.location?.pathname.match(/^\/checkin\/(.+)$/);
+  const isCheckinDetail = !!checkinMatch;
+  const checkinId = checkinMatch?.[1];
+
   if (isMobileAuth) {
     return <MobileAuth />;
+  }
+
+  if (isCheckinDetail && checkinId) {
+    return <CheckinDetail checkinId={checkinId} />;
   }
 
   const [checkins, setCheckins] = useState<CheckinData[]>([]);

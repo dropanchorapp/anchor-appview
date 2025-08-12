@@ -86,6 +86,11 @@ export default async function (req: Request): Promise<Response> {
     case "/api/checkins":
       return await handleCreateCheckin(req, corsHeaders);
     default:
+      // Check for dynamic routes like /api/checkin/:id
+      if (url.pathname.startsWith("/api/checkin/")) {
+        const checkinId = url.pathname.split("/api/checkin/")[1];
+        return await getCheckinById(checkinId, corsHeaders);
+      }
       return new Response(JSON.stringify({ error: "Not Found" }), {
         status: 404,
         headers: corsHeaders,
@@ -553,6 +558,68 @@ function calculateDistance(
       Math.sin(dLng / 2) * Math.sin(dLng / 2);
   const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
   return R * c;
+}
+
+async function getCheckinById(
+  checkinId: string,
+  corsHeaders: CorsHeaders,
+): Promise<Response> {
+  try {
+    // Query for the specific checkin by id (rkey)
+    const rows = await db.select({
+      id: checkinsTable.id,
+      uri: checkinsTable.uri,
+      rkey: checkinsTable.rkey,
+      did: checkinsTable.did,
+      handle: checkinsTable.handle,
+      displayName: checkinsTable.displayName,
+      avatar: checkinsTable.avatar,
+      text: checkinsTable.text,
+      createdAt: checkinsTable.createdAt,
+      latitude: checkinsTable.latitude,
+      longitude: checkinsTable.longitude,
+      venueName: checkinsTable.venueName,
+      category: checkinsTable.category,
+      categoryGroup: checkinsTable.categoryGroup,
+      categoryIcon: checkinsTable.categoryIcon,
+      addressStreet: checkinsTable.addressStreet,
+      addressLocality: checkinsTable.addressLocality,
+      addressRegion: checkinsTable.addressRegion,
+      addressCountry: checkinsTable.addressCountry,
+      addressPostalCode: checkinsTable.addressPostalCode,
+    })
+      .from(checkinsTable)
+      .where(eq(checkinsTable.id, checkinId))
+      .limit(1);
+
+    if (rows.length === 0) {
+      return new Response(JSON.stringify({ error: "Checkin not found" }), {
+        status: 404,
+        headers: corsHeaders,
+      });
+    }
+
+    const row = rows[0];
+
+    // Get profile data for the author
+    const storage = new SqliteStorageProvider(rawDb);
+    const profileResolver = new ATProtocolProfileResolver(storage);
+    const profiles = await profileResolver.batchResolveProfiles([row.did]);
+
+    // Convert to CheckinRecord format
+    const checkin = await formatCheckinWithPlaces(row, profiles);
+
+    return new Response(JSON.stringify(checkin), {
+      status: 200,
+      headers: corsHeaders,
+    });
+  } catch (error) {
+    console.error("Get checkin error:", error);
+    return new Response(JSON.stringify({ error: "Internal server error" }), {
+      status: 500,
+      headers: corsHeaders,
+    });
+  }
 }
 
 async function handleCreateCheckin(
