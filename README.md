@@ -1,14 +1,14 @@
 # Anchor AppView
 
-A complete location-based social feed generator built on the AT Protocol for
-decentralized social networking.
+A complete location-based social feed generator and web interface built on the AT Protocol for decentralized social networking. Provides both API endpoints for mobile clients and a web interface for viewing and sharing check-ins.
 
 ## 🏗️ Architecture
 
-The system consists of 3 main components:
+The system consists of 4 main components:
 
 - **Ingestion** - Real-time check-in data ingestion from AT Protocol Jetstream
-- **API** - Feed APIs for global, nearby, user, and following feeds
+- **API** - RESTful APIs for global, nearby, user, and following feeds
+- **Web Interface** - React-based web frontend for viewing feeds and shareable checkin detail pages
 - **Social** - Social graph sync from Bluesky for following feeds
 
 ## 📁 Project Structure
@@ -27,6 +27,15 @@ src/
     ├── address-cache.ts    # Val Town blob storage cache
     ├── profile-resolver.ts # Profile caching and resolution
     └── profile-refresh-job.ts # Background profile refresh
+
+frontend/
+├── main.tsx           # React app entry point and routing
+├── components/        # React components
+│   ├── CheckinDetail.tsx  # Individual checkin detail view with map
+│   ├── Feed.tsx          # Global feed component
+│   └── Layout.tsx        # App layout and navigation
+└── types/
+    └── index.ts       # TypeScript type definitions
 
 database/
 ├── database-schema.sql # SQLite schema and indexes
@@ -93,45 +102,63 @@ vt create cron socialGraphSync --file src/social/social-graph-sync.ts --schedule
 
 **Base URL**: `https://dropanchor.app`
 
-### Global Feed
+### Feed APIs
 
+#### Global Feed
 ```http
-GET https://dropanchor.app/global?limit=50&cursor=2025-06-29T15:00:00Z
+GET https://dropanchor.app/api/global?limit=50&cursor=2025-06-29T15:00:00Z
 ```
-
 Recent check-ins from all users with pagination.
 
-### Nearby Checkins
-
+#### Nearby Checkins
 ```http
-GET https://dropanchor.app/nearby?lat=52.0705&lng=4.3007&radius=5&limit=50
+GET https://dropanchor.app/api/nearby?lat=52.0705&lng=4.3007&radius=5&limit=50
 ```
-
 Spatial query for check-ins within specified radius (km).
 
-### User Checkins
-
+#### User Checkins
 ```http
-GET https://dropanchor.app/user?did=did:plc:abc123&limit=50
+GET https://dropanchor.app/api/user?did=did:plc:abc123&limit=50
 ```
-
 All check-ins from a specific user.
 
-### Following Feed
-
+#### Following Feed
 ```http
-GET https://dropanchor.app/following?user=did:plc:abc123&limit=50&cursor=2025-06-29T15:00:00Z
+GET https://dropanchor.app/api/following?user=did:plc:abc123&limit=50&cursor=2025-06-29T15:00:00Z
 ```
-
 Check-ins from people the specified user follows on Bluesky.
 
-### Statistics
+### Individual Checkin
 
+#### Checkin Detail API
 ```http
-GET https://dropanchor.app/stats
+GET https://dropanchor.app/api/checkin/{rkey}
 ```
+Individual checkin data by record key for detail views and sharing.
 
+### System APIs
+
+#### Statistics
+```http
+GET https://dropanchor.app/api/stats
+```
 AppView health metrics and processing statistics.
+
+## 🌐 Web Interface
+
+### Public Web Pages
+
+#### Global Feed
+```
+https://dropanchor.app/
+```
+Web interface showing the global feed of check-ins.
+
+#### Shareable Checkin Details
+```
+https://dropanchor.app/checkin/{rkey}
+```
+Individual checkin detail page with interactive map, optimized for sharing on social media with Open Graph meta tags.
 
 ## 📚 API Documentation
 
@@ -152,6 +179,7 @@ The system uses 5 main SQLite tables:
 
 ## 🌟 Key Features
 
+### Backend Features
 - **Real-time Ingestion**: WebSocket polling every 5 minutes from Jetstream
 - **Address Resolution**: Automatic strongref resolution with caching
 - **Profile Resolution**: Automatic profile data fetching and caching
@@ -160,7 +188,19 @@ The system uses 5 main SQLite tables:
 - **Performance**: SQLite with proper indexing for fast queries
 - **Error Handling**: Comprehensive error tracking and retry logic
 
+### Web Interface Features
+- **Global Feed View**: Browse all check-ins with author profiles and timestamps
+- **Shareable Checkin Pages**: Individual checkin detail pages with interactive maps
+- **Interactive Maps**: OpenStreetMap integration via Leaflet with CartoDB tiles
+- **Social Sharing**: Optimized sharing with Web Share API and copy functionality
+- **Responsive Design**: Mobile-friendly interface using system fonts
+- **Open Graph Tags**: Rich social media previews for shared checkin URLs
+
 ## 🔧 Development
+
+### Known Technical Debt
+
+- **Share URL Collisions**: Currently using AT Protocol rkeys as unique identifiers in share URLs (`/checkin/{rkey}`). While collision risk is negligible at current scale (~32 simultaneous checkins per microsecond for 50% collision probability), rkeys only provide 10 bits of entropy and are not cryptographically guaranteed to be globally unique. Consider migrating to composite identifiers (DID+rkey) or backend-generated UUIDs if collision issues emerge at scale.
 
 ### Testing
 
