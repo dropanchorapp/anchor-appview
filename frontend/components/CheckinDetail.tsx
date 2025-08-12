@@ -1,9 +1,89 @@
 /** @jsxImportSource https://esm.sh/react */
-import { useEffect, useState } from "https://esm.sh/react";
+import { useEffect, useRef, useState } from "https://esm.sh/react";
 import { CheckinData } from "../types/index.ts";
 
 interface CheckinDetailProps {
   checkinId: string;
+}
+
+interface MapWidgetProps {
+  latitude: number;
+  longitude: number;
+  venueName?: string;
+}
+
+function MapWidget({ latitude, longitude, venueName }: MapWidgetProps) {
+  const mapRef = useRef<HTMLDivElement>(null);
+  const mapInstanceRef = useRef<any>(null);
+
+  useEffect(() => {
+    // Dynamically load Leaflet
+    const loadLeaflet = async () => {
+      if (mapInstanceRef.current || !mapRef.current) return;
+
+      try {
+        // Load Leaflet CSS
+        const link = document.createElement("link");
+        link.rel = "stylesheet";
+        link.href = "https://unpkg.com/leaflet@1.9.4/dist/leaflet.css";
+        document.head.appendChild(link);
+
+        // Load Leaflet JS
+        const L = await import("https://esm.sh/leaflet@1.9.4");
+
+        // Create map
+        const map = L.default.map(mapRef.current).setView(
+          [latitude, longitude],
+          16,
+        );
+
+        // Add CartoDB Voyager tiles - clean and modern style
+        L.default.tileLayer(
+          "https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png",
+          {
+            attribution:
+              '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors © <a href="https://carto.com/attributions">CARTO</a>',
+            maxZoom: 20,
+            subdomains: "abcd",
+          },
+        ).addTo(map);
+
+        // Add marker
+        const marker = L.default.marker([latitude, longitude]).addTo(map);
+
+        if (venueName) {
+          marker.bindPopup(venueName).openPopup();
+        }
+
+        mapInstanceRef.current = map;
+
+        // Clean up on unmount
+        return () => {
+          if (mapInstanceRef.current) {
+            mapInstanceRef.current.remove();
+            mapInstanceRef.current = null;
+          }
+        };
+      } catch (error) {
+        console.error("Failed to load map:", error);
+      }
+    };
+
+    loadLeaflet();
+  }, [latitude, longitude, venueName]);
+
+  return (
+    <div
+      ref={mapRef}
+      style={{
+        width: "100%",
+        height: "200px",
+        borderRadius: "12px",
+        overflow: "hidden",
+        background: "#f0f0f0",
+      }}
+    />
+  );
 }
 
 export function CheckinDetail({ checkinId }: CheckinDetailProps) {
@@ -323,17 +403,27 @@ export function CheckinDetail({ checkinId }: CheckinDetailProps) {
             )}
 
             {checkin.coordinates && (
-              <div
-                style={{
-                  fontSize: "13px",
-                  color: "#8e8e93",
-                  marginTop: checkin.address ? "8px" : "0",
-                  fontFamily: "monospace",
-                }}
-              >
-                {checkin.coordinates.latitude.toFixed(6)},{" "}
-                {checkin.coordinates.longitude.toFixed(6)}
-              </div>
+              <>
+                <div
+                  style={{
+                    fontSize: "13px",
+                    color: "#8e8e93",
+                    marginTop: checkin.address ? "8px" : "0",
+                    fontFamily: "monospace",
+                    marginBottom: "12px",
+                  }}
+                >
+                  {checkin.coordinates.latitude.toFixed(6)},{" "}
+                  {checkin.coordinates.longitude.toFixed(6)}
+                </div>
+
+                {/* Map widget */}
+                <MapWidget
+                  latitude={checkin.coordinates.latitude}
+                  longitude={checkin.coordinates.longitude}
+                  venueName={checkin.address?.name}
+                />
+              </>
             )}
           </div>
         )}
@@ -385,23 +475,63 @@ export function CheckinDetail({ checkinId }: CheckinDetailProps) {
           />
           <button
             type="button"
-            onClick={() => {
-              navigator.clipboard.writeText(shareUrl);
-              // Simple feedback - could be enhanced with a toast
-              alert("Link copied to clipboard!");
+            onClick={async () => {
+              // Copy URL only
+              try {
+                await navigator.clipboard.writeText(shareUrl);
+                alert("Link copied to clipboard!");
+              } catch (_err) {
+                // Fallback for older browsers
+                const textArea = document.createElement("textarea");
+                textArea.value = shareUrl;
+                document.body.appendChild(textArea);
+                textArea.select();
+                document.execCommand("copy");
+                document.body.removeChild(textArea);
+                alert("Link copied to clipboard!");
+              }
             }}
             style={{
-              background: "#007aff",
-              color: "white",
-              border: "none",
+              background: "#f8f9fa",
+              color: "#007aff",
+              border: "1px solid #007aff",
               padding: "6px 12px",
               borderRadius: "6px",
               fontSize: "14px",
               cursor: "pointer",
+              marginRight: "4px",
             }}
           >
             Copy
           </button>
+          {navigator.share && (
+            <button
+              type="button"
+              onClick={async () => {
+                try {
+                  const shareText = `Dropped anchor at ${
+                    checkin.address?.name || "a location"
+                  } ${shareUrl}`;
+                  await navigator.share({
+                    text: shareText,
+                  });
+                } catch (err) {
+                  console.log("Share cancelled or failed:", err);
+                }
+              }}
+              style={{
+                background: "#007aff",
+                color: "white",
+                border: "none",
+                padding: "6px 12px",
+                borderRadius: "6px",
+                fontSize: "14px",
+                cursor: "pointer",
+              }}
+            >
+              Share
+            </button>
+          )}
         </div>
       </div>
     </div>
