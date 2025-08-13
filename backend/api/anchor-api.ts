@@ -521,13 +521,11 @@ async function formatCheckinWithPlaces(
         const nearestPlace = nearbyPlaces[0];
         checkin.address = {
           name: nearestPlace.name, // Use the actual venue name from OSM
-          street: nearestPlace.tags?.["addr:street"] || undefined,
-          locality: nearestPlace.tags?.["addr:city"] ||
-            nearestPlace.tags?.["addr:locality"] || undefined,
-          region: nearestPlace.tags?.["addr:state"] ||
-            nearestPlace.tags?.["addr:province"] || undefined,
-          country: nearestPlace.tags?.["addr:country"] || undefined,
-          postalCode: nearestPlace.tags?.["addr:postcode"] || undefined,
+          street: nearestPlace.address?.street,
+          locality: nearestPlace.address?.locality,
+          region: nearestPlace.address?.region,
+          country: nearestPlace.address?.country,
+          postalCode: nearestPlace.address?.postalCode,
         };
       }
     } catch (error) {
