@@ -598,30 +598,67 @@ export class PlaceCategorization {
   }
 
   /**
-   * Get prioritized categories for performance (most commonly visited places)
+   * Get prioritized categories optimized for social check-ins
+   * Focuses on places people want to share and experience (like Foursquare/Swarm)
    */
   static getPrioritizedCategories(): string[] {
     return [
-      // Food & Drink (most common check-ins)
+      // Food & Drink (most popular check-ins)
       "amenity=restaurant",
       "amenity=cafe",
       "amenity=bar",
       "amenity=pub",
+      "amenity=fast_food",
+      "amenity=ice_cream",
+      "amenity=biergarten",
 
-      // Entertainment & Culture
+      // Entertainment & Nightlife (social experiences)
       "amenity=cinema",
+      "amenity=theatre",
+      "amenity=nightclub",
+      "leisure=bowling_alley",
+      "leisure=amusement_arcade",
+
+      // Attractions & Culture (destination spots)
       "tourism=attraction",
       "tourism=museum",
+      "tourism=gallery",
+      "tourism=zoo",
+      "tourism=theme_park",
+      "tourism=viewpoint",
 
-      // Sports & Fitness
-      "leisure=fitness_centre",
-      "leisure=climbing",
-
-      // Shopping (essentials only)
+      // Shopping (experience-worthy)
       "shop=supermarket",
+      "shop=convenience",
+      "shop=clothes",
+      "shop=electronics",
+      "shop=books",
 
-      // Nature
+      // Sports & Fitness (social activities)
+      "leisure=fitness_centre",
+      "leisure=sports_centre",
+      "leisure=climbing",
+      "leisure=swimming_pool",
+      "leisure=golf_course",
+      "leisure=stadium",
+
+      // Recreation & Outdoors
       "leisure=park",
+      "leisure=playground",
+      "leisure=beach_resort",
+
+      // Travel & Accommodation
+      "tourism=hotel",
+      "tourism=hostel",
+      "amenity=fuel",
+
+      // Essential Services (sometimes shared)
+      "amenity=bank",
+      "amenity=library",
+
+      // Education (milestone check-ins)
+      "amenity=school",
+      "amenity=university",
     ];
   }
 

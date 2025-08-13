@@ -93,18 +93,16 @@ export class OverpassService {
       }
 
       const overpassResponse: OverpassResponse = await response.json();
-      const places = overpassResponse.elements
+      const rawPlaces = overpassResponse.elements
         .map((element) => this.parseElement(element))
         .filter((place): place is Place => place !== null);
 
-      // Enhance places that lack locality/country with administrative boundary data
-      const enhancedPlaces = await this.enhancePlacesWithAdministrativeData(
-        places,
-      );
+      // Deduplicate places by their unique ID (elementType:elementId)
+      const places = this.deduplicatePlaces(rawPlaces);
 
-      // Cache the results
+      // Cache the results (no enhancement during discovery for speed)
       const cachedPlaces: CachedPlaces = {
-        places: enhancedPlaces,
+        places: places,
         coordinate,
         radiusMeters,
         categories: categories.length > 0
@@ -114,8 +112,8 @@ export class OverpassService {
       };
       this.placesCache.set(cacheKey, cachedPlaces);
 
-      console.log(`📍 Cached ${enhancedPlaces.length} places for location`);
-      return enhancedPlaces;
+      console.log(`📍 Cached ${places.length} places for location`);
+      return places;
     } catch (error) {
       if (error instanceof DOMException && error.name === "AbortError") {
         throw new OverpassError("Request timeout");
@@ -289,6 +287,29 @@ export class OverpassService {
     return place.category
       ? geographicCategories.includes(place.category)
       : false;
+  }
+
+  /**
+   * Remove duplicate places based on their unique ID (elementType:elementId)
+   * Keeps the first occurrence when duplicates are found
+   */
+  private deduplicatePlaces(places: Place[]): Place[] {
+    const seenIds = new Set<string>();
+    const uniquePlaces: Place[] = [];
+
+    for (const place of places) {
+      if (!seenIds.has(place.id)) {
+        seenIds.add(place.id);
+        uniquePlaces.push(place);
+      }
+    }
+
+    const duplicatesRemoved = places.length - uniquePlaces.length;
+    if (duplicatesRemoved > 0) {
+      console.log(`📍 Removed ${duplicatesRemoved} duplicate places`);
+    }
+
+    return uniquePlaces;
   }
 
   private createCacheKey(

@@ -380,6 +380,11 @@ export async function refreshOAuthToken(
     // Import the stored DPoP keys
     const privateKeyJWK = JSON.parse(session.dpopPrivateKey);
     const publicKeyJWK = JSON.parse(session.dpopPublicKey);
+
+    // Set extractable flag in JWK
+    privateKeyJWK.ext = true;
+    publicKeyJWK.ext = true;
+
     const privateKey = await importJWK(privateKeyJWK, "ES256") as CryptoKey;
     const publicKey = await importJWK(publicKeyJWK, "ES256") as CryptoKey;
 

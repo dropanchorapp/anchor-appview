@@ -160,7 +160,17 @@ export async function createCheckin(c: Context): Promise<Response> {
     );
 
     if (!addressResponse.response.ok) {
-      const error = await addressResponse.response.text();
+      let error = "Unknown error";
+      try {
+        // Try to read the response body only if it hasn't been consumed
+        if (addressResponse.response.body) {
+          error = await addressResponse.response.text();
+        }
+      } catch (e) {
+        console.warn("Could not read response body:", e);
+        error =
+          `HTTP ${addressResponse.response.status}: ${addressResponse.response.statusText}`;
+      }
       console.error("Failed to create address record:", error);
       return c.json({
         success: false,
@@ -170,6 +180,9 @@ export async function createCheckin(c: Context): Promise<Response> {
 
     const addressResult = await addressResponse.response.json();
     console.log(`✅ Created address record: ${addressResult.uri}`);
+
+    // Use the potentially updated session from address creation (in case token was refreshed)
+    const updatedSession = addressResponse.session;
 
     // Step 2: Create checkin record with StrongRef to address
     const checkinRecord: CheckinRecord = {
@@ -188,30 +201,41 @@ export async function createCheckin(c: Context): Promise<Response> {
 
     const checkinResponse = await makeDPoPRequest(
       "POST",
-      `${session.pdsUrl}/xrpc/com.atproto.repo.createRecord`,
-      session,
+      `${updatedSession.pdsUrl}/xrpc/com.atproto.repo.createRecord`,
+      updatedSession,
       JSON.stringify({
-        repo: session.did,
+        repo: updatedSession.did,
         collection: "app.dropanchor.checkin",
         record: checkinRecord,
       }),
     );
 
     if (!checkinResponse.response.ok) {
-      // Cleanup: Delete orphaned address record
+      // Cleanup: Delete orphaned address record using the most recent session
       const addressRkey = extractRkey(addressResult.uri);
+      const finalSession = checkinResponse.session; // Use session from checkin response (may have been refreshed again)
       await makeDPoPRequest(
         "POST",
-        `${session.pdsUrl}/xrpc/com.atproto.repo.deleteRecord`,
-        session,
+        `${finalSession.pdsUrl}/xrpc/com.atproto.repo.deleteRecord`,
+        finalSession,
         JSON.stringify({
-          repo: session.did,
+          repo: finalSession.did,
           collection: "community.lexicon.location.address",
           rkey: addressRkey,
         }),
       ).catch(console.error); // Best effort cleanup
 
-      const error = await checkinResponse.response.text();
+      let error = "Unknown error";
+      try {
+        // Try to read the response body only if it hasn't been consumed
+        if (checkinResponse.response.body) {
+          error = await checkinResponse.response.text();
+        }
+      } catch (e) {
+        console.warn("Could not read response body:", e);
+        error =
+          `HTTP ${checkinResponse.response.status}: ${checkinResponse.response.statusText}`;
+      }
       console.error("Failed to create checkin record:", error);
       return c.json({
         success: false,

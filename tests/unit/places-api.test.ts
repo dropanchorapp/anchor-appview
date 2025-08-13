@@ -62,8 +62,8 @@ Deno.test("PlaceCategorization - Prioritized categories", () => {
   assertEquals(prioritized.includes("amenity=cafe"), true);
   assertEquals(prioritized.includes("leisure=climbing"), true);
 
-  // Should be reasonable number (not too many)
-  assertEquals(prioritized.length < 20, true);
+  // Should be reasonable number (focused on check-in worthy places)
+  assertEquals(prioritized.length > 30 && prioritized.length < 50, true);
 });
 
 Deno.test("PlaceCategorization - Category objects with IDs", () => {
