@@ -137,9 +137,12 @@ The project includes several Deno tasks for common development workflows:
 - `/client-metadata.json` - OAuth client metadata endpoint
 - `/api/auth/start` - Initiate OAuth flow (POST with handle)
 - `/oauth/callback` - Complete OAuth token exchange
-- `/api/auth/session` - Session validation for web and mobile
+- `/api/auth/session` - Session validation for web and mobile (auto-extends
+  session lifetime)
 - `/api/auth/logout` - Session cleanup
-- `/api/auth/validate-mobile-session` - Mobile token validation
+- `/api/auth/validate-mobile-session` - Mobile token validation with automatic
+  token refresh
+- `/api/auth/refresh-mobile-token` - Explicit mobile token refresh endpoint
 
 ### Mobile OAuth WebView
 
@@ -157,7 +160,7 @@ The project includes several Deno tasks for common development workflows:
 ## Mobile OAuth WebView Integration
 
 The system includes a complete OAuth authentication flow designed for mobile app
-WebView integration:
+WebView integration with extended session duration (30+ days):
 
 ### Mobile Authentication Flow
 
@@ -191,7 +194,20 @@ anchor-app://auth-callback?access_token=...&refresh_token=...&did=...&handle=...
 - **WebView Configuration**: Set User-Agent to "AnchorApp" for detection
 - **Secure Storage**: Store tokens in iOS Keychain for production apps
 - **Session Management**: Use session validation endpoints for token
-  verification
+  verification with automatic refresh
+
+### Session Duration & Token Management
+
+- **Extended Sessions**: Sessions now persist for 30+ days with automatic
+  lifetime extension
+- **Token Refresh**: Automatic token refresh when AT Protocol access tokens
+  expire
+- **Session Touching**: Session validation endpoints automatically extend
+  session lifetime
+- **Database Cleanup**: Sessions are only cleaned up after 90 days of inactivity
+  (extended from 30 days)
+- **Mobile Token Refresh**: Dedicated endpoint for mobile clients to explicitly
+  refresh tokens
 
 ## Implementation Phases
 

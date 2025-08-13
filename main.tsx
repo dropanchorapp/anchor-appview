@@ -8,6 +8,7 @@ import {
   getDashboardStats,
   getSessionBySessionId as _getSessionBySessionId,
 } from "./backend/database/queries.ts";
+import { getStoredSession as _getStoredSession } from "./backend/oauth/session.ts";
 import {
   handleClientMetadata,
   handleOAuthCallback,
@@ -493,6 +494,10 @@ app.get("/api/auth/session", async (c) => {
       return c.json({ authenticated: false });
     }
 
+    // Touch the session to extend its lifetime (updates updated_at timestamp)
+    const { touchSession } = await import("./backend/oauth/session.ts");
+    await touchSession(session.did);
+
     // Return user info without sensitive tokens
     return c.json({
       authenticated: true,
@@ -647,6 +652,41 @@ app.post("/api/auth/validate-mobile-session", async (c) => {
       return c.json({ valid: false, error: "Invalid token format" }, 400);
     }
 
+    // Get the stored session to check if tokens need refreshing
+    const storedSession = await _getStoredSession(did);
+    if (storedSession) {
+      // Touch the session to extend its lifetime (updates updated_at timestamp)
+      const { touchSession } = await import("./backend/oauth/session.ts");
+      await touchSession(did);
+
+      // Check if we should refresh the tokens (they're different from stored ones)
+      if (
+        storedSession.accessToken !== access_token ||
+        storedSession.refreshToken !== refresh_token
+      ) {
+        // Try to refresh the tokens using the stored session data
+        const { refreshOAuthToken } = await import("./backend/oauth/dpop.ts");
+        const refreshedSession = await refreshOAuthToken(storedSession);
+
+        if (refreshedSession) {
+          // Return the refreshed tokens to the mobile client
+          return c.json({
+            valid: true,
+            refreshed: true,
+            tokens: {
+              access_token: refreshedSession.accessToken,
+              refresh_token: refreshedSession.refreshToken,
+            },
+            user: {
+              did,
+              handle,
+              sessionId: session_id,
+            },
+          });
+        }
+      }
+    }
+
     return c.json({
       valid: true,
       user: {
@@ -658,6 +698,64 @@ app.post("/api/auth/validate-mobile-session", async (c) => {
   } catch (error) {
     console.error("Mobile session validation error:", error);
     return c.json({ valid: false, error: "Validation failed" }, 500);
+  }
+});
+
+// Mobile token refresh endpoint - allows mobile clients to explicitly refresh tokens
+app.post("/api/auth/refresh-mobile-token", async (c) => {
+  try {
+    const { refresh_token, did, handle } = await c.req.json();
+
+    if (!refresh_token || !did || !handle) {
+      return c.json(
+        { success: false, error: "Missing required parameters" },
+        400,
+      );
+    }
+
+    // Get the stored session
+    const storedSession = await _getStoredSession(did);
+    if (!storedSession) {
+      return c.json(
+        { success: false, error: "Session not found" },
+        404,
+      );
+    }
+
+    // Verify the refresh token matches
+    if (storedSession.refreshToken !== refresh_token) {
+      return c.json(
+        { success: false, error: "Invalid refresh token" },
+        401,
+      );
+    }
+
+    // Try to refresh the tokens
+    const { refreshOAuthToken } = await import("./backend/oauth/dpop.ts");
+    const refreshedSession = await refreshOAuthToken(storedSession);
+
+    if (!refreshedSession) {
+      return c.json(
+        { success: false, error: "Token refresh failed" },
+        500,
+      );
+    }
+
+    // Return the new tokens
+    return c.json({
+      success: true,
+      tokens: {
+        access_token: refreshedSession.accessToken,
+        refresh_token: refreshedSession.refreshToken,
+      },
+      user: {
+        did: refreshedSession.did,
+        handle: refreshedSession.handle,
+      },
+    });
+  } catch (error) {
+    console.error("Mobile token refresh error:", error);
+    return c.json({ success: false, error: "Token refresh failed" }, 500);
   }
 });
 

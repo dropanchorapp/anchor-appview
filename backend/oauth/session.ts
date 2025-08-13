@@ -187,6 +187,19 @@ export async function updateSessionTokens(
   );
 }
 
+// Touch session to update the updated_at timestamp (keeps session alive)
+export async function touchSession(did: string): Promise<void> {
+  const now = Date.now();
+  await sqlite.execute(
+    `
+    UPDATE oauth_sessions
+    SET updated_at = ?
+    WHERE did = ?
+  `,
+    [now, did],
+  );
+}
+
 // Delete OAuth session
 export async function deleteOAuthSession(did: string): Promise<void> {
   await sqlite.execute(
@@ -218,14 +231,14 @@ export async function getActiveSessions(): Promise<OAuthSession[]> {
   }));
 }
 
-// Clean up expired sessions (older than 30 days)
+// Clean up expired sessions (older than 90 days - extended for mobile apps)
 export async function cleanupExpiredSessions(): Promise<number> {
-  const thirtyDaysAgo = Date.now() - (30 * 24 * 60 * 60 * 1000);
+  const ninetyDaysAgo = Date.now() - (90 * 24 * 60 * 60 * 1000);
   const result = await sqlite.execute(
     `
     DELETE FROM oauth_sessions WHERE updated_at < ?
   `,
-    [thirtyDaysAgo],
+    [ninetyDaysAgo],
   );
 
   return (result as any).changes || 0;
