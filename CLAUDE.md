@@ -245,8 +245,9 @@ The system deploys as a single unified HTTP function on Val Town:
 - Use TypeScript for all Val Town functions
 - Never hardcode secrets - always use environment variables with
   `Deno.env.get('keyname')`
-- Import SQLite using
-  `import { sqlite } from "https://esm.town/v/stevekrouse/sqlite"`
+- **Import SQLite using** `import { sqlite } from "https://esm.town/v/std/sqlite2"`
+  - ⚠️ **CRITICAL**: Use `sqlite2` not `sqlite` (the old path is deprecated)
+  - Val Town updated their sqlite module - always use the `sqlite2` version
 - Import blob storage using `import { blob } from "https://esm.town/v/std/blob"`
 - Use `https://esm.sh` for external dependencies
 - All functions must be properly typed with TypeScript interfaces
@@ -258,6 +259,42 @@ The system deploys as a single unified HTTP function on Val Town:
 - Always create tables before querying with `IF NOT EXISTS`
 - Use proper indexing for coordinate-based spatial queries
 - Initialize tables on every function execution for robustness
+
+#### SQLite API Format (sqlite2)
+
+The new sqlite2 API uses object format for queries:
+
+```typescript
+// CORRECT (sqlite2 format)
+await sqlite.execute({
+  sql: "SELECT * FROM users WHERE id = ?",
+  args: [userId],
+});
+
+// INCORRECT (old format - will not work)
+await sqlite.execute("SELECT * FROM users WHERE id = ?", [userId]);
+```
+
+#### Result Format Conversion
+
+The sqlite2 API returns `{ columns, rows }` where rows are arrays. Use helper function:
+
+```typescript
+// Helper function (already implemented in session.ts and storage-provider.ts)
+function rowsToObjects(columns: string[], rows: any[][]): Record<string, any>[] {
+  return rows.map(row => {
+    const obj: Record<string, any> = {};
+    columns.forEach((column, index) => {
+      obj[column] = row[index];
+    });
+    return obj;
+  });
+}
+
+// Usage
+const result = await sqlite.execute({ sql: "SELECT * FROM users", args: [] });
+const objects = rowsToObjects(result.columns, result.rows);
+```
 
 ### Val Town Triggers
 
@@ -271,6 +308,33 @@ The system deploys as a single unified HTTP function on Val Town:
 - Let errors bubble up with full context rather than catching and logging
 - Use comprehensive error tracking in processing logs
 - Include timeout handling for WebSocket connections
+
+### Troubleshooting Common Issues
+
+#### SQLite Module Errors
+
+If you encounter `Module not found` errors with SQLite:
+
+1. **Check import path**: Must use `https://esm.town/v/std/sqlite2` (not `sqlite`)
+2. **Update API calls**: Use object format `{ sql: "...", args: [...] }`
+3. **Row format**: Results are arrays, use `rowsToObjects()` helper for objects
+4. **Force refresh**: Add comment to trigger redeployment if cached
+
+```typescript
+// Common error patterns and fixes:
+
+// ❌ WRONG - old import path
+import { sqlite } from "https://esm.town/v/std/sqlite";
+
+// ✅ CORRECT - new import path  
+import { sqlite } from "https://esm.town/v/std/sqlite2";
+
+// ❌ WRONG - old API format
+await sqlite.execute("SELECT * FROM users WHERE id = ?", [id]);
+
+// ✅ CORRECT - new API format
+await sqlite.execute({ sql: "SELECT * FROM users WHERE id = ?", args: [id] });
+```
 
 ## Important Implementation Details
 

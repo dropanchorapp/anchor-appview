@@ -8,7 +8,7 @@ export default async function () {
 
   try {
     // Initialize profile resolver with database connection
-    const { sqlite } = await import("https://esm.town/v/stevekrouse/sqlite");
+    const { sqlite } = await import("https://esm.town/v/std/sqlite2");
     const storage = new SqliteStorageProvider(sqlite);
     const resolver = new ATProtocolProfileResolver(storage);
 

@@ -268,8 +268,9 @@ deno test --allow-all tests/integration/ # Integration tests only
 ### Val Town Best Practices
 
 - Use TypeScript for all functions
-- Import SQLite:
-  `import { sqlite } from "https://esm.town/v/stevekrouse/sqlite"`
+- **Import SQLite**: `import { sqlite } from "https://esm.town/v/std/sqlite2"`
+  - ⚠️ **IMPORTANT**: Always use `sqlite2`, not `sqlite` (deprecated)
+  - Use object format: `await sqlite.execute({ sql: "...", args: [...] })`
 - Import blob storage: `import { blob } from "https://esm.town/v/std/blob"`
 - Use `https://esm.sh` for external dependencies
 - Never hardcode secrets - use `Deno.env.get('keyname')`

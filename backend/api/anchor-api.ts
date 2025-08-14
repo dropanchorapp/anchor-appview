@@ -435,13 +435,19 @@ async function getNearbyPlaces(
         categories,
       );
 
+    // Map backend PlaceWithDistance to API format (distanceMeters -> distance)
+    const apiPlaces = placesWithDistance.map((place) => ({
+      ...place,
+      distance: place.distanceMeters, // Map distanceMeters to distance for mobile client
+      // Remove distanceMeters to avoid confusion
+      distanceMeters: undefined,
+    }));
+
     // Format response
     const response: PlacesNearbyResponse = {
-      places: placesWithDistance,
-      totalCount: placesWithDistance.length,
-      searchRadius: radius,
-      categories: categories.length > 0 ? categories : undefined,
-      searchCoordinate: {
+      places: apiPlaces,
+      radius: radius, // Changed from searchRadius to radius for mobile client
+      center: {
         latitude: lat,
         longitude: lng,
       },

@@ -1,6 +1,20 @@
 // Storage provider interface for profile data
 // Enables dependency injection and easy testing
 
+// Helper function to convert sqlite result rows to objects
+function rowsToObjects(
+  columns: string[],
+  rows: any[][],
+): Record<string, any>[] {
+  return rows.map((row) => {
+    const obj: Record<string, any> = {};
+    columns.forEach((column, index) => {
+      obj[column] = row[index];
+    });
+    return obj;
+  });
+}
+
 export interface ProfileData {
   did: string;
   handle: string;
@@ -119,13 +133,14 @@ export class SqliteStorageProvider implements StorageProvider {
   }
 
   async getProfile(did: string): Promise<ProfileData | null> {
-    const result = await this.sqlite.execute(
-      "SELECT * FROM profile_cache WHERE did = ?",
-      [did],
-    );
+    const result = await this.sqlite.execute({
+      sql: "SELECT * FROM profile_cache WHERE did = ?",
+      args: [did],
+    });
 
     if (result.rows && result.rows.length > 0) {
-      const row = result.rows[0];
+      const objects = rowsToObjects(result.columns, result.rows);
+      const row = objects[0];
       return {
         did: row.did as string,
         handle: row.handle as string,
@@ -141,11 +156,11 @@ export class SqliteStorageProvider implements StorageProvider {
   }
 
   async setProfile(profile: ProfileData): Promise<void> {
-    await this.sqlite.execute(
-      `INSERT OR REPLACE INTO profile_cache 
+    await this.sqlite.execute({
+      sql: `INSERT OR REPLACE INTO profile_cache 
        (did, handle, display_name, avatar_url, description, indexed_at, updated_at)
        VALUES (?, ?, ?, ?, ?, ?, ?)`,
-      [
+      args: [
         profile.did,
         profile.handle,
         profile.displayName || null,
@@ -154,7 +169,7 @@ export class SqliteStorageProvider implements StorageProvider {
         profile.fetchedAt,
         profile.updatedAt || profile.fetchedAt,
       ],
-    );
+    });
   }
 
   async getStaleProfiles(
@@ -164,15 +179,16 @@ export class SqliteStorageProvider implements StorageProvider {
     const staleThreshold = new Date();
     staleThreshold.setHours(staleThreshold.getHours() - staleThresholdHours);
 
-    const result = await this.sqlite.execute(
-      `SELECT * FROM profile_cache 
+    const result = await this.sqlite.execute({
+      sql: `SELECT * FROM profile_cache 
        WHERE indexed_at < ? 
        ORDER BY indexed_at ASC 
        LIMIT ?`,
-      [staleThreshold.toISOString(), limit],
-    );
+      args: [staleThreshold.toISOString(), limit],
+    });
 
-    return (result.rows || []).map((row: any) => ({
+    const objects = rowsToObjects(result.columns, result.rows || []);
+    return objects.map((row: any) => ({
       did: row.did as string,
       handle: row.handle as string,
       displayName: row.display_name as string | undefined,
@@ -184,8 +200,8 @@ export class SqliteStorageProvider implements StorageProvider {
   }
 
   async ensureTablesExist(): Promise<void> {
-    await this.sqlite.execute(`
-      CREATE TABLE IF NOT EXISTS profile_cache (
+    await this.sqlite.execute({
+      sql: `CREATE TABLE IF NOT EXISTS profile_cache (
         did TEXT PRIMARY KEY,
         handle TEXT,
         display_name TEXT,
@@ -196,15 +212,20 @@ export class SqliteStorageProvider implements StorageProvider {
         posts_count INTEGER DEFAULT 0,
         indexed_at TEXT DEFAULT CURRENT_TIMESTAMP,
         updated_at TEXT DEFAULT CURRENT_TIMESTAMP
-      )
-    `);
+      )`,
+      args: [],
+    });
 
-    await this.sqlite.execute(
-      `CREATE INDEX IF NOT EXISTS idx_profiles_updated ON profile_cache(updated_at)`,
-    );
-    await this.sqlite.execute(
-      `CREATE INDEX IF NOT EXISTS idx_profiles_indexed ON profile_cache(indexed_at)`,
-    );
+    await this.sqlite.execute({
+      sql:
+        `CREATE INDEX IF NOT EXISTS idx_profiles_updated ON profile_cache(updated_at)`,
+      args: [],
+    });
+    await this.sqlite.execute({
+      sql:
+        `CREATE INDEX IF NOT EXISTS idx_profiles_indexed ON profile_cache(indexed_at)`,
+      args: [],
+    });
   }
 }
 

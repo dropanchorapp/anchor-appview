@@ -130,7 +130,8 @@ app.post("/api/admin/backfill-profiles", async (c) => {
     const { SqliteStorageProvider } = await import(
       "./backend/utils/storage-provider.ts"
     );
-    const { sqlite } = await import("https://esm.town/v/stevekrouse/sqlite");
+    // Force refresh - using sqlite2
+    const { sqlite } = await import("https://esm.town/v/std/sqlite2");
 
     const storage = new SqliteStorageProvider(sqlite);
 

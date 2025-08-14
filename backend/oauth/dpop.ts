@@ -467,21 +467,18 @@ export async function refreshOAuthToken(
     };
 
     // Store updated session in database
-    const { sqlite } = await import("https://esm.town/v/stevekrouse/sqlite");
+    const { sqlite } = await import("https://esm.town/v/std/sqlite2");
     const now = Date.now();
-    await sqlite.execute(
-      `
-      UPDATE oauth_sessions
-      SET access_token = ?, refresh_token = ?, updated_at = ?
-      WHERE did = ?
-    `,
-      [
+    await sqlite.execute({
+      sql:
+        `UPDATE oauth_sessions SET access_token = ?, refresh_token = ?, updated_at = ? WHERE did = ?`,
+      args: [
         updatedSession.accessToken,
         updatedSession.refreshToken,
         now,
         session.did,
       ],
-    );
+    });
 
     console.log(`Updated session in database for ${session.handle}`);
 

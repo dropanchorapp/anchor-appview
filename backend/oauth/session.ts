@@ -1,35 +1,53 @@
 // OAuth session management utilities
-import { sqlite } from "https://esm.town/v/stevekrouse/sqlite";
+import { sqlite } from "https://esm.town/v/std/sqlite2";
 import type { OAuthSession } from "./types.ts";
+
+// Helper function to convert sqlite result rows to objects
+function rowsToObjects(
+  columns: string[],
+  rows: any[][],
+): Record<string, any>[] {
+  return rows.map((row) => {
+    const obj: Record<string, any> = {};
+    columns.forEach((column, index) => {
+      obj[column] = row[index];
+    });
+    return obj;
+  });
+}
 
 // Initialize OAuth tables
 export async function initializeOAuthTables() {
-  await sqlite.execute(`
-    CREATE TABLE IF NOT EXISTS oauth_sessions (
+  await sqlite.execute({
+    sql: `CREATE TABLE IF NOT EXISTS oauth_sessions (
       did TEXT PRIMARY KEY,
       handle TEXT NOT NULL,
       pds_url TEXT NOT NULL,
       access_token TEXT NOT NULL,
       refresh_token TEXT NOT NULL,
-      dpop_private_key TEXT NOT NULL,  -- JWK format
-      dpop_public_key TEXT NOT NULL,   -- JWK format
-      session_id TEXT UNIQUE,          -- Session cookie ID
-      display_name TEXT,               -- User's display name
-      avatar_url TEXT,                 -- User's avatar URL
+      dpop_private_key TEXT NOT NULL,
+      dpop_public_key TEXT NOT NULL,
+      session_id TEXT UNIQUE,
+      display_name TEXT,
+      avatar_url TEXT,
       created_at INTEGER NOT NULL,
       updated_at INTEGER NOT NULL
-    )
-  `);
+    )`,
+    args: [],
+  });
 
-  await sqlite.execute(`
-    CREATE INDEX IF NOT EXISTS idx_oauth_sessions_updated ON oauth_sessions(updated_at DESC)
-  `);
+  await sqlite.execute({
+    sql:
+      `CREATE INDEX IF NOT EXISTS idx_oauth_sessions_updated ON oauth_sessions(updated_at DESC)`,
+    args: [],
+  });
 
   // Add session_id column if it doesn't exist (migration)
   try {
-    await sqlite.execute(`
-      ALTER TABLE oauth_sessions ADD COLUMN session_id TEXT
-    `);
+    await sqlite.execute({
+      sql: `ALTER TABLE oauth_sessions ADD COLUMN session_id TEXT`,
+      args: [],
+    });
     console.log("Added session_id column to oauth_sessions table");
   } catch (error) {
     // Column probably already exists, ignore the error
@@ -46,9 +64,10 @@ export async function initializeOAuthTables() {
 
   // Add profile columns if they don't exist (migration)
   try {
-    await sqlite.execute(`
-      ALTER TABLE oauth_sessions ADD COLUMN display_name TEXT
-    `);
+    await sqlite.execute({
+      sql: `ALTER TABLE oauth_sessions ADD COLUMN display_name TEXT`,
+      args: [],
+    });
     console.log("Added display_name column to oauth_sessions table");
   } catch (error) {
     const errorMsg = error.message || String(error);
@@ -61,9 +80,10 @@ export async function initializeOAuthTables() {
   }
 
   try {
-    await sqlite.execute(`
-      ALTER TABLE oauth_sessions ADD COLUMN avatar_url TEXT
-    `);
+    await sqlite.execute({
+      sql: `ALTER TABLE oauth_sessions ADD COLUMN avatar_url TEXT`,
+      args: [],
+    });
     console.log("Added avatar_url column to oauth_sessions table");
   } catch (error) {
     const errorMsg = error.message || String(error);
@@ -96,13 +116,11 @@ export async function initializeOAuthTables() {
 // Store OAuth session in database
 export async function storeOAuthSession(session: OAuthSession): Promise<void> {
   const now = Date.now();
-  await sqlite.execute(
-    `
-    INSERT OR REPLACE INTO oauth_sessions 
+  await sqlite.execute({
+    sql: `INSERT OR REPLACE INTO oauth_sessions 
     (did, handle, pds_url, access_token, refresh_token, dpop_private_key, dpop_public_key, created_at, updated_at)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-  `,
-    [
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    args: [
       session.did,
       session.handle,
       session.pdsUrl,
@@ -113,25 +131,24 @@ export async function storeOAuthSession(session: OAuthSession): Promise<void> {
       now,
       now,
     ],
-  );
+  });
 }
 
 // Get stored OAuth session by DID
 export async function getStoredSession(
   did: string,
 ): Promise<OAuthSession | null> {
-  const result = await sqlite.execute(
-    `
-    SELECT * FROM oauth_sessions WHERE did = ?
-  `,
-    [did],
-  );
+  const result = await sqlite.execute({
+    sql: `SELECT * FROM oauth_sessions WHERE did = ?`,
+    args: [did],
+  });
 
   if (!result.rows || result.rows.length === 0) {
     return null;
   }
 
-  const row = result.rows[0];
+  const objects = rowsToObjects(result.columns, result.rows);
+  const row = objects[0];
   return {
     did: row.did as string,
     handle: row.handle as string,
@@ -147,18 +164,17 @@ export async function getStoredSession(
 export async function getSessionBySessionId(
   sessionId: string,
 ): Promise<OAuthSession | null> {
-  const result = await sqlite.execute(
-    `
-    SELECT * FROM oauth_sessions WHERE session_id = ?
-  `,
-    [sessionId],
-  );
+  const result = await sqlite.execute({
+    sql: `SELECT * FROM oauth_sessions WHERE session_id = ?`,
+    args: [sessionId],
+  });
 
   if (!result.rows || result.rows.length === 0) {
     return null;
   }
 
-  const row = result.rows[0];
+  const objects = rowsToObjects(result.columns, result.rows);
+  const row = objects[0];
   return {
     did: row.did as string,
     handle: row.handle as string,
@@ -177,50 +193,43 @@ export async function updateSessionTokens(
   refreshToken: string,
 ): Promise<void> {
   const now = Date.now();
-  await sqlite.execute(
-    `
-    UPDATE oauth_sessions
-    SET access_token = ?, refresh_token = ?, updated_at = ?
-    WHERE did = ?
-  `,
-    [accessToken, refreshToken, now, did],
-  );
+  await sqlite.execute({
+    sql:
+      `UPDATE oauth_sessions SET access_token = ?, refresh_token = ?, updated_at = ? WHERE did = ?`,
+    args: [accessToken, refreshToken, now, did],
+  });
 }
 
 // Touch session to update the updated_at timestamp (keeps session alive)
 export async function touchSession(did: string): Promise<void> {
   const now = Date.now();
-  await sqlite.execute(
-    `
-    UPDATE oauth_sessions
-    SET updated_at = ?
-    WHERE did = ?
-  `,
-    [now, did],
-  );
+  await sqlite.execute({
+    sql: `UPDATE oauth_sessions SET updated_at = ? WHERE did = ?`,
+    args: [now, did],
+  });
 }
 
 // Delete OAuth session
 export async function deleteOAuthSession(did: string): Promise<void> {
-  await sqlite.execute(
-    `
-    DELETE FROM oauth_sessions WHERE did = ?
-  `,
-    [did],
-  );
+  await sqlite.execute({
+    sql: `DELETE FROM oauth_sessions WHERE did = ?`,
+    args: [did],
+  });
 }
 
 // Get all active sessions (for cleanup)
 export async function getActiveSessions(): Promise<OAuthSession[]> {
-  const result = await sqlite.execute(`
-    SELECT * FROM oauth_sessions ORDER BY updated_at DESC
-  `);
+  const result = await sqlite.execute({
+    sql: `SELECT * FROM oauth_sessions ORDER BY updated_at DESC`,
+    args: [],
+  });
 
   if (!result.rows) {
     return [];
   }
 
-  return result.rows.map((row) => ({
+  const objects = rowsToObjects(result.columns, result.rows);
+  return objects.map((row) => ({
     did: row.did as string,
     handle: row.handle as string,
     pdsUrl: row.pds_url as string,
@@ -234,12 +243,10 @@ export async function getActiveSessions(): Promise<OAuthSession[]> {
 // Clean up expired sessions (older than 90 days - extended for mobile apps)
 export async function cleanupExpiredSessions(): Promise<number> {
   const ninetyDaysAgo = Date.now() - (90 * 24 * 60 * 60 * 1000);
-  const result = await sqlite.execute(
-    `
-    DELETE FROM oauth_sessions WHERE updated_at < ?
-  `,
-    [ninetyDaysAgo],
-  );
+  const result = await sqlite.execute({
+    sql: `DELETE FROM oauth_sessions WHERE updated_at < ?`,
+    args: [ninetyDaysAgo],
+  });
 
-  return (result as any).changes || 0;
+  return result.rowsAffected || 0;
 }

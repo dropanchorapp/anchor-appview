@@ -88,10 +88,8 @@ export interface OverpassElement {
 // API response format
 export interface PlacesNearbyResponse {
   places: PlaceWithDistance[];
-  totalCount: number;
-  searchRadius: number;
-  categories?: string[];
-  searchCoordinate: {
+  radius: number;
+  center: {
     latitude: number;
     longitude: number;
   };

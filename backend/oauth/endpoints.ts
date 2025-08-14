@@ -1,6 +1,6 @@
 // OAuth endpoints implementation for ATProto authentication
 import { exportJWK, generateKeyPair } from "https://esm.sh/jose@5.2.0";
-import { sqlite } from "https://esm.town/v/stevekrouse/sqlite";
+import { sqlite } from "https://esm.town/v/std/sqlite2";
 import { generateDPoPProofWithKeys, generatePKCE } from "./dpop.ts";
 import { initializeOAuthTables, storeOAuthSession } from "./session.ts";
 import { OAUTH_CONFIG } from "./config.ts";
@@ -461,15 +461,16 @@ export async function handleOAuthCallback(request: Request): Promise<Response> {
     const sessionId = crypto.randomUUID();
 
     // Store session ID and profile info in database for this user
-    await sqlite.execute(
-      `UPDATE oauth_sessions SET session_id = ?, display_name = ?, avatar_url = ? WHERE did = ?`,
-      [
+    await sqlite.execute({
+      sql:
+        `UPDATE oauth_sessions SET session_id = ?, display_name = ?, avatar_url = ? WHERE did = ?`,
+      args: [
         sessionId,
         userProfile?.displayName || null,
         userProfile?.avatar || null,
         did,
       ],
-    );
+    });
 
     // Use stored mobile app flag from OAuth state
     const isMobileApp = stateData.isMobileApp || false;

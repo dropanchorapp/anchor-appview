@@ -316,14 +316,25 @@ export async function runMigrations() {
 
   try {
     // Create migrations table
-    await rawDb.execute(MIGRATIONS_TABLE);
+    await rawDb.execute({
+      sql: MIGRATIONS_TABLE,
+      args: [],
+    });
 
     // Get already executed migrations
-    const executed = await rawDb.execute(
-      "SELECT version FROM migrations ORDER BY id",
-    );
+    const executed = await rawDb.execute({
+      sql: "SELECT version FROM migrations ORDER BY id",
+      args: [],
+    });
+
+    // Convert rows array to objects
+    const executedObjects = executed.rows
+      ? executed.rows.map((row: any[]) => ({
+        version: row[0], // assuming version is the first column
+      }))
+      : [];
     const executedVersions = new Set(
-      executed.rows?.map((row) => (row as any).version) || [],
+      executedObjects.map((row) => row.version) || [],
     );
 
     // Run pending migrations
@@ -342,7 +353,10 @@ export async function runMigrations() {
         // Execute each statement
         for (const statement of statements) {
           try {
-            await rawDb.execute(statement);
+            await rawDb.execute({
+              sql: statement,
+              args: [],
+            });
           } catch (error) {
             console.warn(
               `⚠️  Statement warning (likely table exists): ${error.message}`,
@@ -351,10 +365,10 @@ export async function runMigrations() {
         }
 
         // Record migration as executed
-        await rawDb.execute(
-          "INSERT INTO migrations (version, description) VALUES (?, ?)",
-          [migration.version, migration.description],
-        );
+        await rawDb.execute({
+          sql: "INSERT INTO migrations (version, description) VALUES (?, ?)",
+          args: [migration.version, migration.description],
+        });
 
         console.log(`✅ Completed migration: ${migration.version}`);
       }
@@ -369,10 +383,15 @@ export async function runMigrations() {
 
 export async function getMigrationStatus() {
   try {
-    await rawDb.execute(MIGRATIONS_TABLE);
-    const result = await rawDb.execute(
-      "SELECT version, description, executed_at FROM migrations ORDER BY id",
-    );
+    await rawDb.execute({
+      sql: MIGRATIONS_TABLE,
+      args: [],
+    });
+    const result = await rawDb.execute({
+      sql:
+        "SELECT version, description, executed_at FROM migrations ORDER BY id",
+      args: [],
+    });
     return result.rows || [];
   } catch (error) {
     console.error("Failed to get migration status:", error);
