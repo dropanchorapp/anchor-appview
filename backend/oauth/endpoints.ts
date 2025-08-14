@@ -21,6 +21,9 @@ export function handleClientMetadata(): Response {
     "application_type": "web",
     "token_endpoint_auth_method": "none",
     "dpop_bound_access_tokens": true,
+    // Optional but recommended fields
+    "tos_uri": `${OAUTH_CONFIG.BASE_URL}/terms`,
+    "policy_uri": `${OAUTH_CONFIG.BASE_URL}/privacy`,
   };
 
   return new Response(JSON.stringify(metadata, null, 2), {
@@ -422,10 +425,22 @@ export async function handleOAuthCallback(request: Request): Promise<Response> {
 
     const tokens = await tokenResponse.json();
 
+    // Log the actual token response for debugging
+    console.log("Token response from Bluesky:", {
+      expires_in: tokens.expires_in,
+      token_type: tokens.token_type,
+      scope: tokens.scope,
+    });
+
     // Export keys to JWK format for storage
     console.log("Exporting DPoP keys to JWK format...");
     const privateKeyJWK = JSON.stringify(await exportJWK(sessionPrivateKey));
     const publicKeyJWK = JSON.stringify(await exportJWK(sessionPublicKey));
+
+    // Calculate actual token expiration from Bluesky response
+    const tokenExpiresAt = tokens.expires_in
+      ? Date.now() + (tokens.expires_in * 1000)
+      : Date.now() + (2 * 60 * 60 * 1000); // 2 hours default
 
     // Store session data with DPoP keys
     const sessionData: OAuthSession = {
@@ -436,6 +451,7 @@ export async function handleOAuthCallback(request: Request): Promise<Response> {
       refreshToken: tokens.refresh_token,
       dpopPrivateKey: privateKeyJWK,
       dpopPublicKey: publicKeyJWK,
+      tokenExpiresAt,
     };
 
     // Store the session in SQLite
@@ -477,24 +493,10 @@ export async function handleOAuthCallback(request: Request): Promise<Response> {
     console.log(`📱 Using stored mobile app flag: ${isMobileApp}`);
 
     if (isMobileApp) {
-      // For mobile apps, redirect using custom URL scheme with auth data
+      // For mobile apps, use the session_id as a temporary authorization code
+      // The tokens are already stored in oauth_sessions table - client will exchange session_id for tokens
       const mobileRedirectUrl = new URL("anchor-app://auth-callback");
-      mobileRedirectUrl.searchParams.set("access_token", tokens.access_token);
-      mobileRedirectUrl.searchParams.set("refresh_token", tokens.refresh_token);
-      mobileRedirectUrl.searchParams.set("did", did);
-      mobileRedirectUrl.searchParams.set("handle", handle);
-      mobileRedirectUrl.searchParams.set("session_id", sessionId);
-      mobileRedirectUrl.searchParams.set("pds_url", pdsEndpoint);
-
-      if (userProfile?.avatar) {
-        mobileRedirectUrl.searchParams.set("avatar", userProfile.avatar);
-      }
-      if (userProfile?.displayName) {
-        mobileRedirectUrl.searchParams.set(
-          "display_name",
-          userProfile.displayName,
-        );
-      }
+      mobileRedirectUrl.searchParams.set("code", sessionId);
 
       // Return a success page that triggers the mobile redirect
       return new Response(
@@ -645,5 +647,88 @@ export async function handleOAuthCallback(request: Request): Promise<Response> {
         headers: { "Content-Type": "text/html" },
       },
     );
+  }
+}
+
+// Mobile token exchange endpoint - exchange authorization code for tokens
+export async function handleMobileTokenExchange(
+  request: Request,
+): Promise<Response> {
+  try {
+    const { code } = await request.json();
+
+    if (!code) {
+      return new Response(
+        JSON.stringify({ error: "Authorization code is required" }),
+        {
+          status: 400,
+          headers: { "Content-Type": "application/json" },
+        },
+      );
+    }
+
+    // Initialize OAuth tables
+    await initializeOAuthTables();
+
+    // Find session by session_id (which is the code we sent to mobile)
+    const result = await sqlite.execute({
+      sql:
+        `SELECT * FROM oauth_sessions WHERE session_id = ? AND updated_at > ?`,
+      args: [code, Date.now() - (10 * 60 * 1000)], // Code expires in 10 minutes
+    });
+
+    if (result.rows.length === 0) {
+      return new Response(
+        JSON.stringify({ error: "Invalid or expired authorization code" }),
+        {
+          status: 400,
+          headers: { "Content-Type": "application/json" },
+        },
+      );
+    }
+
+    const session = result.rows[0] as any;
+
+    // Use a reasonable token expiration - Bluesky tokens typically last 2-24 hours
+    // This will be properly handled by automatic refresh when tokens expire
+    const expiresInSeconds = 4 * 60 * 60; // 4 hours
+    const expiresAt = new Date(Date.now() + (expiresInSeconds * 1000));
+
+    // Return token data with proper expiration info
+    const tokenResponse = {
+      access_token: session.access_token,
+      refresh_token: session.refresh_token,
+      expires_in: expiresInSeconds, // Standard OAuth field - seconds until expiration
+      expires_at: expiresAt.toISOString(), // ISO timestamp for convenience
+      token_type: "Bearer",
+      scope: "atproto",
+      // User info
+      did: session.did,
+      handle: session.handle,
+      pds_url: session.pds_url,
+      session_id: session.session_id,
+      // Optional profile data
+      ...(session.display_name && { display_name: session.display_name }),
+      ...(session.avatar_url && { avatar: session.avatar_url }),
+    };
+
+    // Optional: Invalidate the session_id so it can't be reused
+    await sqlite.execute({
+      sql: `UPDATE oauth_sessions SET session_id = NULL WHERE session_id = ?`,
+      args: [code],
+    });
+
+    console.log(`🔄 Mobile token exchange successful for ${session.handle}`);
+
+    return new Response(JSON.stringify(tokenResponse), {
+      status: 200,
+      headers: { "Content-Type": "application/json" },
+    });
+  } catch (error) {
+    console.error("Mobile token exchange error:", error);
+    return new Response(JSON.stringify({ error: "Token exchange failed" }), {
+      status: 500,
+      headers: { "Content-Type": "application/json" },
+    });
   }
 }

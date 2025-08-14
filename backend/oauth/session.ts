@@ -81,6 +81,23 @@ export async function initializeOAuthTables() {
     }
   }
 
+  // Add token expiration column if it doesn't exist (migration)
+  try {
+    await sqlite.execute({
+      sql: `ALTER TABLE oauth_sessions ADD COLUMN token_expires_at INTEGER`,
+      args: [],
+    });
+    console.log("Added token_expires_at column to oauth_sessions table");
+  } catch (error) {
+    const errorMsg = error.message || String(error);
+    if (
+      !errorMsg.includes("duplicate column name") &&
+      !errorMsg.includes("already exists")
+    ) {
+      console.error("Error adding token_expires_at column:", errorMsg);
+    }
+  }
+
   // Check if session_id column exists before creating index
   try {
     // Test if the column exists by trying to query it

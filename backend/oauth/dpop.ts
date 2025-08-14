@@ -51,6 +51,7 @@ export async function generateDPoPProofWithJWK(
     htm: method,
     htu: url,
     iat: Math.floor(Date.now() / 1000),
+    exp: Math.floor(Date.now() / 1000) + (5 * 60), // Expires in 5 minutes (near future)
   };
 
   if (accessToken) {
@@ -99,6 +100,7 @@ export async function generateDPoPProofWithKeys(
     htm: method,
     htu: url,
     iat: Math.floor(Date.now() / 1000),
+    exp: Math.floor(Date.now() / 1000) + (5 * 60), // Expires in 5 minutes (near future)
   };
 
   // Add nonce if provided (for anti-replay)

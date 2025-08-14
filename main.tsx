@@ -11,6 +11,7 @@ import {
 import { getStoredSession as _getStoredSession } from "./backend/oauth/session.ts";
 import {
   handleClientMetadata,
+  handleMobileTokenExchange,
   handleOAuthCallback,
   handleOAuthStart,
 } from "./backend/oauth/endpoints.ts";
@@ -48,6 +49,208 @@ app.get("/oauth/callback", async (c) => {
     status: response.status,
     headers: Object.fromEntries(response.headers.entries()),
   });
+});
+
+// Mobile token exchange endpoint
+app.post("/api/auth/exchange", async (c) => {
+  const response = await handleMobileTokenExchange(c.req.raw);
+  return new Response(response.body, {
+    status: response.status,
+    headers: Object.fromEntries(response.headers.entries()),
+  });
+});
+
+// Terms of Service endpoint
+app.get("/terms", (_c) => {
+  return new Response(
+    `
+    <!DOCTYPE html>
+    <html lang="en">
+    <head>
+      <meta charset="UTF-8">
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <title>Terms of Service - Anchor</title>
+      <style>
+        body { 
+          font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+          max-width: 800px; margin: 0 auto; padding: 2rem; line-height: 1.6; 
+        }
+        h1 { color: #1a365d; }
+        .last-updated { color: #666; font-style: italic; }
+      </style>
+    </head>
+    <body>
+      <h1>Terms of Service</h1>
+      <p class="last-updated">Last updated: ${
+      new Date().toLocaleDateString()
+    }</p>
+      
+      <h2>1. Acceptance of Terms</h2>
+      <p>By using Anchor, you agree to these Terms of Service. Anchor is a location-based social app for the AT Protocol network.</p>
+      
+      <h2>2. Description of Service</h2>
+      <p>Anchor allows users to:</p>
+      <ul>
+        <li>Check in at locations and share with the AT Protocol network</li>
+        <li>View location-based posts from other users</li>
+        <li>Connect with the decentralized social web via Bluesky and AT Protocol</li>
+      </ul>
+      
+      <h2>3. User Responsibilities</h2>
+      <p>Users are responsible for:</p>
+      <ul>
+        <li>Providing accurate location information</li>
+        <li>Respecting others' privacy and safety</li>
+        <li>Complying with local laws regarding location sharing</li>
+        <li>Maintaining the security of their account credentials</li>
+      </ul>
+      
+      <h2>4. Privacy and Data</h2>
+      <p>Your location data and posts are stored on your chosen AT Protocol PDS (Personal Data Server). 
+         Anchor does not permanently store your personal data. See our <a href="/privacy">Privacy Policy</a> for details.</p>
+      
+      <h2>5. Content Policy</h2>
+      <p>Users must not post content that is illegal, harmful, or violates others' rights. 
+         Content moderation follows AT Protocol and your chosen PDS policies.</p>
+      
+      <h2>6. Service Availability</h2>
+      <p>Anchor is provided "as is" without warranties. We may modify or discontinue the service at any time.</p>
+      
+      <h2>7. Contact</h2>
+      <p>For questions about these terms, contact us through the AT Protocol network or via our project repository.</p>
+    </body>
+    </html>
+  `,
+    {
+      status: 200,
+      headers: { "Content-Type": "text/html; charset=utf-8" },
+    },
+  );
+});
+
+// Privacy Policy endpoint
+app.get("/privacy", (_c) => {
+  return new Response(
+    `
+    <!DOCTYPE html>
+    <html lang="en">
+    <head>
+      <meta charset="UTF-8">
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <title>Privacy Policy - Anchor</title>
+      <style>
+        body { 
+          font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+          max-width: 800px; margin: 0 auto; padding: 2rem; line-height: 1.6; 
+        }
+        h1 { color: #1a365d; }
+        .last-updated { color: #666; font-style: italic; }
+        .highlight { background: #e6f3ff; padding: 1rem; border-radius: 8px; margin: 1rem 0; }
+      </style>
+    </head>
+    <body>
+      <h1>Privacy Policy</h1>
+      <p class="last-updated">Last updated: ${
+      new Date().toLocaleDateString()
+    }</p>
+      
+      <div class="highlight">
+        <strong>Key Principle:</strong> Anchor is built on the AT Protocol, which means your data belongs to you 
+        and is stored on your chosen Personal Data Server (PDS), not on Anchor's servers.
+      </div>
+      
+      <h2>1. Information We Collect</h2>
+      <h3>Location Data</h3>
+      <p>When you check in at locations, we collect:</p>
+      <ul>
+        <li>GPS coordinates of your check-ins</li>
+        <li>Place names and addresses from OpenStreetMap</li>
+        <li>Your custom messages associated with check-ins</li>
+      </ul>
+      
+      <h3>Authentication Data</h3>
+      <p>For OAuth authentication with AT Protocol:</p>
+      <ul>
+        <li>Your AT Protocol handle and DID</li>
+        <li>Temporary OAuth tokens (refreshed automatically)</li>
+        <li>Your chosen PDS URL</li>
+      </ul>
+      
+      <h2>2. How We Use Your Information</h2>
+      <p>Your information is used to:</p>
+      <ul>
+        <li>Enable location-based check-ins</li>
+        <li>Display your posts on the AT Protocol network</li>
+        <li>Provide location-based feeds and discovery</li>
+        <li>Maintain your authentication session</li>
+      </ul>
+      
+      <h2>3. Data Storage and Control</h2>
+      <div class="highlight">
+        <h3>Your Data, Your Server</h3>
+        <p>All your check-ins and location data are stored as AT Protocol records on YOUR chosen PDS. 
+           Anchor does not permanently store your personal content.</p>
+      </div>
+      
+      <h3>What We Store Temporarily</h3>
+      <ul>
+        <li>OAuth session tokens (for authentication)</li>
+        <li>Cached feed data (for performance)</li>
+        <li>Anonymous usage statistics</li>
+      </ul>
+      
+      <h2>4. Data Sharing</h2>
+      <p>Your location check-ins are published to the AT Protocol network according to your PDS's settings. 
+         This means they may be visible to other AT Protocol applications and users, subject to your chosen visibility settings.</p>
+      
+      <h2>5. Third-Party Services</h2>
+      <p>Anchor integrates with:</p>
+      <ul>
+        <li><strong>OpenStreetMap:</strong> For place data and geocoding</li>
+        <li><strong>AT Protocol Network:</strong> For decentralized social features</li>
+        <li><strong>Your PDS:</strong> For storing your data</li>
+      </ul>
+      
+      <h2>6. Your Rights</h2>
+      <p>Because your data is stored on AT Protocol:</p>
+      <ul>
+        <li>You can export all your data at any time</li>
+        <li>You can delete your data by deleting it from your PDS</li>
+        <li>You can switch PDS providers and take your data with you</li>
+        <li>You control who can see your location data</li>
+      </ul>
+      
+      <h2>7. Security</h2>
+      <p>We protect your data using:</p>
+      <ul>
+        <li>OAuth 2.1 with PKCE for secure authentication</li>
+        <li>DPoP (Demonstration of Proof of Possession) for token security</li>
+        <li>HTTPS encryption for all communications</li>
+        <li>Secure credential storage in iOS Keychain</li>
+      </ul>
+      
+      <h2>8. Children's Privacy</h2>
+      <p>Anchor is not intended for users under 13. We do not knowingly collect personal information from children under 13.</p>
+      
+      <h2>9. Changes to This Policy</h2>
+      <p>We may update this privacy policy as needed. Changes will be posted at this URL with an updated date.</p>
+      
+      <h2>10. Contact Us</h2>
+      <p>For privacy questions, contact us through the AT Protocol network or via our project repository.</p>
+      
+      <div class="highlight">
+        <h3>AT Protocol Benefits</h3>
+        <p>By building on AT Protocol, Anchor ensures your location data remains under your control, 
+           portable between services, and not locked into any single platform.</p>
+      </div>
+    </body>
+    </html>
+  `,
+    {
+      status: 200,
+      headers: { "Content-Type": "text/html; charset=utf-8" },
+    },
+  );
 });
 
 // ========================================

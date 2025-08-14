@@ -8,6 +8,7 @@ export interface OAuthSession {
   refreshToken: string;
   dpopPrivateKey: string; // JWK format
   dpopPublicKey: string; // JWK format
+  tokenExpiresAt?: number; // Unix timestamp when tokens expire (from Bluesky)
 }
 
 export interface PKCEParams {
