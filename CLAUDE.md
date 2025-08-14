@@ -245,7 +245,8 @@ The system deploys as a single unified HTTP function on Val Town:
 - Use TypeScript for all Val Town functions
 - Never hardcode secrets - always use environment variables with
   `Deno.env.get('keyname')`
-- **Import SQLite using** `import { sqlite } from "https://esm.town/v/std/sqlite2"`
+- **Import SQLite using**
+  `import { sqlite } from "https://esm.town/v/std/sqlite2"`
   - ⚠️ **CRITICAL**: Use `sqlite2` not `sqlite` (the old path is deprecated)
   - Val Town updated their sqlite module - always use the `sqlite2` version
 - Import blob storage using `import { blob } from "https://esm.town/v/std/blob"`
@@ -277,12 +278,16 @@ await sqlite.execute("SELECT * FROM users WHERE id = ?", [userId]);
 
 #### Result Format Conversion
 
-The sqlite2 API returns `{ columns, rows }` where rows are arrays. Use helper function:
+The sqlite2 API returns `{ columns, rows }` where rows are arrays. Use helper
+function:
 
 ```typescript
 // Helper function (already implemented in session.ts and storage-provider.ts)
-function rowsToObjects(columns: string[], rows: any[][]): Record<string, any>[] {
-  return rows.map(row => {
+function rowsToObjects(
+  columns: string[],
+  rows: any[][],
+): Record<string, any>[] {
+  return rows.map((row) => {
     const obj: Record<string, any> = {};
     columns.forEach((column, index) => {
       obj[column] = row[index];
@@ -315,7 +320,8 @@ const objects = rowsToObjects(result.columns, result.rows);
 
 If you encounter `Module not found` errors with SQLite:
 
-1. **Check import path**: Must use `https://esm.town/v/std/sqlite2` (not `sqlite`)
+1. **Check import path**: Must use `https://esm.town/v/std/sqlite2` (not
+   `sqlite`)
 2. **Update API calls**: Use object format `{ sql: "...", args: [...] }`
 3. **Row format**: Results are arrays, use `rowsToObjects()` helper for objects
 4. **Force refresh**: Add comment to trigger redeployment if cached
@@ -326,7 +332,7 @@ If you encounter `Module not found` errors with SQLite:
 // ❌ WRONG - old import path
 import { sqlite } from "https://esm.town/v/std/sqlite";
 
-// ✅ CORRECT - new import path  
+// ✅ CORRECT - new import path
 import { sqlite } from "https://esm.town/v/std/sqlite2";
 
 // ❌ WRONG - old API format

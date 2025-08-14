@@ -2,6 +2,90 @@
 import type { Context } from "https://esm.sh/hono";
 import { makeDPoPRequest } from "../oauth/dpop.ts";
 import { getSessionBySessionId } from "../oauth/session.ts";
+import { OverpassService } from "../services/overpass-service.ts";
+import type { Place } from "../models/place-models.ts";
+
+// Global service instance for address enhancement
+const overpassService = new OverpassService();
+
+/**
+ * Get enhanced address record with proper validation and fallbacks
+ * Uses existing OverpassService logic to prevent name/locality duplication
+ */
+/**
+ * Convert API PlaceInput to proper Place object
+ */
+function sanitizePlaceInput(input: PlaceInput): Place {
+  const latitude = typeof input.latitude === "string"
+    ? parseFloat(input.latitude)
+    : input.latitude;
+  const longitude = typeof input.longitude === "string"
+    ? parseFloat(input.longitude)
+    : input.longitude;
+
+  // Create a proper Place object with required fields
+  return {
+    id: input.id || `unknown:${input.name}`,
+    elementType: input.elementType || "node",
+    elementId: input.elementId || 0,
+    name: input.name,
+    latitude,
+    longitude,
+    tags: input.tags,
+    address: input.address || {
+      $type: "community.lexicon.location.address",
+      name: input.name,
+      street: input.tags["addr:street"],
+      locality: input.tags["addr:city"] || input.tags["addr:locality"],
+      region: input.tags["addr:state"] || input.tags["addr:region"],
+      country: input.tags["addr:country"] || input.tags["addr:country_code"],
+      postalCode: input.tags["addr:postcode"],
+    },
+    category: input.category || input.tags["amenity"] || input.tags["shop"] ||
+      input.tags["leisure"] || input.tags["tourism"],
+    categoryGroup: input.categoryGroup,
+    icon: input.icon || "📍",
+  };
+}
+
+async function getEnhancedAddressRecord(
+  place: Place,
+): Promise<CommunityAddressRecord> {
+  // Use OverpassService to enhance the address directly
+  try {
+    console.log(`🔍 Enhancing address for place: ${place.name}`);
+    const enhancedAddress = await overpassService.getEnhancedAddress(place);
+
+    // Ensure no name/locality duplication
+    if (enhancedAddress.locality === place.name) {
+      enhancedAddress.locality = undefined;
+    }
+
+    return enhancedAddress;
+  } catch (error) {
+    console.warn(`Address enhancement failed for ${place.name}:`, error);
+
+    // Fallback to existing address if available, with validation
+    const baseAddress = place.address || {
+      $type: "community.lexicon.location.address" as const,
+      name: place.name,
+      street: place.tags["addr:street"],
+      locality: place.tags["addr:city"] || place.tags["addr:locality"],
+      region: place.tags["addr:state"] || place.tags["addr:region"],
+      country: place.tags["addr:country"] || place.tags["addr:country_code"],
+      postalCode: place.tags["addr:postcode"],
+    };
+
+    // Ensure no name/locality duplication in fallback
+    return {
+      ...baseAddress,
+      name: place.name,
+      locality: baseAddress.locality === place.name
+        ? undefined
+        : baseAddress.locality,
+    };
+  }
+}
 
 // AT Protocol record types
 interface CommunityAddressRecord {
@@ -35,15 +119,24 @@ interface GeoCoordinates {
   longitude: number;
 }
 
-interface Place {
+// API input format - coordinates might be strings
+interface PlaceInput {
   name: string;
-  latitude: number | string; // Allow strings for parsing
-  longitude: number | string; // Allow strings for parsing
+  latitude: number | string;
+  longitude: number | string;
   tags: Record<string, string>;
+  // Optional fields that might be missing from API input
+  id?: string;
+  elementType?: "node" | "way" | "relation";
+  elementId?: number;
+  address?: any;
+  category?: string;
+  categoryGroup?: any;
+  icon?: string;
 }
 
 interface CheckinRequest {
-  place: Place;
+  place: PlaceInput;
   message?: string;
 }
 
@@ -83,15 +176,12 @@ export async function createCheckin(c: Context): Promise<Response> {
       }, 400);
     }
 
-    const { place, message } = body;
+    const { message } = body;
 
-    // Validate coordinates are numbers and within valid bounds
-    const lat = typeof place.latitude === "number"
-      ? place.latitude
-      : parseFloat(String(place.latitude));
-    const lng = typeof place.longitude === "number"
-      ? place.longitude
-      : parseFloat(String(place.longitude));
+    // Convert API input to proper Place object and validate coordinates
+    const place = sanitizePlaceInput(body.place);
+    const lat = place.latitude;
+    const lng = place.longitude;
 
     if (
       typeof lat !== "number" || typeof lng !== "number" ||
@@ -122,17 +212,9 @@ export async function createCheckin(c: Context): Promise<Response> {
       }, 400);
     }
 
-    // Build address record from place data
-    const addressRecord: CommunityAddressRecord = {
-      $type: "community.lexicon.location.address",
-      name: place.name,
-      street: undefined, // OSM places don't always have structured street data
-      locality: place.tags?.["addr:city"] ?? place.tags?.["place"] ??
-        place.tags?.["name"],
-      region: place.tags?.["addr:state"] ?? place.tags?.["addr:region"],
-      country: place.tags?.["addr:country"],
-      postalCode: place.tags?.["addr:postcode"],
-    };
+    // Get enhanced address using existing OverpassService logic
+    // This prevents name/locality duplication and ensures proper country/region data
+    const addressRecord = await getEnhancedAddressRecord(place);
 
     // Build coordinates using validated values
     const coordinates: GeoCoordinates = {
@@ -140,10 +222,10 @@ export async function createCheckin(c: Context): Promise<Response> {
       longitude: lng,
     };
 
-    // Extract place category information
-    const category = extractCategory(place.tags);
-    const categoryGroup = extractCategoryGroup(place.tags);
-    const categoryIcon = extractCategoryIcon(place.tags);
+    // Use category information from the sanitized place object
+    const category = place.category;
+    const categoryGroup = place.categoryGroup;
+    const categoryIcon = place.icon;
 
     console.log(`🔰 Creating checkin for ${place.name} by ${session.handle}`);
 
@@ -257,150 +339,6 @@ export async function createCheckin(c: Context): Promise<Response> {
       success: false,
       error: "Internal server error",
     }, 500);
-  }
-}
-
-// Helper functions for category extraction (ported from AnchorKit)
-function extractCategory(
-  tags: Record<string, string> = {},
-): string | undefined {
-  return tags["amenity"] ?? tags["shop"] ?? tags["leisure"] ?? tags["tourism"];
-}
-
-function extractCategoryGroup(
-  tags: Record<string, string> = {},
-): string | undefined {
-  const amenityGroup = extractAmenityCategoryGroup(tags);
-  if (amenityGroup) return amenityGroup;
-
-  const shopGroup = extractShopCategoryGroup(tags);
-  if (shopGroup) return shopGroup;
-
-  const leisureGroup = extractLeisureCategoryGroup(tags);
-  if (leisureGroup) return leisureGroup;
-
-  return undefined;
-}
-
-function extractAmenityCategoryGroup(
-  tags: Record<string, string>,
-): string | undefined {
-  const amenity = tags["amenity"];
-  if (!amenity) return undefined;
-
-  switch (amenity) {
-    case "restaurant":
-    case "cafe":
-    case "bar":
-    case "pub":
-    case "fast_food":
-      return "Food & Drink";
-    case "climbing_gym":
-    case "fitness_centre":
-    case "gym":
-      return "Sports & Fitness";
-    case "hotel":
-    case "hostel":
-    case "guest_house":
-      return "Accommodation";
-    default:
-      return "Services";
-  }
-}
-
-function extractShopCategoryGroup(
-  tags: Record<string, string>,
-): string | undefined {
-  return tags["shop"] ? "Shopping" : undefined;
-}
-
-function extractLeisureCategoryGroup(
-  tags: Record<string, string>,
-): string | undefined {
-  const leisure = tags["leisure"];
-  if (!leisure) return undefined;
-
-  switch (leisure) {
-    case "climbing":
-    case "fitness_centre":
-    case "sports_centre":
-      return "Sports & Fitness";
-    case "park":
-    case "garden":
-      return "Outdoors";
-    default:
-      return "Recreation";
-  }
-}
-
-function extractCategoryIcon(
-  tags: Record<string, string> = {},
-): string | undefined {
-  const amenityIcon = extractAmenityCategoryIcon(tags);
-  if (amenityIcon) return amenityIcon;
-
-  const shopIcon = extractShopCategoryIcon(tags);
-  if (shopIcon) return shopIcon;
-
-  const leisureIcon = extractLeisureCategoryIcon(tags);
-  if (leisureIcon) return leisureIcon;
-
-  return undefined;
-}
-
-function extractAmenityCategoryIcon(
-  tags: Record<string, string>,
-): string | undefined {
-  const amenity = tags["amenity"];
-  if (!amenity) return undefined;
-
-  switch (amenity) {
-    case "restaurant":
-      return "🍽️";
-    case "cafe":
-      return "☕";
-    case "bar":
-    case "pub":
-      return "🍺";
-    case "fast_food":
-      return "🍔";
-    case "climbing_gym":
-      return "🧗‍♂️";
-    case "fitness_centre":
-    case "gym":
-      return "💪";
-    case "hotel":
-    case "hostel":
-    case "guest_house":
-      return "🏨";
-    default:
-      return undefined;
-  }
-}
-
-function extractShopCategoryIcon(
-  tags: Record<string, string>,
-): string | undefined {
-  return tags["shop"] ? "🏪" : undefined;
-}
-
-function extractLeisureCategoryIcon(
-  tags: Record<string, string>,
-): string | undefined {
-  const leisure = tags["leisure"];
-  if (!leisure) return undefined;
-
-  switch (leisure) {
-    case "climbing":
-      return "🧗‍♂️";
-    case "fitness_centre":
-    case "sports_centre":
-      return "💪";
-    case "park":
-    case "garden":
-      return "🌳";
-    default:
-      return "🎯";
   }
 }
 

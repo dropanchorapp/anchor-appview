@@ -327,14 +327,9 @@ export async function runMigrations() {
       args: [],
     });
 
-    // Convert rows array to objects
-    const executedObjects = executed.rows
-      ? executed.rows.map((row: any[]) => ({
-        version: row[0], // assuming version is the first column
-      }))
-      : [];
+    // Get executed versions from Row objects
     const executedVersions = new Set(
-      executedObjects.map((row) => row.version) || [],
+      executed.rows?.map((row) => row.version as string) || [],
     );
 
     // Run pending migrations

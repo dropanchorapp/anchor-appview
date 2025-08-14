@@ -2,20 +2,6 @@
 import { sqlite } from "https://esm.town/v/std/sqlite2";
 import type { OAuthSession } from "./types.ts";
 
-// Helper function to convert sqlite result rows to objects
-function rowsToObjects(
-  columns: string[],
-  rows: any[][],
-): Record<string, any>[] {
-  return rows.map((row) => {
-    const obj: Record<string, any> = {};
-    columns.forEach((column, index) => {
-      obj[column] = row[index];
-    });
-    return obj;
-  });
-}
-
 // Initialize OAuth tables
 export async function initializeOAuthTables() {
   await sqlite.execute({
@@ -147,8 +133,7 @@ export async function getStoredSession(
     return null;
   }
 
-  const objects = rowsToObjects(result.columns, result.rows);
-  const row = objects[0];
+  const row = result.rows[0];
   return {
     did: row.did as string,
     handle: row.handle as string,
@@ -173,8 +158,7 @@ export async function getSessionBySessionId(
     return null;
   }
 
-  const objects = rowsToObjects(result.columns, result.rows);
-  const row = objects[0];
+  const row = result.rows[0];
   return {
     did: row.did as string,
     handle: row.handle as string,
@@ -228,8 +212,7 @@ export async function getActiveSessions(): Promise<OAuthSession[]> {
     return [];
   }
 
-  const objects = rowsToObjects(result.columns, result.rows);
-  return objects.map((row) => ({
+  return result.rows.map((row) => ({
     did: row.did as string,
     handle: row.handle as string,
     pdsUrl: row.pds_url as string,

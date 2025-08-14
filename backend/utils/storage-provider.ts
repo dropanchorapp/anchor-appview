@@ -1,20 +1,6 @@
 // Storage provider interface for profile data
 // Enables dependency injection and easy testing
 
-// Helper function to convert sqlite result rows to objects
-function rowsToObjects(
-  columns: string[],
-  rows: any[][],
-): Record<string, any>[] {
-  return rows.map((row) => {
-    const obj: Record<string, any> = {};
-    columns.forEach((column, index) => {
-      obj[column] = row[index];
-    });
-    return obj;
-  });
-}
-
 export interface ProfileData {
   did: string;
   handle: string;
@@ -139,8 +125,7 @@ export class SqliteStorageProvider implements StorageProvider {
     });
 
     if (result.rows && result.rows.length > 0) {
-      const objects = rowsToObjects(result.columns, result.rows);
-      const row = objects[0];
+      const row = result.rows[0];
       return {
         did: row.did as string,
         handle: row.handle as string,
@@ -187,8 +172,7 @@ export class SqliteStorageProvider implements StorageProvider {
       args: [staleThreshold.toISOString(), limit],
     });
 
-    const objects = rowsToObjects(result.columns, result.rows || []);
-    return objects.map((row: any) => ({
+    return (result.rows || []).map((row) => ({
       did: row.did as string,
       handle: row.handle as string,
       displayName: row.display_name as string | undefined,
