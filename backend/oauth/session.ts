@@ -13,6 +13,7 @@ export async function initializeOAuthTables() {
       refresh_token TEXT NOT NULL,
       dpop_private_key TEXT NOT NULL,
       dpop_public_key TEXT NOT NULL,
+      token_expires_at INTEGER NOT NULL,
       session_id TEXT UNIQUE,
       display_name TEXT,
       avatar_url TEXT,
@@ -45,6 +46,27 @@ export async function initializeOAuthTables() {
       console.log("session_id column already exists");
     } else {
       console.error("Error adding session_id column:", errorMsg);
+    }
+  }
+
+  // Add token_expires_at column if it doesn't exist (migration)
+  try {
+    await sqlite.execute({
+      sql:
+        `ALTER TABLE oauth_sessions ADD COLUMN token_expires_at INTEGER DEFAULT 0`,
+      args: [],
+    });
+    console.log("Added token_expires_at column to oauth_sessions table");
+  } catch (error) {
+    // Column probably already exists, ignore the error
+    const errorMsg = error.message || String(error);
+    if (
+      errorMsg.includes("duplicate column name") ||
+      errorMsg.includes("already exists")
+    ) {
+      console.log("token_expires_at column already exists");
+    } else {
+      console.error("Error adding token_expires_at column:", errorMsg);
     }
   }
 
@@ -121,8 +143,8 @@ export async function storeOAuthSession(session: OAuthSession): Promise<void> {
   const now = Date.now();
   await sqlite.execute({
     sql: `INSERT OR REPLACE INTO oauth_sessions 
-    (did, handle, pds_url, access_token, refresh_token, dpop_private_key, dpop_public_key, created_at, updated_at)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    (did, handle, pds_url, access_token, refresh_token, dpop_private_key, dpop_public_key, token_expires_at, created_at, updated_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     args: [
       session.did,
       session.handle,
@@ -131,6 +153,7 @@ export async function storeOAuthSession(session: OAuthSession): Promise<void> {
       session.refreshToken,
       session.dpopPrivateKey,
       session.dpopPublicKey,
+      session.tokenExpiresAt,
       now,
       now,
     ],
@@ -159,6 +182,7 @@ export async function getStoredSession(
     refreshToken: row.refresh_token as string,
     dpopPrivateKey: row.dpop_private_key as string,
     dpopPublicKey: row.dpop_public_key as string,
+    tokenExpiresAt: (row.token_expires_at as number) || 0,
   };
 }
 
@@ -184,6 +208,7 @@ export async function getSessionBySessionId(
     refreshToken: row.refresh_token as string,
     dpopPrivateKey: row.dpop_private_key as string,
     dpopPublicKey: row.dpop_public_key as string,
+    tokenExpiresAt: (row.token_expires_at as number) || 0,
   };
 }
 
@@ -237,6 +262,7 @@ export async function getActiveSessions(): Promise<OAuthSession[]> {
     refreshToken: row.refresh_token as string,
     dpopPrivateKey: row.dpop_private_key as string,
     dpopPublicKey: row.dpop_public_key as string,
+    tokenExpiresAt: (row.token_expires_at as number) || 0,
   }));
 }
 

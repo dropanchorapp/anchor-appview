@@ -11,28 +11,8 @@ export const OAUTH_CONFIG = {
   ATPROTO_SERVICE: "https://bsky.social",
 };
 
-export interface OAuthSession {
-  did: string;
-  handle: string;
-  pdsUrl: string;
-  accessToken: string;
-  refreshToken: string;
-  dpopPrivateKey: string; // JWK format
-  dpopPublicKey: string; // JWK format
-}
-
 export interface PKCEParams {
   codeVerifier: string;
   codeChallenge: string;
   codeChallengeMethod: string;
-}
-
-export interface OAuthStateData {
-  codeVerifier: string;
-  handle: string;
-  did: string;
-  pdsEndpoint: string;
-  authorizationEndpoint: string;
-  tokenEndpoint: string;
-  timestamp: number;
 }

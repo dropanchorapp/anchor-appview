@@ -38,10 +38,27 @@ export function handleClientMetadata(): Response {
 // OAuth start endpoint - initiates OAuth flow
 export async function handleOAuthStart(request: Request): Promise<Response> {
   try {
-    const { handle } = await request.json();
+    const { handle: rawHandle } = await request.json();
+
+    if (!rawHandle) {
+      return new Response(JSON.stringify({ error: "Handle is required" }), {
+        status: 400,
+        headers: { "Content-Type": "application/json" },
+      });
+    }
+
+    // Normalize handle by removing invisible Unicode characters and trimming
+    const handle = rawHandle
+      .trim()
+      .replace(/[\u200E\u200F\u202A-\u202E\u2066-\u2069]/g, "") // Remove directional marks
+      .replace(/[\u00A0\u1680\u2000-\u200A\u202F\u205F\u3000]/g, " ") // Normalize spaces
+      .trim()
+      .toLowerCase();
+
+    console.log(`🔍 Normalized handle: "${rawHandle}" → "${handle}"`);
 
     if (!handle) {
-      return new Response(JSON.stringify({ error: "Handle is required" }), {
+      return new Response(JSON.stringify({ error: "Invalid handle format" }), {
         status: 400,
         headers: { "Content-Type": "application/json" },
       });
@@ -58,32 +75,49 @@ export async function handleOAuthStart(request: Request): Promise<Response> {
       `🔍 Mobile app detection - User-Agent: ${userAgent}, Referer: ${referer}, IsMobile: ${isMobileApp}`,
     );
 
-    // Resolve handle to DID
+    // Resolve handle to DID using proper AT Protocol directory services
     let did: string | null = null;
-    const handleParts = handle.split(".");
-    const potentialPDS = handleParts.length >= 2
-      ? `https://${handleParts.slice(-2).join(".")}`
-      : null;
 
-    // Try multiple resolution services
+    // Use proper AT Protocol services that support handle resolution
     const resolutionServices = [
-      potentialPDS,
-      OAUTH_CONFIG.ATPROTO_SERVICE,
-      "https://api.bsky.app",
-    ].filter(Boolean);
+      "https://api.bsky.app", // Bluesky's public API (most reliable)
+      OAUTH_CONFIG.ATPROTO_SERVICE, // Primary AT Protocol service (bsky.social)
+    ];
+
+    // For custom domain handles, also try the handle's domain as a PDS
+    if (handle.includes(".") && !handle.endsWith(".bsky.social")) {
+      const handleDomain = handle.split(".").slice(-2).join(".");
+      const customPdsUrl = `https://${handleDomain}`;
+      resolutionServices.push(customPdsUrl);
+      console.log(
+        `🔍 Added custom PDS to resolution services: ${customPdsUrl}`,
+      );
+    }
+
+    console.log(`🔍 Resolving handle "${handle}" to DID...`);
 
     for (const service of resolutionServices) {
       try {
-        const resolveResponse = await fetch(
-          `${service}/xrpc/com.atproto.identity.resolveHandle?handle=${handle}`,
-        );
+        const resolveURL =
+          `${service}/xrpc/com.atproto.identity.resolveHandle?handle=${handle}`;
+        console.log(`🔍 Trying handle resolution at: ${resolveURL}`);
+
+        const resolveResponse = await fetch(resolveURL);
 
         if (resolveResponse.ok) {
           const data = await resolveResponse.json();
           did = data.did;
+          console.log(
+            `✅ Successfully resolved "${handle}" → "${did}" via ${service}`,
+          );
           break;
+        } else {
+          console.log(
+            `❌ Handle resolution failed at ${service}: ${resolveResponse.status}`,
+          );
         }
-      } catch {
+      } catch (error) {
+        console.log(`❌ Handle resolution error at ${service}:`, error);
         // Try next service
       }
     }
@@ -99,8 +133,13 @@ export async function handleOAuthStart(request: Request): Promise<Response> {
     }
 
     // Get user's DID document to find PDS
-    const didDocResponse = await fetch(`${OAUTH_CONFIG.PLC_DIRECTORY}/${did}`);
+    console.log(`🔍 Fetching DID document for "${did}" from PLC directory...`);
+    const didDocURL = `${OAUTH_CONFIG.PLC_DIRECTORY}/${did}`;
+    console.log(`🔍 DID document URL: ${didDocURL}`);
+
+    const didDocResponse = await fetch(didDocURL);
     if (!didDocResponse.ok) {
+      console.log(`❌ Could not fetch DID document: ${didDocResponse.status}`);
       return new Response(JSON.stringify({ error: "Could not resolve DID" }), {
         status: 404,
         headers: { "Content-Type": "application/json" },
@@ -108,11 +147,20 @@ export async function handleOAuthStart(request: Request): Promise<Response> {
     }
 
     const didDoc = await didDocResponse.json();
+    console.log(
+      `📄 DID document services:`,
+      didDoc.service?.map((s: any) => ({
+        id: s.id,
+        endpoint: s.serviceEndpoint,
+      })),
+    );
+
     const pdsEndpoint = didDoc.service?.find((s: any) =>
       s.id === "#atproto_pds"
     )?.serviceEndpoint;
 
     if (!pdsEndpoint) {
+      console.log(`❌ No #atproto_pds service found in DID document`);
       return new Response(
         JSON.stringify({ error: "Could not find PDS endpoint" }),
         {
@@ -121,6 +169,8 @@ export async function handleOAuthStart(request: Request): Promise<Response> {
         },
       );
     }
+
+    console.log(`✅ Found PDS endpoint: "${pdsEndpoint}"`);
 
     // Discover OAuth protected resource metadata
     const resourceMetadataResponse = await fetch(
