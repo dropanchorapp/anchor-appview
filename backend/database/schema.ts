@@ -108,6 +108,9 @@ export const oauthSessionsTable = sqliteTable("oauth_sessions", {
   dpopPrivateKey: text("dpop_private_key").notNull(), // JWK format
   dpopPublicKey: text("dpop_public_key").notNull(), // JWK format
   sessionId: text("session_id").unique(), // Session cookie ID
+  tokenExpiresAt: integer("token_expires_at").default(0), // Added in migration 009
+  displayName: text("display_name"), // Added in migration 009
+  avatarUrl: text("avatar_url"), // Added in migration 009
   createdAt: integer("created_at").notNull(),
   updatedAt: integer("updated_at").notNull(),
 });

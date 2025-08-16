@@ -1,5 +1,5 @@
 // User and PDS tracking for privacy-focused crawling
-import { db, rawDb } from "./db.ts";
+import { db } from "./db.ts";
 import {
   anchorUsersTable,
   checkinsTable,
@@ -24,42 +24,10 @@ export interface UserPDS {
   createdAt: string;
 }
 
-// Initialize user tracking tables
-export async function initializeUserTables(): Promise<void> {
-  console.log("Initializing user tracking tables...");
-
-  // Create anchor_users table
-  await rawDb.execute(`
-    CREATE TABLE IF NOT EXISTS anchor_users (
-      did TEXT PRIMARY KEY,
-      handle TEXT NOT NULL,
-      pds_url TEXT NOT NULL,
-      registered_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-      last_crawled_at TIMESTAMP,
-      last_follower_crawl TIMESTAMP
-    )
-  `);
-
-  // Create user_pdses table for reference counting
-  await rawDb.execute(`
-    CREATE TABLE IF NOT EXISTS user_pdses (
-      pds_url TEXT PRIMARY KEY,
-      user_count INTEGER DEFAULT 1,
-      last_crawled_at TIMESTAMP,
-      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-    )
-  `);
-
-  // Create indexes for efficient querying
-  await rawDb.execute(`
-    CREATE INDEX IF NOT EXISTS idx_anchor_users_pds_url ON anchor_users(pds_url)
-  `);
-
-  await rawDb.execute(`
-    CREATE INDEX IF NOT EXISTS idx_anchor_users_last_crawled ON anchor_users(last_crawled_at)
-  `);
-
-  console.log("User tracking tables initialized");
+// User tracking table initialization is now handled by Drizzle migrations
+// This eliminates duplicate table creation and ensures schema consistency
+export function initializeUserTables(): void {
+  console.log("User tracking tables initialized (via Drizzle migrations)");
 }
 
 // Register a new user (called during OAuth)

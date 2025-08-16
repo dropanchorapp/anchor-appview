@@ -1,9 +1,9 @@
 // Checkin creation API endpoint for Anchor
 import type { Context } from "https://esm.sh/hono";
 import { makeDPoPRequest } from "../oauth/dpop.ts";
-import { getSessionBySessionId } from "../oauth/session.ts";
 import { OverpassService } from "../services/overpass-service.ts";
 import type { Place } from "../models/place-models.ts";
+import { authenticateRequest } from "../middleware/auth-middleware.ts";
 
 // Global service instance for address enhancement
 const overpassService = new OverpassService();
@@ -138,6 +138,7 @@ interface PlaceInput {
 interface CheckinRequest {
   place: PlaceInput;
   message?: string;
+  session_id?: string; // For mobile authentication
 }
 
 interface CheckinResponse {
@@ -150,21 +151,19 @@ interface CheckinResponse {
 // Create a checkin with address using StrongRef architecture
 export async function createCheckin(c: Context): Promise<Response> {
   try {
-    // Get session from cookie
-    const sessionCookie = c.req.header("Cookie")?.match(
-      /anchor_session=([^;]+)/,
-    )?.[1];
-    if (!sessionCookie) {
-      return c.json({ success: false, error: "Authentication required" }, 401);
-    }
-
-    const session = await getSessionBySessionId(sessionCookie);
-    if (!session) {
-      return c.json({ success: false, error: "Invalid session" }, 401);
-    }
-
     // Parse request body
     const body: CheckinRequest = await c.req.json();
+
+    // Authenticate using unified OAuth system (supports both cookies and Bearer headers)
+    const authResult = await authenticateRequest(c);
+    if (!authResult) {
+      return c.json({
+        success: false,
+        error: "Authentication required. Please log in.",
+      }, 401);
+    }
+
+    const { session } = authResult;
     if (
       !body.place || !body.place.name || !body.place.latitude ||
       !body.place.longitude

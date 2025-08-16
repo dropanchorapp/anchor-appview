@@ -8,6 +8,7 @@ import {
 import { count, desc, eq, sql } from "https://esm.sh/drizzle-orm";
 import { ATProtocolProfileResolver } from "../utils/profile-resolver.ts";
 import { SqliteStorageProvider } from "../utils/storage-provider.ts";
+import type { OAuthSession } from "../oauth/types.ts";
 
 // Profile queries
 export async function getProfileByDid(did: string) {
@@ -161,11 +162,27 @@ export async function getDashboardStats() {
 }
 
 // OAuth session queries
-export async function getSessionBySessionId(sessionId: string) {
+export async function getSessionBySessionId(
+  sessionId: string,
+): Promise<OAuthSession | null> {
   const result = await db.select().from(oauthSessionsTable)
     .where(eq(oauthSessionsTable.sessionId, sessionId))
     .limit(1);
-  return result[0] || null;
+
+  const row = result[0];
+  if (!row) return null;
+
+  // Map database row to OAuthSession type
+  return {
+    did: row.did,
+    handle: row.handle,
+    pdsUrl: row.pdsUrl,
+    accessToken: row.accessToken,
+    refreshToken: row.refreshToken,
+    dpopPrivateKey: row.dpopPrivateKey,
+    dpopPublicKey: row.dpopPublicKey,
+    tokenExpiresAt: row.tokenExpiresAt || 0,
+  };
 }
 
 export async function deleteOAuthSession(did: string) {

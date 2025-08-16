@@ -46,7 +46,7 @@ export function MobileAuth() {
     setLoading(true);
 
     try {
-      const response = await fetch("/api/auth/start", {
+      const response = await fetch("/api/auth/mobile-start", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",

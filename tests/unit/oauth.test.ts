@@ -24,8 +24,12 @@ Deno.test("OAuth - client metadata content", async () => {
   assertEquals(metadata.application_type, "web");
   assertEquals(metadata.dpop_bound_access_tokens, true);
   assertExists(metadata.redirect_uris);
-  assertEquals(metadata.redirect_uris.length, 1);
+  assertEquals(metadata.redirect_uris.length, 2);
   assertEquals(metadata.redirect_uris[0], OAUTH_CONFIG.REDIRECT_URI);
+  assertEquals(
+    metadata.redirect_uris[1],
+    `${OAUTH_CONFIG.BASE_URL}/oauth/mobile-callback`,
+  );
 });
 
 Deno.test("OAuth - PKCE generation", async () => {

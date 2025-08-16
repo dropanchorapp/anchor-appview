@@ -490,3 +490,75 @@ export async function refreshOAuthToken(
     return null;
   }
 }
+
+/**
+ * Performs OAuth token exchange with DPoP proof and automatic nonce retry
+ * @param tokenEndpoint - The OAuth token endpoint URL
+ * @param requestBody - The URLSearchParams body for the token request
+ * @param privateKey - DPoP private key
+ * @param publicKey - DPoP public key
+ * @param accessToken - Optional access token for DPoP proof binding
+ * @returns Promise<Response> - The token response
+ */
+export async function exchangeTokenWithDPoP(
+  tokenEndpoint: string,
+  requestBody: URLSearchParams,
+  privateKey: CryptoKey,
+  publicKey: CryptoKey,
+  accessToken?: string,
+): Promise<Response> {
+  // Generate initial DPoP proof
+  const { dpopProof } = await generateDPoPProofWithKeys(
+    "POST",
+    tokenEndpoint,
+    privateKey,
+    publicKey,
+    accessToken,
+  );
+
+  // First attempt
+  let tokenResponse = await fetch(tokenEndpoint, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/x-www-form-urlencoded",
+      "DPoP": dpopProof,
+    },
+    body: requestBody,
+  });
+
+  // Handle nonce requirement during token exchange
+  if (!tokenResponse.ok && tokenResponse.status === 400) {
+    try {
+      const errorData = await tokenResponse.json();
+      if (errorData.error === "use_dpop_nonce") {
+        const nonce = tokenResponse.headers.get("DPoP-Nonce");
+        if (nonce) {
+          console.log("🔄 Retrying token exchange with DPoP nonce:", nonce);
+
+          const { dpopProof: dpopProofWithNonce } =
+            await generateDPoPProofWithKeys(
+              "POST",
+              tokenEndpoint,
+              privateKey,
+              publicKey,
+              accessToken,
+              nonce,
+            );
+
+          tokenResponse = await fetch(tokenEndpoint, {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/x-www-form-urlencoded",
+              "DPoP": dpopProofWithNonce,
+            },
+            body: requestBody,
+          });
+        }
+      }
+    } catch (parseError) {
+      console.error("Failed to parse token exchange error:", parseError);
+    }
+  }
+
+  return tokenResponse;
+}

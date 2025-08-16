@@ -1,11 +1,132 @@
 // OAuth endpoints implementation for ATProto authentication
 import { exportJWK, generateKeyPair } from "https://esm.sh/jose@5.2.0";
 import { sqlite } from "https://esm.town/v/std/sqlite2";
-import { generateDPoPProofWithKeys, generatePKCE } from "./dpop.ts";
-import { initializeOAuthTables, storeOAuthSession } from "./session.ts";
+import { generatePKCE } from "./dpop.ts";
+import { storeOAuthSession } from "./session.ts";
 import { OAUTH_CONFIG } from "./config.ts";
 import { BlueskyProfileFetcher } from "../utils/profile-resolver.ts";
 import type { OAuthSession, OAuthStateData } from "./types.ts";
+
+// Shared OAuth utility functions
+async function normalizeAndResolveHandle(
+  rawHandle: string,
+): Promise<{ handle: string; did: string }> {
+  // Normalize handle by removing invisible Unicode characters and trimming
+  const handle = rawHandle
+    .replace(/[\u200B-\u200D\uFEFF]/g, "")
+    .replace(/[^\w.-]/g, "")
+    .trim()
+    .toLowerCase();
+
+  console.log(`🔄 Resolving handle: ${handle}`);
+
+  // Try multiple resolution methods for robustness
+  const resolutionMethods = [
+    `https://bsky.social/xrpc/com.atproto.identity.resolveHandle?handle=${handle}`,
+    `https://public.api.bsky.app/xrpc/com.atproto.identity.resolveHandle?handle=${handle}`,
+  ];
+
+  for (const url of resolutionMethods) {
+    try {
+      const response = await fetch(url);
+      if (response.ok) {
+        const data = await response.json();
+        const did = data.did;
+        console.log(`✅ Resolved ${handle} to ${did} via ${url}`);
+        return { handle, did };
+      }
+    } catch (error) {
+      console.warn(`Failed to resolve handle via ${url}:`, error);
+      continue;
+    }
+  }
+
+  throw new Error("Could not resolve handle to DID");
+}
+
+async function discoverOAuthEndpoints(
+  did: string,
+): Promise<
+  { pdsEndpoint: string; authorizationEndpoint: string; tokenEndpoint: string }
+> {
+  // Discover OAuth endpoints for this user's PDS
+  let pdsEndpoint: string;
+
+  try {
+    const pdsResponse = await fetch(
+      `https://plc.directory/${encodeURIComponent(did)}`,
+    );
+    if (!pdsResponse.ok) {
+      throw new Error(`PDS discovery failed: ${pdsResponse.status}`);
+    }
+    const pdsDoc = await pdsResponse.json();
+    pdsEndpoint = pdsDoc.service?.find((s: any) =>
+      s.type === "AtprotoPersonalDataServer"
+    )?.serviceEndpoint;
+
+    if (!pdsEndpoint) {
+      throw new Error("No PDS endpoint found in DID document");
+    }
+  } catch (error) {
+    console.error("PDS discovery failed:", error);
+    throw new Error("Failed to discover user's PDS");
+  }
+
+  // Step 1: Get PDS resource metadata to discover authorization server
+  let authorizationServerUrl: string;
+
+  try {
+    const resourceMetadataResponse = await fetch(
+      `${pdsEndpoint}/.well-known/oauth-protected-resource`,
+    );
+    if (!resourceMetadataResponse.ok) {
+      throw new Error(
+        `PDS resource metadata fetch failed: ${resourceMetadataResponse.status}`,
+      );
+    }
+    const resourceMetadata = await resourceMetadataResponse.json();
+    const authorizationServers = resourceMetadata.authorization_servers;
+
+    if (!authorizationServers || authorizationServers.length === 0) {
+      throw new Error("No authorization servers found in PDS metadata");
+    }
+
+    authorizationServerUrl = authorizationServers[0]; // Use first authorization server
+    console.log(`🔍 Found authorization server: ${authorizationServerUrl}`);
+  } catch (error) {
+    console.error("PDS resource metadata discovery failed:", error);
+    throw new Error("Failed to discover authorization server");
+  }
+
+  // Step 2: Get OAuth endpoints from the authorization server
+  let authorizationEndpoint: string;
+  let tokenEndpoint: string;
+
+  try {
+    const metadataResponse = await fetch(
+      `${authorizationServerUrl}/.well-known/oauth-authorization-server`,
+    );
+    if (!metadataResponse.ok) {
+      throw new Error(
+        `OAuth metadata fetch failed: ${metadataResponse.status}`,
+      );
+    }
+    const metadata = await metadataResponse.json();
+    authorizationEndpoint = metadata.authorization_endpoint;
+    tokenEndpoint = metadata.token_endpoint;
+
+    if (!authorizationEndpoint || !tokenEndpoint) {
+      throw new Error("Missing OAuth endpoints in metadata");
+    }
+
+    console.log(`✅ OAuth endpoints discovered from ${authorizationServerUrl}`);
+  } catch (error) {
+    console.error("OAuth metadata discovery failed:", error);
+    throw new Error("Failed to discover OAuth endpoints");
+  }
+
+  return { pdsEndpoint, authorizationEndpoint, tokenEndpoint };
+}
 
 // OAuth client metadata endpoint
 export function handleClientMetadata(): Response {
@@ -14,7 +135,10 @@ export function handleClientMetadata(): Response {
     "client_name": OAUTH_CONFIG.APP_NAME,
     "client_uri": OAUTH_CONFIG.BASE_URL,
     "logo_uri": `${OAUTH_CONFIG.BASE_URL}/favicon.ico`,
-    "redirect_uris": [OAUTH_CONFIG.REDIRECT_URI],
+    "redirect_uris": [
+      OAUTH_CONFIG.REDIRECT_URI,
+      `${OAUTH_CONFIG.BASE_URL}/oauth/mobile-callback`,
+    ],
     "scope": "atproto transition:generic",
     "grant_types": ["authorization_code", "refresh_token"],
     "response_types": ["code"],
@@ -35,7 +159,7 @@ export function handleClientMetadata(): Response {
   });
 }
 
-// OAuth start endpoint - initiates OAuth flow
+// Web OAuth start endpoint - initiates OAuth flow for web dashboard
 export async function handleOAuthStart(request: Request): Promise<Response> {
   try {
     const { handle: rawHandle } = await request.json();
@@ -64,172 +188,12 @@ export async function handleOAuthStart(request: Request): Promise<Response> {
       });
     }
 
-    // Detect mobile app context
-    const userAgent = request.headers.get("User-Agent") || "";
-    const referer = request.headers.get("Referer") || "";
-    const isMobileApp = userAgent.includes("AnchorApp") ||
-      referer.includes("/mobile-auth") ||
-      (userAgent.includes("iPhone") && userAgent.includes("Mobile"));
-
-    console.log(
-      `🔍 Mobile app detection - User-Agent: ${userAgent}, Referer: ${referer}, IsMobile: ${isMobileApp}`,
+    // Use shared OAuth utilities for web flow
+    const { handle: resolvedHandle, did } = await normalizeAndResolveHandle(
+      handle,
     );
-
-    // Resolve handle to DID using proper AT Protocol directory services
-    let did: string | null = null;
-
-    // Use proper AT Protocol services that support handle resolution
-    const resolutionServices = [
-      "https://api.bsky.app", // Bluesky's public API (most reliable)
-      OAUTH_CONFIG.ATPROTO_SERVICE, // Primary AT Protocol service (bsky.social)
-    ];
-
-    // For custom domain handles, also try the handle's domain as a PDS
-    if (handle.includes(".") && !handle.endsWith(".bsky.social")) {
-      const handleDomain = handle.split(".").slice(-2).join(".");
-      const customPdsUrl = `https://${handleDomain}`;
-      resolutionServices.push(customPdsUrl);
-      console.log(
-        `🔍 Added custom PDS to resolution services: ${customPdsUrl}`,
-      );
-    }
-
-    console.log(`🔍 Resolving handle "${handle}" to DID...`);
-
-    for (const service of resolutionServices) {
-      try {
-        const resolveURL =
-          `${service}/xrpc/com.atproto.identity.resolveHandle?handle=${handle}`;
-        console.log(`🔍 Trying handle resolution at: ${resolveURL}`);
-
-        const resolveResponse = await fetch(resolveURL);
-
-        if (resolveResponse.ok) {
-          const data = await resolveResponse.json();
-          did = data.did;
-          console.log(
-            `✅ Successfully resolved "${handle}" → "${did}" via ${service}`,
-          );
-          break;
-        } else {
-          console.log(
-            `❌ Handle resolution failed at ${service}: ${resolveResponse.status}`,
-          );
-        }
-      } catch (error) {
-        console.log(`❌ Handle resolution error at ${service}:`, error);
-        // Try next service
-      }
-    }
-
-    if (!did) {
-      return new Response(
-        JSON.stringify({ error: "Handle not found on any known service" }),
-        {
-          status: 404,
-          headers: { "Content-Type": "application/json" },
-        },
-      );
-    }
-
-    // Get user's DID document to find PDS
-    console.log(`🔍 Fetching DID document for "${did}" from PLC directory...`);
-    const didDocURL = `${OAUTH_CONFIG.PLC_DIRECTORY}/${did}`;
-    console.log(`🔍 DID document URL: ${didDocURL}`);
-
-    const didDocResponse = await fetch(didDocURL);
-    if (!didDocResponse.ok) {
-      console.log(`❌ Could not fetch DID document: ${didDocResponse.status}`);
-      return new Response(JSON.stringify({ error: "Could not resolve DID" }), {
-        status: 404,
-        headers: { "Content-Type": "application/json" },
-      });
-    }
-
-    const didDoc = await didDocResponse.json();
-    console.log(
-      `📄 DID document services:`,
-      didDoc.service?.map((s: any) => ({
-        id: s.id,
-        endpoint: s.serviceEndpoint,
-      })),
-    );
-
-    const pdsEndpoint = didDoc.service?.find((s: any) =>
-      s.id === "#atproto_pds"
-    )?.serviceEndpoint;
-
-    if (!pdsEndpoint) {
-      console.log(`❌ No #atproto_pds service found in DID document`);
-      return new Response(
-        JSON.stringify({ error: "Could not find PDS endpoint" }),
-        {
-          status: 404,
-          headers: { "Content-Type": "application/json" },
-        },
-      );
-    }
-
-    console.log(`✅ Found PDS endpoint: "${pdsEndpoint}"`);
-
-    // Discover OAuth protected resource metadata
-    const resourceMetadataResponse = await fetch(
-      `${pdsEndpoint}/.well-known/oauth-protected-resource`,
-    );
-
-    if (!resourceMetadataResponse.ok) {
-      return new Response(
-        JSON.stringify({ error: "PDS does not support OAuth" }),
-        {
-          status: 400,
-          headers: { "Content-Type": "application/json" },
-        },
-      );
-    }
-
-    const resourceMetadata = await resourceMetadataResponse.json();
-    const authServerUrl = resourceMetadata.authorization_servers?.[0];
-
-    if (!authServerUrl) {
-      return new Response(
-        JSON.stringify({ error: "No authorization server found" }),
-        {
-          status: 400,
-          headers: { "Content-Type": "application/json" },
-        },
-      );
-    }
-
-    // Discover OAuth authorization server metadata
-    const authServerMetadataResponse = await fetch(
-      `${authServerUrl}/.well-known/oauth-authorization-server`,
-    );
-
-    if (!authServerMetadataResponse.ok) {
-      return new Response(
-        JSON.stringify({
-          error: "Could not get authorization server metadata",
-        }),
-        {
-          status: 400,
-          headers: { "Content-Type": "application/json" },
-        },
-      );
-    }
-
-    const authServerMetadata = await authServerMetadataResponse.json();
-    const authorizationEndpoint = authServerMetadata.authorization_endpoint;
-    const tokenEndpoint = authServerMetadata.token_endpoint;
-
-    if (!authorizationEndpoint || !tokenEndpoint) {
-      return new Response(
-        JSON.stringify({ error: "Invalid authorization server metadata" }),
-        {
-          status: 400,
-          headers: { "Content-Type": "application/json" },
-        },
-      );
-    }
+    const { pdsEndpoint, authorizationEndpoint, tokenEndpoint } =
+      await discoverOAuthEndpoints(did);
 
     // Generate OAuth parameters
     const { codeVerifier, codeChallenge, codeChallengeMethod } =
@@ -238,13 +202,12 @@ export async function handleOAuthStart(request: Request): Promise<Response> {
     // Encode state data for serverless compatibility
     const stateData: OAuthStateData = {
       codeVerifier,
-      handle,
+      handle: resolvedHandle,
       did,
       pdsEndpoint,
       authorizationEndpoint,
       tokenEndpoint,
       timestamp: Date.now(),
-      isMobileApp,
     };
 
     const state = btoa(JSON.stringify(stateData));
@@ -258,7 +221,7 @@ export async function handleOAuthStart(request: Request): Promise<Response> {
     authUrl.searchParams.set("state", state);
     authUrl.searchParams.set("code_challenge", codeChallenge);
     authUrl.searchParams.set("code_challenge_method", codeChallengeMethod);
-    authUrl.searchParams.set("login_hint", handle); // Prefill the handle in OAuth form
+    authUrl.searchParams.set("login_hint", resolvedHandle); // Prefill the handle in OAuth form
 
     return new Response(JSON.stringify({ authUrl: authUrl.toString() }), {
       status: 200,
@@ -276,7 +239,84 @@ export async function handleOAuthStart(request: Request): Promise<Response> {
   }
 }
 
-// OAuth callback handler - completes token exchange
+// Mobile OAuth start endpoint - initiates OAuth flow for mobile apps
+export async function handleMobileOAuthStart(
+  request: Request,
+): Promise<Response> {
+  try {
+    const { handle: rawHandle } = await request.json();
+
+    if (!rawHandle) {
+      return new Response(JSON.stringify({ error: "Handle is required" }), {
+        status: 400,
+        headers: { "Content-Type": "application/json" },
+      });
+    }
+
+    console.log(`🔄 Starting mobile OAuth for handle: ${rawHandle}`);
+
+    // Use shared OAuth utilities
+    const { handle, did } = await normalizeAndResolveHandle(rawHandle);
+    const { pdsEndpoint, authorizationEndpoint, tokenEndpoint } =
+      await discoverOAuthEndpoints(did);
+
+    // Generate PKCE parameters
+    const { codeVerifier, codeChallenge, codeChallengeMethod } =
+      await generatePKCE();
+
+    // Encode state data for serverless compatibility
+    const stateData: OAuthStateData = {
+      codeVerifier,
+      handle,
+      did,
+      pdsEndpoint,
+      authorizationEndpoint,
+      tokenEndpoint,
+      timestamp: Date.now(),
+    };
+
+    const state = btoa(JSON.stringify(stateData));
+
+    // Build OAuth authorization URL with mobile callback
+    const authUrl = new URL(authorizationEndpoint);
+    authUrl.searchParams.set("response_type", "code");
+    authUrl.searchParams.set("client_id", OAUTH_CONFIG.CLIENT_ID);
+    authUrl.searchParams.set(
+      "redirect_uri",
+      `${OAUTH_CONFIG.BASE_URL}/oauth/mobile-callback`,
+    );
+    authUrl.searchParams.set("scope", "atproto transition:generic");
+    authUrl.searchParams.set("state", state);
+    authUrl.searchParams.set("code_challenge", codeChallenge);
+    authUrl.searchParams.set("code_challenge_method", codeChallengeMethod);
+    authUrl.searchParams.set("login_hint", handle);
+
+    console.log(`🔗 Mobile OAuth URL generated for ${handle}`);
+
+    return new Response(
+      JSON.stringify({
+        authUrl: authUrl.toString(),
+        handle,
+        did,
+      }),
+      {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      },
+    );
+  } catch (error) {
+    console.error("Mobile OAuth start error:", error);
+    return new Response(
+      JSON.stringify({ error: "Failed to start OAuth flow" }),
+      {
+        status: 500,
+        headers: { "Content-Type": "application/json" },
+      },
+    );
+  }
+}
+
+// Web OAuth callback handler - completes token exchange for web dashboard
 export async function handleOAuthCallback(request: Request): Promise<Response> {
   const url = new URL(request.url);
   const code = url.searchParams.get("code");
@@ -328,8 +368,7 @@ export async function handleOAuthCallback(request: Request): Promise<Response> {
   }
 
   try {
-    // Initialize OAuth tables
-    await initializeOAuthTables();
+    // OAuth tables are now initialized by Drizzle migrations
 
     // Decode state data
     let stateData: OAuthStateData;
@@ -393,56 +432,14 @@ export async function handleOAuthCallback(request: Request): Promise<Response> {
       code_verifier: codeVerifier,
     });
 
-    // First attempt - without nonce
-    const { dpopProof } = await generateDPoPProofWithKeys(
-      "POST",
+    // Exchange tokens using reusable DPoP function
+    const { exchangeTokenWithDPoP } = await import("./dpop.ts");
+    const tokenResponse = await exchangeTokenWithDPoP(
       tokenEndpoint,
+      requestBody,
       sessionPrivateKey as CryptoKey,
       sessionPublicKey as CryptoKey,
     );
-
-    let tokenResponse = await fetch(tokenEndpoint, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/x-www-form-urlencoded",
-        "DPoP": dpopProof,
-      },
-      body: requestBody,
-    });
-
-    // Handle nonce requirement during token exchange
-    if (!tokenResponse.ok && tokenResponse.status === 400) {
-      try {
-        const errorData = await tokenResponse.json();
-        if (errorData.error === "use_dpop_nonce") {
-          const nonce = tokenResponse.headers.get("DPoP-Nonce");
-          if (nonce) {
-            console.log("Retrying token exchange with DPoP nonce:", nonce);
-
-            const { dpopProof: dpopProofWithNonce } =
-              await generateDPoPProofWithKeys(
-                "POST",
-                tokenEndpoint,
-                sessionPrivateKey as CryptoKey,
-                sessionPublicKey as CryptoKey,
-                undefined,
-                nonce,
-              );
-
-            tokenResponse = await fetch(tokenEndpoint, {
-              method: "POST",
-              headers: {
-                "Content-Type": "application/x-www-form-urlencoded",
-                "DPoP": dpopProofWithNonce,
-              },
-              body: requestBody,
-            });
-          }
-        }
-      } catch {
-        // Continue to general error handling
-      }
-    }
 
     if (!tokenResponse.ok) {
       const errorText = await tokenResponse.text();
@@ -538,120 +535,7 @@ export async function handleOAuthCallback(request: Request): Promise<Response> {
       ],
     });
 
-    // Use stored mobile app flag from OAuth state
-    const isMobileApp = stateData.isMobileApp || false;
-    console.log(`📱 Using stored mobile app flag: ${isMobileApp}`);
-
-    if (isMobileApp) {
-      // For mobile apps, use the session_id as a temporary authorization code
-      // The tokens are already stored in oauth_sessions table - client will exchange session_id for tokens
-      const mobileRedirectUrl = new URL("anchor-app://auth-callback");
-      mobileRedirectUrl.searchParams.set("code", sessionId);
-
-      // Return a success page that triggers the mobile redirect
-      return new Response(
-        `
-        <!DOCTYPE html>
-        <html>
-          <head>
-            <title>Authentication Successful</title>
-            <meta name="viewport" content="width=device-width, initial-scale=1.0">
-            <style>
-              * {
-                margin: 0;
-                padding: 0;
-                box-sizing: border-box;
-              }
-              
-              body {
-                font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
-                background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-                min-height: 100vh;
-                display: flex;
-                align-items: center;
-                justify-content: center;
-                padding: 20px;
-                color: white;
-                text-align: center;
-              }
-
-              .container {
-                background: rgba(255, 255, 255, 0.1);
-                backdrop-filter: blur(10px);
-                border-radius: 20px;
-                padding: 40px 30px;
-                max-width: 400px;
-                width: 100%;
-                border: 1px solid rgba(255, 255, 255, 0.2);
-              }
-
-              .success-icon {
-                width: 80px;
-                height: 80px;
-                margin: 0 auto 24px;
-                background: rgba(255, 255, 255, 0.2);
-                border-radius: 50%;
-                display: flex;
-                align-items: center;
-                justify-content: center;
-                font-size: 40px;
-              }
-
-              h1 {
-                font-size: 24px;
-                font-weight: 700;
-                margin-bottom: 16px;
-              }
-
-              p {
-                opacity: 0.9;
-                margin-bottom: 24px;
-              }
-
-              .redirect-info {
-                background: rgba(255, 255, 255, 0.1);
-                border-radius: 12px;
-                padding: 16px;
-                margin-top: 20px;
-                font-size: 14px;
-                opacity: 0.8;
-              }
-            </style>
-          </head>
-          <body>
-            <div class="container">
-              <div class="success-icon">✅</div>
-              <h1>Authentication Successful!</h1>
-              <p>You're being redirected back to the Anchor app...</p>
-              <div class="redirect-info">
-                If you're not redirected automatically, please return to the Anchor app.
-              </div>
-            </div>
-            
-            <script>
-              // Immediately redirect to the mobile app
-              window.location.href = "${mobileRedirectUrl.toString()}";
-              
-              // Fallback: try again after a short delay
-              setTimeout(() => {
-                window.location.href = "${mobileRedirectUrl.toString()}";
-              }, 1000);
-            </script>
-          </body>
-        </html>
-      `,
-        {
-          status: 200,
-          headers: {
-            "Content-Type": "text/html",
-            "Set-Cookie":
-              `anchor_session=${sessionId}; HttpOnly; Secure; SameSite=Strict; Max-Age=${
-                30 * 24 * 60 * 60
-              }; Path=/`,
-          },
-        },
-      );
-    }
+    // Web OAuth flow - redirect to dashboard
 
     // For web browsers, redirect back to app with success and set session cookie
     const redirectUrl = new URL("/", request.url);
@@ -700,16 +584,66 @@ export async function handleOAuthCallback(request: Request): Promise<Response> {
   }
 }
 
+// Mobile OAuth callback handler - completes token exchange and redirects to mobile app
+export function handleMobileOAuthCallback(
+  request: Request,
+): Response {
+  const url = new URL(request.url);
+  const code = url.searchParams.get("code");
+  const state = url.searchParams.get("state");
+
+  if (!code || !state) {
+    return new Response(
+      JSON.stringify({ error: "Missing authorization code or state" }),
+      {
+        status: 400,
+        headers: { "Content-Type": "application/json" },
+      },
+    );
+  }
+
+  // Success - return authorization code to mobile app for client-side token exchange
+  const redirectUrl = new URL("anchor-app://auth-callback");
+  redirectUrl.searchParams.set("code", code);
+  redirectUrl.searchParams.set("state", state);
+
+  const html = `
+    <!DOCTYPE html>
+    <html>
+      <head>
+        <title>Authentication Successful</title>
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      </head>
+      <body>
+        <div style="text-align: center; padding: 40px; font-family: system-ui;">
+          <h1>🎉 Authentication Successful!</h1>
+          <p>Redirecting to the Anchor app...</p>
+          <p>If the app doesn't open automatically, you can close this window.</p>
+          <script>
+            // Redirect to mobile app with authorization code
+            window.location.href = "${redirectUrl.toString()}";
+          </script>
+        </div>
+      </body>
+    </html>
+  `;
+
+  return new Response(html, {
+    status: 200,
+    headers: { "Content-Type": "text/html" },
+  });
+}
+
 // Mobile token exchange endpoint - exchange authorization code for tokens
 export async function handleMobileTokenExchange(
   request: Request,
 ): Promise<Response> {
   try {
-    const { code } = await request.json();
+    const { code, state } = await request.json();
 
-    if (!code) {
+    if (!code || !state) {
       return new Response(
-        JSON.stringify({ error: "Authorization code is required" }),
+        JSON.stringify({ error: "Authorization code and state are required" }),
         {
           status: 400,
           headers: { "Content-Type": "application/json" },
@@ -717,19 +651,54 @@ export async function handleMobileTokenExchange(
       );
     }
 
-    // Initialize OAuth tables
-    await initializeOAuthTables();
+    // Decode state data
+    let stateData: OAuthStateData;
+    try {
+      stateData = JSON.parse(atob(state));
+    } catch (parseError) {
+      console.error("Failed to parse OAuth state:", parseError);
+      return new Response(
+        JSON.stringify({ error: "Invalid OAuth state" }),
+        {
+          status: 400,
+          headers: { "Content-Type": "application/json" },
+        },
+      );
+    }
 
-    // Find session by session_id (which is the code we sent to mobile)
-    const result = await sqlite.execute({
-      sql:
-        `SELECT * FROM oauth_sessions WHERE session_id = ? AND updated_at > ?`,
-      args: [code, Date.now() - (10 * 60 * 1000)], // Code expires in 10 minutes
+    const { codeVerifier, handle, did, pdsEndpoint, tokenEndpoint } = stateData;
+
+    // Generate DPoP key pair for this session
+    const { privateKey, publicKey } = await generateKeyPair("ES256", {
+      extractable: true,
+    });
+    const privateKeyJWK = JSON.stringify(
+      await exportJWK(privateKey),
+    );
+    const publicKeyJWK = JSON.stringify(await exportJWK(publicKey));
+
+    // Exchange authorization code for tokens using reusable DPoP function
+    const requestBody = new URLSearchParams({
+      grant_type: "authorization_code",
+      code,
+      redirect_uri: `${OAUTH_CONFIG.BASE_URL}/oauth/mobile-callback`,
+      client_id: OAUTH_CONFIG.CLIENT_ID,
+      code_verifier: codeVerifier,
     });
 
-    if (result.rows.length === 0) {
+    const { exchangeTokenWithDPoP } = await import("./dpop.ts");
+    const tokenResponse = await exchangeTokenWithDPoP(
+      tokenEndpoint,
+      requestBody,
+      privateKey as CryptoKey,
+      publicKey as CryptoKey,
+    );
+
+    if (!tokenResponse.ok) {
+      const errorText = await tokenResponse.text();
+      console.error("Token exchange failed:", errorText);
       return new Response(
-        JSON.stringify({ error: "Invalid or expired authorization code" }),
+        JSON.stringify({ error: "Token exchange failed" }),
         {
           status: 400,
           headers: { "Content-Type": "application/json" },
@@ -737,40 +706,81 @@ export async function handleMobileTokenExchange(
       );
     }
 
-    const session = result.rows[0] as any;
+    const tokens = await tokenResponse.json();
 
-    // Use a reasonable token expiration - Bluesky tokens typically last 2-24 hours
-    // This will be properly handled by automatic refresh when tokens expire
-    const expiresInSeconds = 4 * 60 * 60; // 4 hours
-    const expiresAt = new Date(Date.now() + (expiresInSeconds * 1000));
+    // Calculate token expiration
+    const tokenExpiresAt = tokens.expires_in
+      ? Date.now() + (tokens.expires_in * 1000)
+      : Date.now() + (2 * 60 * 60 * 1000); // 2 hours default
 
-    // Return token data with proper expiration info
-    const tokenResponse = {
-      access_token: session.access_token,
-      refresh_token: session.refresh_token,
-      expires_in: expiresInSeconds, // Standard OAuth field - seconds until expiration
-      expires_at: expiresAt.toISOString(), // ISO timestamp for convenience
-      token_type: "Bearer",
-      scope: "atproto",
-      // User info
-      did: session.did,
-      handle: session.handle,
-      pds_url: session.pds_url,
-      session_id: session.session_id,
-      // Optional profile data
-      ...(session.display_name && { display_name: session.display_name }),
-      ...(session.avatar_url && { avatar: session.avatar_url }),
+    // Store session data with DPoP keys
+    const sessionData: OAuthSession = {
+      did,
+      handle,
+      pdsUrl: pdsEndpoint,
+      accessToken: tokens.access_token,
+      refreshToken: tokens.refresh_token,
+      dpopPrivateKey: privateKeyJWK,
+      dpopPublicKey: publicKeyJWK,
+      tokenExpiresAt,
     };
 
-    // Optional: Invalidate the session_id so it can't be reused
+    // Store the session in SQLite
+    await storeOAuthSession(sessionData);
+
+    console.log(`Mobile session stored successfully for DID: ${did}`);
+
+    // Register user for PDS crawling
+    try {
+      const { registerUser } = await import("../database/user-tracking.ts");
+      await registerUser(did, handle, pdsEndpoint);
+      console.log(`📝 Registered mobile user ${handle} for PDS crawling`);
+    } catch (registrationError) {
+      console.error(
+        `Failed to register user ${handle}:`,
+        registrationError,
+      );
+    }
+
+    // Get user profile for mobile response
+    const profileFetcher = new BlueskyProfileFetcher();
+    const profile = await profileFetcher.fetchProfile(did);
+
+    // Create session ID for mobile app
+    const sessionId = crypto.randomUUID();
+
+    // Store session ID and profile info in database for API authentication
     await sqlite.execute({
-      sql: `UPDATE oauth_sessions SET session_id = NULL WHERE session_id = ?`,
-      args: [code],
+      sql:
+        `UPDATE oauth_sessions SET session_id = ?, display_name = ?, avatar_url = ? WHERE did = ?`,
+      args: [
+        sessionId,
+        profile?.displayName || null,
+        profile?.avatar || null,
+        did,
+      ],
     });
 
-    console.log(`🔄 Mobile token exchange successful for ${session.handle}`);
+    // Return complete authentication data following OAuth 2.1 spec
+    const authResponse = {
+      access_token: tokens.access_token,
+      refresh_token: tokens.refresh_token,
+      expires_in: tokens.expires_in || 7200, // OAuth 2.1 standard: lifetime in seconds
+      token_type: "Bearer",
+      scope: "atproto transition:generic",
+      // User info
+      did,
+      handle,
+      pds_url: pdsEndpoint,
+      session_id: sessionId,
+      // Optional profile data
+      ...(profile?.displayName && { display_name: profile.displayName }),
+      ...(profile?.avatar && { avatar: profile.avatar }),
+    };
 
-    return new Response(JSON.stringify(tokenResponse), {
+    console.log(`🔄 Mobile token exchange successful for ${handle}`);
+
+    return new Response(JSON.stringify(authResponse), {
       status: 200,
       headers: { "Content-Type": "application/json" },
     });

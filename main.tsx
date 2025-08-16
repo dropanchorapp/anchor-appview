@@ -11,6 +11,8 @@ import {
 import { getStoredSession as _getStoredSession } from "./backend/oauth/session.ts";
 import {
   handleClientMetadata,
+  handleMobileOAuthCallback,
+  handleMobileOAuthStart,
   handleMobileTokenExchange,
   handleOAuthCallback,
   handleOAuthStart,
@@ -45,6 +47,23 @@ app.post("/api/auth/start", async (c) => {
 
 app.get("/oauth/callback", async (c) => {
   const response = await handleOAuthCallback(c.req.raw);
+  return new Response(response.body, {
+    status: response.status,
+    headers: Object.fromEntries(response.headers.entries()),
+  });
+});
+
+// Mobile OAuth endpoints
+app.post("/api/auth/mobile-start", async (c) => {
+  const response = await handleMobileOAuthStart(c.req.raw);
+  return new Response(response.body, {
+    status: response.status,
+    headers: Object.fromEntries(response.headers.entries()),
+  });
+});
+
+app.get("/oauth/mobile-callback", async (c) => {
+  const response = await handleMobileOAuthCallback(c.req.raw);
   return new Response(response.body, {
     status: response.status,
     headers: Object.fromEntries(response.headers.entries()),
@@ -683,32 +702,39 @@ app.post("/api/admin/backfill", async (c) => {
 
 app.get("/api/auth/session", async (c) => {
   try {
-    const sessionCookie = c.req.header("cookie");
-    const anchorSession = sessionCookie
-      ?.split(";")
-      .find((cookie) => cookie.trim().startsWith("anchor_session="))
-      ?.split("=")[1];
+    // Use unified authentication (supports both cookies and Bearer headers)
+    const { authenticateRequest } = await import(
+      "./backend/middleware/auth-middleware.ts"
+    );
+    const authResult = await authenticateRequest(c);
 
-    if (!anchorSession) {
+    if (!authResult) {
       return c.json({ authenticated: false });
     }
 
-    const session = await _getSessionBySessionId(anchorSession);
-    if (!session) {
-      return c.json({ authenticated: false });
-    }
+    const { session } = authResult;
 
     // Touch the session to extend its lifetime (updates updated_at timestamp)
     const { touchSession } = await import("./backend/oauth/session.ts");
     await touchSession(session.did);
+
+    // Get display name and avatar from database
+    const { sqlite } = await import("https://esm.town/v/std/sqlite2");
+    const result = await sqlite.execute({
+      sql: `SELECT display_name, avatar_url FROM oauth_sessions WHERE did = ?`,
+      args: [session.did],
+    });
+
+    const displayName = result.rows?.[0]?.[0] as string | null;
+    const avatar = result.rows?.[0]?.[1] as string | null;
 
     // Return user info without sensitive tokens
     return c.json({
       authenticated: true,
       userHandle: session.handle,
       userDid: session.did,
-      // Note: displayName and avatar would need to be fetched from profile cache
-      // For now, just returning basic session info
+      userDisplayName: displayName,
+      userAvatar: avatar,
     });
   } catch (error) {
     console.error("Session check error:", error);

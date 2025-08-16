@@ -622,7 +622,10 @@ out tags;`;
             nearbyPlaces.push(name);
           }
         } else if (adminLevel === "2" && !country) {
-          country = element.tags?.["ISO3166-1"] ||
+          // Look for country information in multiple formats
+          country = element.tags?.["name"] ||
+            element.tags?.["name:en"] ||
+            element.tags?.["ISO3166-1"] ||
             element.tags?.["country_code"];
         }
       }

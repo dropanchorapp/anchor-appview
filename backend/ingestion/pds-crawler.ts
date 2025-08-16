@@ -47,7 +47,7 @@ export default async function pdsCrawler(): Promise<Response> {
   try {
     // Initialize database tables
     await initializeTables();
-    await initializeUserTables();
+    initializeUserTables();
 
     // Get registered users to crawl
     const users = await getRegisteredUsers();

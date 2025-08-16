@@ -18,7 +18,7 @@ export async function initializeTables() {
 
   // Initialize user tracking tables for PDS crawler
   const { initializeUserTables } = await import("./user-tracking.ts");
-  await initializeUserTables();
+  initializeUserTables();
 }
 
 // Test the database connection

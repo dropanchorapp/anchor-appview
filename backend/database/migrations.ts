@@ -117,7 +117,10 @@ const MIGRATIONS = [
         refresh_token TEXT NOT NULL,
         dpop_private_key TEXT NOT NULL,
         dpop_public_key TEXT NOT NULL,
+        token_expires_at INTEGER NOT NULL,
         session_id TEXT UNIQUE,
+        display_name TEXT,
+        avatar_url TEXT,
         created_at INTEGER NOT NULL,
         updated_at INTEGER NOT NULL
       );
@@ -307,6 +310,39 @@ const MIGRATIONS = [
       
       -- Note: SQLite will ignore ADD COLUMN if the column already exists,
       -- so this is safe to run multiple times
+    `,
+  },
+  {
+    version: "009_fix_oauth_sessions_columns",
+    description:
+      "Add missing OAuth session columns for token expiration and user profile data",
+    sql: `
+      -- Add missing columns to oauth_sessions table if they don't exist
+      -- These columns are required by the OAuth session management but might be missing
+      
+      ALTER TABLE oauth_sessions ADD COLUMN token_expires_at INTEGER DEFAULT 0;
+      ALTER TABLE oauth_sessions ADD COLUMN display_name TEXT;
+      ALTER TABLE oauth_sessions ADD COLUMN avatar_url TEXT;
+      
+      -- Note: SQLite will ignore ADD COLUMN if the column already exists,
+      -- so this is safe to run multiple times
+    `,
+  },
+  {
+    version: "010_add_user_pdses_table",
+    description: "Add user_pdses table for PDS reference counting",
+    sql: `
+      -- Create user_pdses table for PDS crawler infrastructure
+      CREATE TABLE IF NOT EXISTS user_pdses (
+        pds_url TEXT PRIMARY KEY,
+        user_count INTEGER DEFAULT 1,
+        last_crawled_at TEXT,
+        created_at TEXT DEFAULT CURRENT_TIMESTAMP
+      );
+      
+      -- Create index for efficient querying
+      CREATE INDEX IF NOT EXISTS idx_user_pdses_user_count ON user_pdses(user_count);
+      CREATE INDEX IF NOT EXISTS idx_user_pdses_last_crawled ON user_pdses(last_crawled_at);
     `,
   },
 ];

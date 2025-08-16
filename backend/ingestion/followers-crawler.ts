@@ -31,7 +31,7 @@ export default async function followersCrawler(): Promise<Response> {
   try {
     // Initialize database tables
     await initializeTables();
-    await initializeUserTables();
+    initializeUserTables();
 
     // Get registered users to crawl
     const users = await getRegisteredUsers();
