@@ -206,9 +206,9 @@ export class OverpassService {
       $type: "community.lexicon.location.address",
       name: place.name,
       locality: place.address?.locality || adminData.locality,
+      region: place.address?.region || adminData.region,
       country: place.address?.country || adminData.country,
       street: place.address?.street,
-      region: place.address?.region,
       postalCode: place.address?.postalCode,
     };
   }
@@ -552,6 +552,7 @@ out center tags;`;
           address: {
             ...place.address,
             locality: place.address?.locality || adminData.locality,
+            region: place.address?.region || adminData.region,
             country: place.address?.country || adminData.country,
           },
         };
@@ -566,7 +567,7 @@ out center tags;`;
    */
   private async resolveAdministrativeBoundaries(
     coordinate: { latitude: number; longitude: number },
-  ): Promise<{ locality?: string; country?: string }> {
+  ): Promise<{ locality?: string; region?: string; country?: string }> {
     const query = `[out:json][timeout:10];
 (
   // District/neighborhood level (admin_level=10) - most precise locality  
@@ -577,6 +578,8 @@ out center tags;`;
   relation["boundary"="administrative"]["admin_level"="8"](around:5000,${coordinate.latitude},${coordinate.longitude});
   // County/state level (admin_level=6) - for metro areas
   relation["boundary"="administrative"]["admin_level"="6"](around:10000,${coordinate.latitude},${coordinate.longitude});
+  // State/Province level (admin_level=4) - for regions
+  relation["boundary"="administrative"]["admin_level"="4"](around:25000,${coordinate.latitude},${coordinate.longitude});
   // Country level (admin_level=2)
   relation["boundary"="administrative"]["admin_level"="2"](around:50000,${coordinate.latitude},${coordinate.longitude});
 );
@@ -598,12 +601,14 @@ out tags;`;
       const elements = overpassResponse.elements;
 
       let locality: string | undefined;
+      let region: string | undefined;
       let country: string | undefined;
 
       // Collect admin boundaries by level for smarter selection
       const admin10Districts: string[] = [];
       const admin8Municipalities: string[] = [];
       const admin6Counties: string[] = [];
+      const admin4States: string[] = [];
       const nearbyPlaces: string[] = [];
 
       for (const element of elements) {
@@ -616,17 +621,21 @@ out tags;`;
           admin8Municipalities.push(name);
         } else if (adminLevel === "6" && name && !name.includes("County")) {
           admin6Counties.push(name);
+        } else if (adminLevel === "4" && name) {
+          // State/Province level (admin_level=4)
+          admin4States.push(name);
         } else if (element.tags?.["place"] && name) {
           const placeType = element.tags["place"];
           if (["city", "town", "village"].includes(placeType)) {
             nearbyPlaces.push(name);
           }
         } else if (adminLevel === "2" && !country) {
-          // Look for country information in multiple formats
-          country = element.tags?.["name"] ||
+          // OSM admin_level=2 boundaries reliably have ISO codes
+          country = element.tags?.["ISO3166-1"] ||
+            element.tags?.["ISO3166-1:alpha2"] ||
+            // Only fall back to name if no ISO code is available
             element.tags?.["name:en"] ||
-            element.tags?.["ISO3166-1"] ||
-            element.tags?.["country_code"];
+            element.tags?.["name"];
         }
       }
 
@@ -647,7 +656,12 @@ out tags;`;
         locality = admin6Counties[0];
       }
 
-      return { locality, country };
+      // Select region (state/province)
+      if (admin4States.length > 0) {
+        region = admin4States[0];
+      }
+
+      return { locality, region, country };
     } catch (error) {
       console.warn("Failed to resolve administrative boundaries:", error);
       return {};
