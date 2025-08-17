@@ -89,18 +89,10 @@ export class CheckinBackfillService {
   // Resolve DID to PDS endpoint
   async resolvePDS(did: string): Promise<string | null> {
     try {
-      if (did.startsWith("did:plc:")) {
-        const response = await fetch(`https://plc.directory/${did}`);
-        if (!response.ok) return null;
-
-        const data = await response.json();
-        for (const service of data.service || []) {
-          if (service.id === "#atproto_pds" && service.serviceEndpoint) {
-            return service.serviceEndpoint;
-          }
-        }
-      }
-      return null;
+      const { resolveDIDToPDS } = await import(
+        "../oauth/slingshot-resolver.ts"
+      );
+      return await resolveDIDToPDS(did);
     } catch {
       return null;
     }

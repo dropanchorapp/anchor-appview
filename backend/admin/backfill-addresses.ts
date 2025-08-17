@@ -116,20 +116,9 @@ async function fetchCheckinRecord(uri: string): Promise<CheckinRecord | null> {
     const uriParts = uri.replace("at://", "").split("/");
     const [did, collection, rkey] = uriParts;
 
-    // Get PDS endpoint from DID document
-    const didResponse = await fetch(`https://plc.directory/${did}`);
-    if (!didResponse.ok) {
-      throw new Error(`Failed to resolve DID: ${didResponse.status}`);
-    }
-
-    const didDoc = await didResponse.json();
-    const pdsEndpoint = didDoc.service?.find((s: any) =>
-      s.id.endsWith("#atproto_pds") && s.type === "AtprotoPersonalDataServer"
-    )?.serviceEndpoint;
-
-    if (!pdsEndpoint) {
-      throw new Error("No PDS endpoint found in DID document");
-    }
+    // Get PDS endpoint using Slingshot
+    const { resolveDIDToPDS } = await import("../oauth/slingshot-resolver.ts");
+    const pdsEndpoint = await resolveDIDToPDS(did);
 
     // Fetch the checkin record
     const recordUrl = `${pdsEndpoint}/xrpc/com.atproto.repo.getRecord` +

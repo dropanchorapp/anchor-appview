@@ -326,22 +326,9 @@ export async function refreshOAuthToken(
   try {
     console.log(`Refreshing OAuth token for ${session.handle}`);
 
-    // Get the user's token endpoint from their PDS
-    const didDocResponse = await fetch(`https://plc.directory/${session.did}`);
-    if (!didDocResponse.ok) {
-      console.error("Failed to get DID document for token refresh");
-      return null;
-    }
-
-    const didDoc = await didDocResponse.json();
-    const pdsEndpoint = didDoc.service?.find((s: any) =>
-      s.id === "#atproto_pds"
-    )?.serviceEndpoint;
-
-    if (!pdsEndpoint) {
-      console.error("Could not find PDS endpoint for token refresh");
-      return null;
-    }
+    // Get the user's PDS endpoint using Slingshot
+    const { resolveDIDToPDS } = await import("./slingshot-resolver.ts");
+    const pdsEndpoint = await resolveDIDToPDS(session.did);
 
     // Discover OAuth metadata
     const resourceMetadataResponse = await fetch(

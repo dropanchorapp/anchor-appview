@@ -5,128 +5,8 @@ import { generatePKCE } from "./dpop.ts";
 import { storeOAuthSession } from "./session.ts";
 import { OAUTH_CONFIG } from "./config.ts";
 import { BlueskyProfileFetcher } from "../utils/profile-resolver.ts";
+import { setupOAuthWithSlingshot } from "./slingshot-resolver.ts";
 import type { OAuthSession, OAuthStateData } from "./types.ts";
-
-// Shared OAuth utility functions
-async function normalizeAndResolveHandle(
-  rawHandle: string,
-): Promise<{ handle: string; did: string }> {
-  // Normalize handle by removing invisible Unicode characters and trimming
-  const handle = rawHandle
-    .replace(/[\u200B-\u200D\uFEFF]/g, "")
-    .replace(/[^\w.-]/g, "")
-    .trim()
-    .toLowerCase();
-
-  console.log(`🔄 Resolving handle: ${handle}`);
-
-  // Try multiple resolution methods for robustness
-  const resolutionMethods = [
-    `https://bsky.social/xrpc/com.atproto.identity.resolveHandle?handle=${handle}`,
-    `https://public.api.bsky.app/xrpc/com.atproto.identity.resolveHandle?handle=${handle}`,
-  ];
-
-  for (const url of resolutionMethods) {
-    try {
-      const response = await fetch(url);
-      if (response.ok) {
-        const data = await response.json();
-        const did = data.did;
-        console.log(`✅ Resolved ${handle} to ${did} via ${url}`);
-        return { handle, did };
-      }
-    } catch (error) {
-      console.warn(`Failed to resolve handle via ${url}:`, error);
-      continue;
-    }
-  }
-
-  throw new Error("Could not resolve handle to DID");
-}
-
-async function discoverOAuthEndpoints(
-  did: string,
-): Promise<
-  { pdsEndpoint: string; authorizationEndpoint: string; tokenEndpoint: string }
-> {
-  // Discover OAuth endpoints for this user's PDS
-  let pdsEndpoint: string;
-
-  try {
-    const pdsResponse = await fetch(
-      `https://plc.directory/${encodeURIComponent(did)}`,
-    );
-    if (!pdsResponse.ok) {
-      throw new Error(`PDS discovery failed: ${pdsResponse.status}`);
-    }
-    const pdsDoc = await pdsResponse.json();
-    pdsEndpoint = pdsDoc.service?.find((s: any) =>
-      s.type === "AtprotoPersonalDataServer"
-    )?.serviceEndpoint;
-
-    if (!pdsEndpoint) {
-      throw new Error("No PDS endpoint found in DID document");
-    }
-  } catch (error) {
-    console.error("PDS discovery failed:", error);
-    throw new Error("Failed to discover user's PDS");
-  }
-
-  // Step 1: Get PDS resource metadata to discover authorization server
-  let authorizationServerUrl: string;
-
-  try {
-    const resourceMetadataResponse = await fetch(
-      `${pdsEndpoint}/.well-known/oauth-protected-resource`,
-    );
-    if (!resourceMetadataResponse.ok) {
-      throw new Error(
-        `PDS resource metadata fetch failed: ${resourceMetadataResponse.status}`,
-      );
-    }
-    const resourceMetadata = await resourceMetadataResponse.json();
-    const authorizationServers = resourceMetadata.authorization_servers;
-
-    if (!authorizationServers || authorizationServers.length === 0) {
-      throw new Error("No authorization servers found in PDS metadata");
-    }
-
-    authorizationServerUrl = authorizationServers[0]; // Use first authorization server
-    console.log(`🔍 Found authorization server: ${authorizationServerUrl}`);
-  } catch (error) {
-    console.error("PDS resource metadata discovery failed:", error);
-    throw new Error("Failed to discover authorization server");
-  }
-
-  // Step 2: Get OAuth endpoints from the authorization server
-  let authorizationEndpoint: string;
-  let tokenEndpoint: string;
-
-  try {
-    const metadataResponse = await fetch(
-      `${authorizationServerUrl}/.well-known/oauth-authorization-server`,
-    );
-    if (!metadataResponse.ok) {
-      throw new Error(
-        `OAuth metadata fetch failed: ${metadataResponse.status}`,
-      );
-    }
-    const metadata = await metadataResponse.json();
-    authorizationEndpoint = metadata.authorization_endpoint;
-    tokenEndpoint = metadata.token_endpoint;
-
-    if (!authorizationEndpoint || !tokenEndpoint) {
-      throw new Error("Missing OAuth endpoints in metadata");
-    }
-
-    console.log(`✅ OAuth endpoints discovered from ${authorizationServerUrl}`);
-  } catch (error) {
-    console.error("OAuth metadata discovery failed:", error);
-    throw new Error("Failed to discover OAuth endpoints");
-  }
-
-  return { pdsEndpoint, authorizationEndpoint, tokenEndpoint };
-}
 
 // OAuth client metadata endpoint
 export function handleClientMetadata(): Response {
@@ -188,12 +68,8 @@ export async function handleOAuthStart(request: Request): Promise<Response> {
       });
     }
 
-    // Use shared OAuth utilities for web flow
-    const { handle: resolvedHandle, did } = await normalizeAndResolveHandle(
-      handle,
-    );
-    const { pdsEndpoint, authorizationEndpoint, tokenEndpoint } =
-      await discoverOAuthEndpoints(did);
+    // Use simplified Slingshot OAuth setup
+    const oauthSetup = await setupOAuthWithSlingshot(handle);
 
     // Generate OAuth parameters
     const { codeVerifier, codeChallenge, codeChallengeMethod } =
@@ -202,18 +78,18 @@ export async function handleOAuthStart(request: Request): Promise<Response> {
     // Encode state data for serverless compatibility
     const stateData: OAuthStateData = {
       codeVerifier,
-      handle: resolvedHandle,
-      did,
-      pdsEndpoint,
-      authorizationEndpoint,
-      tokenEndpoint,
+      handle: oauthSetup.handle,
+      did: oauthSetup.did,
+      pdsEndpoint: oauthSetup.pdsEndpoint,
+      authorizationEndpoint: oauthSetup.authorizationEndpoint,
+      tokenEndpoint: oauthSetup.tokenEndpoint,
       timestamp: Date.now(),
     };
 
     const state = btoa(JSON.stringify(stateData));
 
     // Build OAuth authorization URL
-    const authUrl = new URL(authorizationEndpoint);
+    const authUrl = new URL(oauthSetup.authorizationEndpoint);
     authUrl.searchParams.set("response_type", "code");
     authUrl.searchParams.set("client_id", OAUTH_CONFIG.CLIENT_ID);
     authUrl.searchParams.set("redirect_uri", OAUTH_CONFIG.REDIRECT_URI);
@@ -221,7 +97,7 @@ export async function handleOAuthStart(request: Request): Promise<Response> {
     authUrl.searchParams.set("state", state);
     authUrl.searchParams.set("code_challenge", codeChallenge);
     authUrl.searchParams.set("code_challenge_method", codeChallengeMethod);
-    authUrl.searchParams.set("login_hint", resolvedHandle); // Prefill the handle in OAuth form
+    authUrl.searchParams.set("login_hint", oauthSetup.handle); // Prefill the handle in OAuth form
 
     return new Response(JSON.stringify({ authUrl: authUrl.toString() }), {
       status: 200,
@@ -255,10 +131,8 @@ export async function handleMobileOAuthStart(
 
     console.log(`🔄 Starting mobile OAuth for handle: ${rawHandle}`);
 
-    // Use shared OAuth utilities
-    const { handle, did } = await normalizeAndResolveHandle(rawHandle);
-    const { pdsEndpoint, authorizationEndpoint, tokenEndpoint } =
-      await discoverOAuthEndpoints(did);
+    // Use simplified Slingshot OAuth setup
+    const oauthSetup = await setupOAuthWithSlingshot(rawHandle);
 
     // Generate PKCE parameters
     const { codeVerifier, codeChallenge, codeChallengeMethod } =
@@ -267,18 +141,18 @@ export async function handleMobileOAuthStart(
     // Encode state data for serverless compatibility
     const stateData: OAuthStateData = {
       codeVerifier,
-      handle,
-      did,
-      pdsEndpoint,
-      authorizationEndpoint,
-      tokenEndpoint,
+      handle: oauthSetup.handle,
+      did: oauthSetup.did,
+      pdsEndpoint: oauthSetup.pdsEndpoint,
+      authorizationEndpoint: oauthSetup.authorizationEndpoint,
+      tokenEndpoint: oauthSetup.tokenEndpoint,
       timestamp: Date.now(),
     };
 
     const state = btoa(JSON.stringify(stateData));
 
     // Build OAuth authorization URL with mobile callback
-    const authUrl = new URL(authorizationEndpoint);
+    const authUrl = new URL(oauthSetup.authorizationEndpoint);
     authUrl.searchParams.set("response_type", "code");
     authUrl.searchParams.set("client_id", OAUTH_CONFIG.CLIENT_ID);
     authUrl.searchParams.set(
@@ -289,15 +163,15 @@ export async function handleMobileOAuthStart(
     authUrl.searchParams.set("state", state);
     authUrl.searchParams.set("code_challenge", codeChallenge);
     authUrl.searchParams.set("code_challenge_method", codeChallengeMethod);
-    authUrl.searchParams.set("login_hint", handle);
+    authUrl.searchParams.set("login_hint", oauthSetup.handle);
 
-    console.log(`🔗 Mobile OAuth URL generated for ${handle}`);
+    console.log(`🔗 Mobile OAuth URL generated for ${oauthSetup.handle}`);
 
     return new Response(
       JSON.stringify({
         authUrl: authUrl.toString(),
-        handle,
-        did,
+        handle: oauthSetup.handle,
+        did: oauthSetup.did,
       }),
       {
         status: 200,
