@@ -11,7 +11,7 @@ import {
   PlaceCategoryGroup,
   PlaceWithDistance,
 } from "../models/place-models.ts";
-import { PlaceCategorization } from "../utils/place-categorization.ts";
+import { CategoryService } from "./category-service.ts";
 import { NominatimService } from "./nominatim-service.ts";
 
 interface CachedPlaces {
@@ -249,7 +249,7 @@ export class OverpassService {
   // MARK: - Private Methods
 
   /**
-   * Check if a place is a venue with good address data
+   * Check if a place is a venue with good address data that doesn't need expensive geocoding
    */
   private isVenueWithGoodAddress(place: Place): boolean {
     // Has direct address components (street address indicates a specific venue)
@@ -257,29 +257,14 @@ export class OverpassService {
       return true;
     }
 
-    // Is a business/venue type likely to have good address data
-    const venueCategories = [
-      "restaurant",
-      "cafe",
-      "bar",
-      "pub",
-      "fast_food",
-      "shop",
-      "supermarket",
-      "bank",
-      "pharmacy",
-      "hospital",
-      "hotel",
-      "gas_station",
-      "cinema",
-      "theatre",
-      "library",
-      "fitness_centre",
-      "sports_centre", // Indoor venues with addresses
-    ];
+    // Check if this category type should use venue address strategy
+    if (!place.category) return false;
 
-    // Must have both category match AND some address data
-    return !!(place.category && venueCategories.includes(place.category) &&
+    const shouldUseVenueStrategy = CategoryService
+      .shouldUseVenueAddressStrategy(place.category);
+
+    // Must have both venue category type AND some address data
+    return !!(shouldUseVenueStrategy &&
       (place.address?.street || place.address?.locality));
   }
 
@@ -287,31 +272,9 @@ export class OverpassService {
    * Check if a place is a geographic area that would benefit from Nominatim
    */
   private isGeographicArea(place: Place): boolean {
-    const geographicCategories = [
-      "park",
-      "playground",
-      "garden",
-      "nature_reserve",
-      "beach",
-      "swimming_pool",
-      "pitch", // Outdoor sports areas
-      "golf_course",
-      "marina",
-      "pier",
-      "attraction",
-      "viewpoint",
-      "monument",
-      "memorial",
-      "mountain_peak",
-      "hill",
-      "forest",
-      "lake",
-      "river",
-    ];
+    if (!place.category) return false;
 
-    return place.category
-      ? geographicCategories.includes(place.category)
-      : false;
+    return CategoryService.shouldUseGeographicAddressStrategy(place.category);
   }
 
   /**
@@ -394,7 +357,7 @@ export class OverpassService {
   }
 
   private getDefaultCategories(): string[] {
-    return PlaceCategorization.getPrioritizedCategories();
+    return CategoryService.getDefaultSearchCategories();
   }
 
   private buildOverpassQuery(
@@ -718,8 +681,8 @@ out tags;`;
     for (const tag of primaryTags) {
       const value = tags[tag];
       if (value) {
-        const categoryGroup = PlaceCategorization.getCategoryGroup(tag, value);
-        const icon = PlaceCategorization.getIcon(tag, value);
+        const categoryGroup = CategoryService.getCategoryGroup(tag, value);
+        const icon = CategoryService.getIcon(tag, value);
 
         return {
           category: value,

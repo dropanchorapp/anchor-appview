@@ -13,6 +13,7 @@ import {
   SqliteStorageProvider,
 } from "../utils/storage-provider.ts";
 import { OverpassService } from "../services/overpass-service.ts";
+import { CategoryService } from "../services/category-service.ts";
 import { PlacesNearbyResponse } from "../models/place-models.ts";
 import { createCheckin } from "./checkins.ts";
 import { getCheckinCounts, getRecentActivity } from "../database/queries.ts";
@@ -81,6 +82,8 @@ export default async function (req: Request): Promise<Response> {
       return await getFollowingFeed(url, corsHeaders);
     case "/api/places/nearby":
       return await getNearbyPlaces(url, corsHeaders);
+    case "/api/places/categories":
+      return getPlaceCategories(corsHeaders);
     case "/api/stats":
       return await getStats(corsHeaders);
     case "/api/checkins":
@@ -460,6 +463,45 @@ async function getNearbyPlaces(
     return new Response(
       JSON.stringify({
         error: "Failed to search for nearby places",
+        details: error instanceof Error ? error.message : "Unknown error",
+      }),
+      {
+        status: 500,
+        headers: corsHeaders,
+      },
+    );
+  }
+}
+
+function getPlaceCategories(corsHeaders: CorsHeaders): Response {
+  try {
+    // Get all category data for mobile app consumption
+    const categories = CategoryService.getAllCategoryObjects();
+    const defaultSearchCategories = CategoryService
+      .getDefaultSearchCategories();
+    const sociallyRelevantCategories = CategoryService
+      .getSociallyRelevantCategories();
+
+    const response = {
+      categories,
+      defaultSearch: defaultSearchCategories,
+      sociallyRelevant: sociallyRelevantCategories,
+      metadata: {
+        totalCategories: categories.length,
+        defaultSearchCount: defaultSearchCategories.length,
+        sociallyRelevantCount: sociallyRelevantCategories.length,
+      },
+    };
+
+    return new Response(JSON.stringify(response), {
+      status: 200,
+      headers: corsHeaders,
+    });
+  } catch (error) {
+    console.error("Error fetching place categories:", error);
+    return new Response(
+      JSON.stringify({
+        error: "Failed to fetch place categories",
         details: error instanceof Error ? error.message : "Unknown error",
       }),
       {

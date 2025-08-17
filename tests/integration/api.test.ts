@@ -125,6 +125,32 @@ function createTestAPIHandler() {
         );
       }
 
+      case "/api/places/categories": {
+        // Import CategoryService to get real data
+        const { CategoryService } = await import(
+          "../../backend/services/category-service.ts"
+        );
+
+        const categories = CategoryService.getAllCategoryObjects();
+        const defaultSearch = CategoryService.getDefaultSearchCategories();
+        const sociallyRelevant = CategoryService
+          .getSociallyRelevantCategories();
+
+        return new Response(
+          JSON.stringify({
+            categories,
+            defaultSearch,
+            sociallyRelevant,
+            metadata: {
+              totalCategories: categories.length,
+              defaultSearchCount: defaultSearch.length,
+              sociallyRelevantCount: sociallyRelevant.length,
+            },
+          }),
+          { headers: corsHeaders },
+        );
+      }
+
       default:
         return new Response(JSON.stringify({ error: "Not Found" }), {
           status: 404,
@@ -265,6 +291,46 @@ Deno.test("API Integration - /nearby endpoint filters by distance", async () => 
 
   const data = await response.json();
   assertEquals(data.checkins.length, 0); // Should be empty due to distance
+});
+
+Deno.test("API Integration - /api/places/categories endpoint returns category data", async () => {
+  const handler = await createTestAPIHandler();
+  const req = new Request("http://localhost/api/places/categories");
+  const response = await handler(req);
+
+  assertEquals(response.status, 200);
+
+  const data = await response.json();
+  assertExists(data.categories);
+  assertExists(data.defaultSearch);
+  assertExists(data.sociallyRelevant);
+  assertExists(data.metadata);
+
+  // Verify structure
+  assertEquals(Array.isArray(data.categories), true);
+  assertEquals(Array.isArray(data.defaultSearch), true);
+  assertEquals(Array.isArray(data.sociallyRelevant), true);
+  assertEquals(typeof data.metadata.totalCategories, "number");
+  assertEquals(typeof data.metadata.defaultSearchCount, "number");
+  assertEquals(typeof data.metadata.sociallyRelevantCount, "number");
+
+  // Verify data consistency
+  assertEquals(data.metadata.totalCategories, data.categories.length);
+  assertEquals(data.metadata.defaultSearchCount, data.defaultSearch.length);
+  assertEquals(
+    data.metadata.sociallyRelevantCount,
+    data.sociallyRelevant.length,
+  );
+
+  // Verify category structure
+  if (data.categories.length > 0) {
+    const category = data.categories[0];
+    assertExists(category.id);
+    assertExists(category.name);
+    assertExists(category.icon);
+    assertExists(category.group);
+    assertExists(category.osmTag);
+  }
 });
 
 Deno.test("API Integration - unknown endpoint returns 404", async () => {

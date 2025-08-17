@@ -131,6 +131,49 @@ The project includes several Deno tasks for common development workflows:
 - `/api/following` - Check-ins from followed users (requires social graph sync)
 - `/api/stats` - AppView health and statistics
 - `/api/places/nearby` - OpenStreetMap POI discovery via Overpass API
+- `/api/places/categories` - Complete category system for mobile app consumption
+
+#### Places Categories API Endpoint
+
+The `/api/places/categories` endpoint provides comprehensive category data designed for mobile app consumption, enabling apps to cache and use the complete category system locally.
+
+**Response Format:**
+```json
+{
+  "categories": [
+    {
+      "id": "amenity_restaurant",
+      "name": "Restaurant", 
+      "icon": "🍽️",
+      "group": "FOOD_AND_DRINK",
+      "osmTag": "amenity=restaurant"
+    }
+    // ... 56 total categories
+  ],
+  "defaultSearch": [
+    "amenity=restaurant",
+    "amenity=cafe",
+    // ... 37 categories optimized for default search queries
+  ],
+  "sociallyRelevant": [
+    "amenity=restaurant", 
+    "tourism=attraction",
+    // ... 37 categories suitable for social check-ins
+  ],
+  "metadata": {
+    "totalCategories": 56,
+    "defaultSearchCount": 37,
+    "sociallyRelevantCount": 37
+  }
+}
+```
+
+**Usage Notes:**
+- **Categories**: Complete category objects with UI-ready data (names, icons, groups)
+- **Default Search**: OSM tags for default Overpass API queries when user doesn't specify categories
+- **Socially Relevant**: Categories appropriate for social check-in experiences
+- **Metadata**: Category counts for validation and UI display
+- **Mobile Integration**: Designed for caching in mobile apps to eliminate hardcoded category arrays
 
 ### OAuth Authentication API
 

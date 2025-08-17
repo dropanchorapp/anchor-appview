@@ -1,3 +1,4 @@
+// deno-lint-ignore-file no-fallthrough
 // Place categorization system ported from Swift PlaceCategorization.swift
 // Provides OSM tag categorization, icons, and grouping for UI display
 
@@ -374,7 +375,6 @@ export class PlaceCategorization {
           default:
             return PlaceCategoryGroup.SERVICES;
         }
-        break;
 
       case "leisure":
         switch (value) {
@@ -414,7 +414,6 @@ export class PlaceCategorization {
           default:
             return PlaceCategoryGroup.ENTERTAINMENT;
         }
-        break;
 
       case "shop":
         switch (value) {
@@ -452,7 +451,6 @@ export class PlaceCategorization {
           default:
             return PlaceCategoryGroup.SHOPPING;
         }
-        break;
 
       case "tourism":
         switch (value) {
@@ -483,7 +481,6 @@ export class PlaceCategorization {
           default:
             return PlaceCategoryGroup.SERVICES;
         }
-        break;
 
       default:
         return null;
@@ -713,8 +710,18 @@ export class PlaceCategorization {
    * Get category by ID
    */
   static getCategoryById(id: string): PlaceCategory | null {
-    const [tag, value] = id.split("_", 2);
+    // Parse the ID format
+    const underscoreIndex = id.indexOf("_");
+    if (underscoreIndex === -1) return null;
+
+    const tag = id.substring(0, underscoreIndex);
+    const value = id.substring(underscoreIndex + 1);
     if (!tag || !value) return null;
+
+    // Validate that this is a real category by checking if it exists in our defined categories
+    const allCategories = this.getAllCategories();
+    const osmTag = `${tag}=${value}`;
+    if (!allCategories.includes(osmTag)) return null;
 
     return this.createCategory(tag, value);
   }
