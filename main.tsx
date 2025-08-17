@@ -282,6 +282,7 @@ app.all("/api/user", (c) => anchorApiHandler(c.req.raw));
 app.all("/api/following", (c) => anchorApiHandler(c.req.raw));
 app.all("/api/stats", (c) => anchorApiHandler(c.req.raw));
 app.all("/api/places/nearby", (c) => anchorApiHandler(c.req.raw));
+app.all("/api/places/categories", (c) => anchorApiHandler(c.req.raw));
 app.all("/api/checkins", (c) => anchorApiHandler(c.req.raw));
 app.all("/api/checkin/*", (c) => anchorApiHandler(c.req.raw));
 
