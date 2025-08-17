@@ -190,27 +190,52 @@ export class OverpassService {
       }
     }
 
-    // If place already has good address data (venues), use it
-    if (this.isVenueWithGoodAddress(place)) {
+    // Always enhance addresses that are missing critical country/region data
+    // Even venues with "good" address data might be missing these fields
+    const needsEnhancement = !place.address?.country || !place.address?.region;
+
+    if (this.isVenueWithGoodAddress(place) && !needsEnhancement) {
+      console.log(`✅ Using complete venue address for: ${place.name}`);
       return place.address;
     }
 
-    // Fallback: use our current OSM administrative boundary logic
-    console.log(`🏛️ Using admin boundaries fallback for: ${place.name}`);
+    // Enhance with administrative boundary data
+    console.log(
+      `🏛️ Enhancing address with admin boundaries for: ${place.name}`,
+    );
     const adminData = await this.resolveAdministrativeBoundaries({
       latitude: place.latitude,
       longitude: place.longitude,
     });
 
-    return {
+    // Build final address with proper fallbacks
+    const finalAddress: CommunityAddressRecord = {
       $type: "community.lexicon.location.address",
       name: place.name,
-      locality: place.address?.locality || adminData.locality,
-      region: place.address?.region || adminData.region,
-      country: place.address?.country || adminData.country,
-      street: place.address?.street,
-      postalCode: place.address?.postalCode,
     };
+
+    // Only include fields that have actual values
+    const locality = place.address?.locality || adminData.locality;
+    const region = place.address?.region || adminData.region;
+    const country = place.address?.country || adminData.country;
+    const street = place.address?.street;
+    const postalCode = place.address?.postalCode;
+
+    if (locality) finalAddress.locality = locality;
+    if (region) finalAddress.region = region;
+    if (country) finalAddress.country = country;
+    if (street) finalAddress.street = street;
+    if (postalCode) finalAddress.postalCode = postalCode;
+
+    // Log what we resolved for debugging
+    console.log(`📍 Final address for ${place.name}:`, {
+      locality: locality || "missing",
+      region: region || "missing",
+      country: country || "missing",
+      adminDataReceived: Object.keys(adminData).length > 0,
+    });
+
+    return finalAddress;
   }
 
   /**
@@ -661,9 +686,20 @@ out tags;`;
         region = admin4States[0];
       }
 
+      console.log(
+        `🏛️ Admin boundary result for ${coordinate.latitude},${coordinate.longitude}:`,
+        {
+          locality: locality || "not found",
+          region: region || "not found",
+          country: country || "not found",
+          elementsFound: elements.length,
+        },
+      );
+
       return { locality, region, country };
     } catch (error) {
-      console.warn("Failed to resolve administrative boundaries:", error);
+      console.error("Failed to resolve administrative boundaries:", error);
+      console.error("Query coordinate:", coordinate);
       return {};
     }
   }
