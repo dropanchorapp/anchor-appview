@@ -8,7 +8,8 @@ mobile clients and a web interface for viewing and sharing check-ins.
 
 The system consists of 4 main components:
 
-- **Ingestion** - Real-time check-in data ingestion from AT Protocol Jetstream
+- **Check-in Creation** - Immediate database saves when check-ins are created
+  via mobile app
 - **API** - RESTful APIs for global, nearby, user, and following feeds
 - **Web Interface** - React-based web frontend for viewing feeds and shareable
   checkin detail pages
@@ -17,19 +18,18 @@ The system consists of 4 main components:
 ## 📁 Project Structure
 
 ```
-src/
-├── ingestion/          # Data ingestion from AT Protocol
-│   └── jetstream-poller.ts
+backend/
+├── ingestion/          # Check-in processing logic
+│   ├── record-processor.ts    # Processes check-in records for database storage
+│   ├── followers-crawler.ts   # Social graph data collection
+│   └── followers-processor.ts # Social relationship processing
 ├── api/               # HTTP API endpoints
-│   └── anchor-api.ts
-├── social/            # Social graph management
-│   └── social-graph-sync.ts
+│   ├── anchor-api.ts      # Main AppView API
+│   └── checkins.ts        # Check-in creation with immediate saves
+├── admin/             # Administrative tools and backfill operations
 └── utils/             # Shared utilities
-    ├── handle-resolver.ts
-    ├── address-resolver.ts
-    ├── address-cache.ts    # Val Town blob storage cache
     ├── profile-resolver.ts # Profile caching and resolution
-    └── profile-refresh-job.ts # Background profile refresh
+    └── storage-provider.ts # Database abstraction layer
 
 frontend/
 ├── main.tsx           # React app entry point and routing
@@ -70,32 +70,10 @@ tests/
 
 ## 🚀 Quick Start
 
-### Option 1: One-Click Deployment
+### Deployment
 
 ```bash
-# Install Val Town CLI
-npm install -g @valtown/cli
-
-# Login to Val Town
-vt login
-
-# Run tests first
-./scripts/test.sh
-
-# Deploy all functions
-./scripts/deploy.sh
-
-# Monitor the deployment
-./scripts/monitor-api.sh
-```
-
-### Option 2: Manual Deployment
-
-```bash
-# Deploy individual functions
-vt create cron jetstreamPoller --file src/ingestion/jetstream-poller.ts --schedule "*/5 * * * *"
-vt create http anchorAPI --file src/api/anchor-api.ts
-vt create cron socialGraphSync --file src/social/social-graph-sync.ts --schedule "0 2 * * *"
+deno task deploy              # Runs quality checks and pushes to Val Town
 ```
 
 > **Note**: No manual database setup required! Tables are created automatically
@@ -201,13 +179,14 @@ The system uses 5 main SQLite tables:
 
 ### Backend Features
 
-- **Real-time Ingestion**: WebSocket polling every 5 minutes from Jetstream
+- **Immediate Updates**: Check-ins appear instantly in feeds when created via
+  app
 - **Address Resolution**: Automatic strongref resolution with caching
 - **Profile Resolution**: Automatic profile data fetching and caching
 - **Spatial Queries**: Nearby check-ins using Haversine distance calculations
 - **Social Integration**: Following feeds leveraging Bluesky's social graph
 - **Performance**: SQLite with proper indexing for fast queries
-- **Error Handling**: Comprehensive error tracking and retry logic
+- **Optimized Architecture**: Direct database saves eliminating ingestion delays
 
 ### Web Interface Features
 
@@ -243,7 +222,7 @@ The project includes comprehensive tests for all components:
 - `address-cache.test.ts` - Address caching and resolution
 - `database.test.ts` - Database operations
 - `spatial.test.ts` - Spatial calculations
-- `jetstream-ingestion.test.ts` - Event ingestion
+- `record-processor.test.ts` - Check-in processing and immediate saves
 
 **Integration Tests**:
 
@@ -302,10 +281,10 @@ deno test --allow-all tests/integration/ # Integration tests only
 
 The AppView is fully compatible with the AT Protocol ecosystem:
 
-- Ingests from Jetstream (official AT Protocol firehose)
-- Resolves DIDs using PLC directory
-- Fetches records via `com.atproto.repo.getRecord`
-- Integrates with Bluesky social graph APIs
+- Creates records via `com.atproto.repo.createRecord` with immediate local saves
+- Resolves DIDs using PLC directory and Slingshot resolver
+- Supports personal PDS servers with automatic DID document resolution
+- Integrates with Bluesky social graph APIs for following feeds
 
 ## 📄 License
 

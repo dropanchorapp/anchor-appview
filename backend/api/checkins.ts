@@ -4,6 +4,7 @@ import { makeDPoPRequest } from "../oauth/dpop.ts";
 import { OverpassService } from "../services/overpass-service.ts";
 import type { Place } from "../models/place-models.ts";
 import { authenticateRequest } from "../middleware/auth-middleware.ts";
+import { processCheckinEvent } from "../ingestion/record-processor.ts";
 
 // Global service instance for address enhancement
 const overpassService = new OverpassService();
@@ -326,6 +327,29 @@ export async function createCheckin(c: Context): Promise<Response> {
 
     const checkinResult = await checkinResponse.response.json();
     console.log(`✅ Created checkin record: ${checkinResult.uri}`);
+
+    // IMMEDIATELY save to local database for instant feed updates
+    try {
+      const rkey = extractRkey(checkinResult.uri);
+      await processCheckinEvent({
+        did: updatedSession.did,
+        time_us: Date.now() * 1000, // Convert to microseconds
+        commit: {
+          rkey: rkey,
+          collection: "app.dropanchor.checkin",
+          operation: "create",
+          record: checkinRecord,
+          cid: checkinResult.cid,
+        },
+      });
+      console.log(`✅ Saved checkin to local database: ${rkey}`);
+    } catch (localSaveError) {
+      console.error(
+        "Failed to save checkin to local database:",
+        localSaveError,
+      );
+      // Don't fail the request - AT Protocol save succeeded, local save can be retried later
+    }
 
     return c.json({
       success: true,

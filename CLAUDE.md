@@ -40,7 +40,7 @@ includes a complete OAuth WebView implementation for mobile app integration.
 
 3. **AppView Data Layer (`backend/api/anchor-api.ts`)** - AT Protocol compliant
    feed system:
-   - Real-time ingestion from Jetstream
+   - Immediate database saves when check-ins are created via app
    - StrongRef address resolution and caching
    - Spatial queries using Haversine distance calculations
    - Social graph integration with Bluesky
@@ -55,7 +55,6 @@ includes a complete OAuth WebView implementation for mobile app integration.
 - **Val Town** - Serverless platform deployment with Deno runtime
 - **SQLite** - Database for check-ins, addresses, social graph, and OAuth
   sessions
-- **Jetstream** - Real-time AT Protocol firehose for data ingestion
 - **Hono** - Lightweight web framework for unified API serving
 - **React 18.2.0** - Frontend dashboard with TypeScript
 
@@ -111,13 +110,14 @@ The project includes several Deno tasks for common development workflows:
 
 ## Key Features
 
-- **Real-time ingestion** via WebSocket polling every 5 minutes
+- **Immediate feed updates** - check-ins appear instantly when created via app
 - **Embedded location data** with coordinates and address details included in
   check-in records
 - **Spatial queries** for nearby check-ins using coordinate-based distance
   calculations
 - **Social feeds** leveraging Bluesky's social graph for personalized content
-- **Duplicate detection** to prevent reprocessing of check-in events
+- **Optimized architecture** with direct database saves eliminating ingestion
+  delays
 
 ## API Endpoints
 
@@ -356,13 +356,12 @@ const objects = rowsToObjects(result.columns, result.rows);
 - **Cron Functions**: Export default async function with no parameters
 - **HTTP Functions**: Export default async function with `(req: Request)`
   parameter
-- **WebSocket**: Use standard WebSocket API for Jetstream connections
 
 ### Error Handling
 
 - Let errors bubble up with full context rather than catching and logging
 - Use comprehensive error tracking in processing logs
-- Include timeout handling for WebSocket connections
+- Handle AT Protocol save failures gracefully with fallback strategies
 
 ### Troubleshooting Common Issues
 
@@ -421,54 +420,17 @@ await sqlite.execute({ sql: "SELECT * FROM users WHERE id = ?", args: [id] });
 }
 ```
 
-#### Jetstream Event Format (real-time ingestion)
+#### Immediate Save Process (app-created check-ins)
 
-```json
-{
-  "did": "did:plc:wxex3wx5k4ctciupsv5m5stb",
-  "time_us": 1751824706067182,
-  "kind": "commit",
-  "commit": {
-    "rev": "3ltctwowylo26",
-    "operation": "create",
-    "collection": "app.dropanchor.checkin",
-    "rkey": "3ltctwowntw26",
-    "record": {
-      "$type": "app.dropanchor.checkin",
-      "addressRef": {
-        "cid": "bafyreibhvynislx7vv52urqpm2vac6oeidvjb74m5pr3dmw3iztbengwbm",
-        "uri": "at://did:plc:wxex3wx5k4ctciupsv5m5stb/community.lexicon.location.address/3ltctwolmqz2o"
-      },
-      "coordinates": {
-        "$type": "community.lexicon.location.geo",
-        "latitude": "52.0742969",
-        "longitude": "4.3468013"
-      },
-      "createdAt": "2025-07-06T17:58:25Z",
-      "text": "And one more which does include the social post as well."
-    },
-    "cid": "bafyreifdepudvenhqnz4rk4j4dvyaaompafnj6r5ixamalpqmjlei2p43y"
-  }
-}
-```
+When a check-in is created via the mobile app:
 
-**CRITICAL**: The DID is at the **top level** in Jetstream events (`event.did`),
-not in `commit.repo`. This is essential for proper data extraction during
-real-time ingestion.
+1. **Create address record** in user's PDS via AT Protocol
+2. **Create check-in record** in user's PDS with StrongRef to address
+3. **Immediately save to local database** using the same processing logic
+4. **Check-in appears instantly** in all feeds without any ingestion delay
 
-### Jetstream Real-time Ingestion Process
-
-1. **Connect to Jetstream** with cursor-based resumption (1-hour lookback)
-2. **Filter events** for `kind: "commit"`,
-   `collection: "app.dropanchor.checkin"`, `operation: "create"`
-3. **Extract data** from Jetstream event structure:
-   - Author DID: `event.did` (top-level field)
-   - Record key: `event.commit.rkey`
-   - Record data: `event.commit.record`
-   - Timestamp: `event.time_us` (for cursor tracking)
-4. **Duplicate detection** using `rkey` as primary key
-5. **Store in database** with proper URI construction:
-   `at://${event.did}/${collection}/${rkey}`
+This eliminates the need for periodic crawling or real-time ingestion systems,
+providing the best user experience with instant feed updates.
 
 ### Address Resolution Process
 
@@ -518,8 +480,8 @@ The system provides complete OAuth authentication for the Anchor iOS app:
   User-Agent
 - **PDS URL resolution**: Resolves user's actual PDS from DID document (supports
   personal PDS servers)
-- **User registration**: Automatically registers authenticated users for PDS
-  crawling
+- **User registration**: Automatically registers authenticated users for session
+  management and immediate check-in processing
 - **Custom URL scheme**: Returns auth data via `anchor-app://auth-callback` with
   all required parameters
 
