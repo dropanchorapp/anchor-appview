@@ -80,12 +80,15 @@ export async function authenticateRequest(
   const { sqlite } = await import("https://esm.town/v/std/sqlite2");
   console.log("🔍 Looking up session by access token...");
 
-  // Let's also check what sessions exist
+  // Check how many sessions exist (for debugging)
   const allSessions = await sqlite.execute({
-    sql: `SELECT did, handle, access_token FROM oauth_sessions LIMIT 3`,
+    sql: `SELECT COUNT(*) as count FROM oauth_sessions`,
     args: [],
   });
-  console.log("📋 Available sessions:", allSessions.rows?.length || 0);
+  console.log(
+    "📋 Total sessions in database:",
+    allSessions.rows?.[0]?.count || 0,
+  );
 
   const result = await sqlite.execute({
     sql:
@@ -102,10 +105,7 @@ export async function authenticateRequest(
       const did = payload.sub; // Standard JWT 'sub' claim contains DID
 
       if (did) {
-        console.log(
-          "🔄 Attempting token refresh for DID:",
-          did.substring(0, 20) + "...",
-        );
+        console.log("🔄 Attempting token refresh for user");
 
         // Get session by DID
         const sessionResult = await sqlite.execute({

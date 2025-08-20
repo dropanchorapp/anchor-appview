@@ -257,7 +257,7 @@ export async function makeDPoPRequest(
       if (errorData.error === "use_dpop_nonce") {
         const nonce = response.headers.get("DPoP-Nonce");
         if (nonce) {
-          console.log(`Retrying ${method} ${url} with DPoP nonce:`, nonce);
+          console.log(`Retrying ${method} ${url} with DPoP nonce`);
 
           const { dpopProof: dpopProofWithNonce } =
             await generateDPoPProofWithKeys(
@@ -520,7 +520,7 @@ export async function exchangeTokenWithDPoP(
       if (errorData.error === "use_dpop_nonce") {
         const nonce = tokenResponse.headers.get("DPoP-Nonce");
         if (nonce) {
-          console.log("🔄 Retrying token exchange with DPoP nonce:", nonce);
+          console.log("🔄 Retrying token exchange with DPoP nonce");
 
           const { dpopProof: dpopProofWithNonce } =
             await generateDPoPProofWithKeys(
