@@ -34,10 +34,16 @@ export async function extractAccessToken(c: Context): Promise<string | null> {
   });
 
   if (!result.rows || result.rows.length === 0) {
+    console.log("❌ No session found for session ID");
     return null;
   }
 
-  return result.rows[0][0] as string;
+  const accessToken = result.rows[0].access_token as string;
+  console.log(
+    "✅ Found access token via session:",
+    accessToken.substring(0, 20) + "...",
+  );
+  return accessToken;
 }
 
 /**
@@ -50,17 +56,37 @@ export async function authenticateRequest(
   const accessToken = await extractAccessToken(c);
 
   if (!accessToken) {
+    console.log("❌ No access token found");
     return null;
   }
+  console.log(
+    "🔍 Authenticating with token:",
+    accessToken.substring(0, 20) + "...",
+  );
 
   // Validate token format (should be a JWT)
   const tokenParts = accessToken.split(".");
   if (tokenParts.length !== 3) {
+    console.log(
+      "❌ Token format invalid - not a JWT:",
+      tokenParts.length,
+      "parts",
+    );
     return null;
   }
+  console.log("✅ Token format valid (3 parts)");
 
   // Find the session associated with this access token
   const { sqlite } = await import("https://esm.town/v/std/sqlite2");
+  console.log("🔍 Looking up session by access token...");
+
+  // Let's also check what sessions exist
+  const allSessions = await sqlite.execute({
+    sql: `SELECT did, handle, access_token FROM oauth_sessions LIMIT 3`,
+    args: [],
+  });
+  console.log("📋 Available sessions:", allSessions.rows?.length || 0);
+
   const result = await sqlite.execute({
     sql:
       `SELECT did, handle, pds_url, access_token, refresh_token, dpop_private_key, dpop_public_key, token_expires_at FROM oauth_sessions WHERE access_token = ?`,
@@ -68,27 +94,86 @@ export async function authenticateRequest(
   });
 
   if (!result.rows || result.rows.length === 0) {
+    console.log("❌ No session found for access token - attempting refresh");
+
+    // Try to refresh the token by extracting DID from JWT
+    try {
+      const payload = JSON.parse(atob(accessToken.split(".")[1]));
+      const did = payload.sub; // Standard JWT 'sub' claim contains DID
+
+      if (did) {
+        console.log(
+          "🔄 Attempting token refresh for DID:",
+          did.substring(0, 20) + "...",
+        );
+
+        // Get session by DID
+        const sessionResult = await sqlite.execute({
+          sql: `SELECT * FROM oauth_sessions WHERE did = ?`,
+          args: [did],
+        });
+
+        if (sessionResult.rows && sessionResult.rows.length > 0) {
+          const sessionRow = sessionResult.rows[0];
+          const sessionData = {
+            did: sessionRow.did as string,
+            handle: sessionRow.handle as string,
+            pdsUrl: sessionRow.pds_url as string,
+            accessToken: sessionRow.access_token as string,
+            refreshToken: sessionRow.refresh_token as string,
+            dpopPrivateKey: sessionRow.dpop_private_key as string,
+            dpopPublicKey: sessionRow.dpop_public_key as string,
+            tokenExpiresAt: sessionRow.token_expires_at as number,
+          };
+
+          // Attempt token refresh
+          const { refreshOAuthToken } = await import("../oauth/dpop.ts");
+          const refreshedSession = await refreshOAuthToken(sessionData);
+
+          if (refreshedSession) {
+            console.log("✅ Token refresh successful");
+            return {
+              session: refreshedSession,
+              accessToken: refreshedSession.accessToken,
+            };
+          }
+        }
+      }
+    } catch (refreshError) {
+      console.log("❌ Token refresh failed:", refreshError.message);
+    }
+
     return null;
   }
+  console.log("✅ Found session for token");
 
-  // Convert row to object with explicit column mapping
+  // Convert row to object using sqlite2 object properties
   const sessionRow = result.rows[0];
   const session: OAuthSession = {
-    did: sessionRow[0] as string,
-    handle: sessionRow[1] as string,
-    pdsUrl: sessionRow[2] as string,
-    accessToken: sessionRow[3] as string,
-    refreshToken: sessionRow[4] as string,
-    dpopPrivateKey: sessionRow[5] as string,
-    dpopPublicKey: sessionRow[6] as string,
-    tokenExpiresAt: sessionRow[7] as number,
+    did: sessionRow.did as string,
+    handle: sessionRow.handle as string,
+    pdsUrl: sessionRow.pds_url as string,
+    accessToken: sessionRow.access_token as string,
+    refreshToken: sessionRow.refresh_token as string,
+    dpopPrivateKey: sessionRow.dpop_private_key as string,
+    dpopPublicKey: sessionRow.dpop_public_key as string,
+    tokenExpiresAt: sessionRow.token_expires_at as number,
   };
 
   // Check if token is expired
+  console.log(
+    "🔍 Checking token expiration:",
+    Date.now(),
+    "vs",
+    session.tokenExpiresAt,
+  );
   if (Date.now() > session.tokenExpiresAt) {
+    console.log("❌ Token expired!");
     return null;
   }
+  console.log("✅ Token not expired");
 
+  console.log("✅ Authentication successful");
   return { session, accessToken };
 }
 
