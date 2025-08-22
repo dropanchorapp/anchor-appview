@@ -34,6 +34,29 @@ export function MobileAuth() {
     };
   }, []);
 
+  // Generate PKCE parameters for secure OAuth flow
+  const generatePKCE = async () => {
+    // Generate code verifier (128 characters, URL-safe)
+    const array = new Uint8Array(96);
+    crypto.getRandomValues(array);
+    const codeVerifier = btoa(String.fromCharCode(...array))
+      .replace(/\+/g, "-")
+      .replace(/\//g, "_")
+      .replace(/=/g, "");
+
+    // Generate code challenge (SHA256 hash of verifier)
+    const encoder = new TextEncoder();
+    const data = encoder.encode(codeVerifier);
+    const hashBuffer = await crypto.subtle.digest("SHA-256", data);
+    const hashArray = Array.from(new Uint8Array(hashBuffer));
+    const codeChallenge = btoa(String.fromCharCode(...hashArray))
+      .replace(/\+/g, "-")
+      .replace(/\//g, "_")
+      .replace(/=/g, "");
+
+    return { codeVerifier, codeChallenge };
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
@@ -46,12 +69,21 @@ export function MobileAuth() {
     setLoading(true);
 
     try {
+      // Generate PKCE parameters for this OAuth flow
+      const { codeVerifier, codeChallenge } = await generatePKCE();
+
+      // Store code verifier for later use (in sessionStorage for this tab)
+      sessionStorage.setItem("pkce_code_verifier", codeVerifier);
+
       const response = await fetch("/api/auth/mobile-start", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({ handle: handle.trim() }),
+        body: JSON.stringify({
+          handle: handle.trim(),
+          code_challenge: codeChallenge,
+        }),
       });
 
       if (!response.ok) {
