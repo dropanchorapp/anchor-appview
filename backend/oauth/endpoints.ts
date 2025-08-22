@@ -823,6 +823,77 @@ export async function handleMobileOAuthCallback(
   }
 }
 
+// Mobile session retrieval endpoint - get credentials by session ID (for completed sessions)
+export async function handleMobileSessionRetrieval(
+  request: Request,
+): Promise<Response> {
+  try {
+    const { sessionId } = await request.json();
+
+    if (!sessionId) {
+      return new Response(
+        JSON.stringify({ error: "sessionId is required" }),
+        {
+          status: 400,
+          headers: { "Content-Type": "application/json" },
+        },
+      );
+    }
+
+    console.log(`🔄 Mobile session retrieval for session: ${sessionId}`);
+
+    // Get completed session
+    const sessionResult = await sqlite.execute({
+      sql:
+        `SELECT * FROM oauth_sessions WHERE session_id = ? AND access_token != 'PENDING' AND access_token != 'WEB_PENDING'`,
+      args: [sessionId],
+    });
+
+    if (!sessionResult.rows || sessionResult.rows.length === 0) {
+      console.error("No completed session found for session ID:", sessionId);
+      return new Response(
+        JSON.stringify({ error: "Invalid or incomplete session ID" }),
+        {
+          status: 400,
+          headers: { "Content-Type": "application/json" },
+        },
+      );
+    }
+
+    const sessionRow = sessionResult.rows[0];
+    const handle = sessionRow.handle as string;
+    const did = sessionRow.did as string;
+    const accessToken = sessionRow.access_token as string;
+    const refreshToken = sessionRow.refresh_token as string;
+    const pdsUrl = sessionRow.pds_url as string;
+
+    console.log(`✅ Mobile session retrieved for @${handle}`);
+
+    return new Response(
+      JSON.stringify({
+        handle,
+        did,
+        accessToken,
+        refreshToken,
+        pdsUrl,
+      }),
+      {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      },
+    );
+  } catch (error) {
+    console.error("Mobile session retrieval error:", error);
+    return new Response(
+      JSON.stringify({ error: "Session retrieval failed" }),
+      {
+        status: 500,
+        headers: { "Content-Type": "application/json" },
+      },
+    );
+  }
+}
+
 // Mobile token exchange endpoint - exchange session ID for tokens with PKCE validation
 export async function handleMobileTokenExchange(
   request: Request,

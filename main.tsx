@@ -13,6 +13,7 @@ import {
   handleClientMetadata,
   handleMobileOAuthCallback,
   handleMobileOAuthStart,
+  handleMobileSessionRetrieval,
   handleMobileTokenExchange,
   handleOAuthCallback,
   handleOAuthStart,
@@ -74,6 +75,15 @@ app.get("/oauth/mobile-callback", async (c) => {
 // Mobile token exchange endpoint
 app.post("/api/auth/exchange", async (c) => {
   const response = await handleMobileTokenExchange(c.req.raw);
+  return new Response(response.body, {
+    status: response.status,
+    headers: Object.fromEntries(response.headers.entries()),
+  });
+});
+
+// Mobile session retrieval endpoint
+app.post("/api/auth/session", async (c) => {
+  const response = await handleMobileSessionRetrieval(c.req.raw);
   return new Response(response.body, {
     status: response.status,
     headers: Object.fromEntries(response.headers.entries()),
