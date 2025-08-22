@@ -2,11 +2,11 @@
 import { exportJWK, generateKeyPair } from "https://esm.sh/jose@5.2.0";
 import { sqlite } from "https://esm.town/v/std/sqlite2";
 import { generatePKCE } from "./dpop.ts";
-import { storeOAuthSession } from "./session.ts";
 import { OAUTH_CONFIG } from "./config.ts";
 import { BlueskyProfileFetcher } from "../utils/profile-resolver.ts";
 import { setupOAuthWithSlingshot } from "./slingshot-resolver.ts";
-import type { OAuthSession, OAuthStateData } from "./types.ts";
+import { cleanupExpiredOAuthSessions } from "./session-cleanup.ts";
+import type { OAuthStateData } from "./types.ts";
 
 // OAuth client metadata endpoint
 export function handleClientMetadata(): Response {
@@ -42,6 +42,9 @@ export function handleClientMetadata(): Response {
 // Web OAuth start endpoint - initiates OAuth flow for web dashboard
 export async function handleOAuthStart(request: Request): Promise<Response> {
   try {
+    // Cleanup expired sessions periodically
+    await cleanupExpiredOAuthSessions();
+
     const { handle: rawHandle } = await request.json();
 
     if (!rawHandle) {
@@ -75,15 +78,39 @@ export async function handleOAuthStart(request: Request): Promise<Response> {
     const { codeVerifier, codeChallenge, codeChallengeMethod } =
       await generatePKCE();
 
-    // Encode state data for serverless compatibility
+    // For web OAuth, store codeVerifier securely in database with session ID
+    const webSessionId = crypto.randomUUID();
+
+    // Store web session securely for OAuth callback
+    await sqlite.execute({
+      sql: `INSERT OR REPLACE INTO oauth_sessions 
+        (did, handle, pds_url, access_token, refresh_token, dpop_private_key, dpop_public_key, 
+         token_expires_at, session_id, created_at, updated_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      args: [
+        oauthSetup.did,
+        oauthSetup.handle,
+        oauthSetup.pdsEndpoint,
+        "WEB_PENDING",
+        "WEB_PENDING",
+        codeVerifier, // Securely store web's PKCE verifier in database
+        "WEB_PENDING",
+        0,
+        webSessionId,
+        Date.now(),
+        Date.now(),
+      ],
+    });
+
+    // Encode secure state data with session ID reference (no sensitive data!)
     const stateData: OAuthStateData = {
-      codeVerifier,
       handle: oauthSetup.handle,
       did: oauthSetup.did,
       pdsEndpoint: oauthSetup.pdsEndpoint,
       authorizationEndpoint: oauthSetup.authorizationEndpoint,
       tokenEndpoint: oauthSetup.tokenEndpoint,
       timestamp: Date.now(),
+      sessionId: webSessionId, // Include session ID for web callback lookup
     };
 
     const state = btoa(JSON.stringify(stateData));
@@ -115,12 +142,15 @@ export async function handleOAuthStart(request: Request): Promise<Response> {
   }
 }
 
-// Mobile OAuth start endpoint - initiates OAuth flow for mobile apps
+// Mobile OAuth start endpoint - initiates OAuth flow for mobile apps with PKCE security
 export async function handleMobileOAuthStart(
   request: Request,
 ): Promise<Response> {
   try {
-    const { handle: rawHandle } = await request.json();
+    // Cleanup expired sessions periodically
+    await cleanupExpiredOAuthSessions();
+
+    const { handle: rawHandle, code_challenge } = await request.json();
 
     if (!rawHandle) {
       return new Response(JSON.stringify({ error: "Handle is required" }), {
@@ -129,24 +159,64 @@ export async function handleMobileOAuthStart(
       });
     }
 
-    console.log(`🔄 Starting mobile OAuth for handle: ${rawHandle}`);
+    if (!code_challenge) {
+      return new Response(
+        JSON.stringify({
+          error: "code_challenge is required for mobile PKCE security",
+        }),
+        {
+          status: 400,
+          headers: { "Content-Type": "application/json" },
+        },
+      );
+    }
+
+    console.log(`🔄 Starting secure mobile OAuth for handle: ${rawHandle}`);
 
     // Use simplified Slingshot OAuth setup
     const oauthSetup = await setupOAuthWithSlingshot(rawHandle);
 
-    // Generate PKCE parameters
-    const { codeVerifier, codeChallenge, codeChallengeMethod } =
-      await generatePKCE();
-
-    // Encode state data for serverless compatibility
-    const stateData: OAuthStateData = {
+    // Generate PKCE parameters for server-side OAuth flow
+    const {
       codeVerifier,
+      codeChallenge: serverCodeChallenge,
+      codeChallengeMethod,
+    } = await generatePKCE();
+
+    // Create unique session ID for this OAuth flow
+    const sessionId = crypto.randomUUID();
+
+    // Store mobile PKCE challenge and server PKCE verifier in database for later validation
+    await sqlite.execute({
+      sql: `INSERT OR REPLACE INTO oauth_sessions 
+        (did, handle, pds_url, access_token, refresh_token, dpop_private_key, dpop_public_key, 
+         token_expires_at, session_id, mobile_code_challenge, created_at, updated_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      args: [
+        oauthSetup.did,
+        oauthSetup.handle,
+        oauthSetup.pdsEndpoint,
+        "PENDING", // Placeholder until token exchange
+        "PENDING", // Placeholder until token exchange
+        codeVerifier, // Store server's PKCE verifier for OAuth provider exchange
+        "PENDING", // Placeholder until token exchange
+        0, // Will be updated during token exchange
+        sessionId,
+        code_challenge, // Store mobile app's PKCE challenge for mobile validation
+        Date.now(),
+        Date.now(),
+      ],
+    });
+
+    // Encode secure state data (no sensitive codeVerifier!)
+    const stateData: OAuthStateData = {
       handle: oauthSetup.handle,
       did: oauthSetup.did,
       pdsEndpoint: oauthSetup.pdsEndpoint,
       authorizationEndpoint: oauthSetup.authorizationEndpoint,
       tokenEndpoint: oauthSetup.tokenEndpoint,
       timestamp: Date.now(),
+      sessionId: sessionId, // Include session ID for mobile callback lookup
     };
 
     const state = btoa(JSON.stringify(stateData));
@@ -161,17 +231,20 @@ export async function handleMobileOAuthStart(
     );
     authUrl.searchParams.set("scope", "atproto transition:generic");
     authUrl.searchParams.set("state", state);
-    authUrl.searchParams.set("code_challenge", codeChallenge);
+    authUrl.searchParams.set("code_challenge", serverCodeChallenge); // Server's PKCE challenge
     authUrl.searchParams.set("code_challenge_method", codeChallengeMethod);
     authUrl.searchParams.set("login_hint", oauthSetup.handle);
 
-    console.log(`🔗 Mobile OAuth URL generated for ${oauthSetup.handle}`);
+    console.log(
+      `🔗 Secure mobile OAuth URL generated for ${oauthSetup.handle}`,
+    );
 
     return new Response(
       JSON.stringify({
         authUrl: authUrl.toString(),
         handle: oauthSetup.handle,
         did: oauthSetup.did,
+        session_id: sessionId, // Return session ID for mobile app to use in exchange
       }),
       {
         status: 200,
@@ -291,7 +364,63 @@ export async function handleOAuthCallback(request: Request): Promise<Response> {
       );
     }
 
-    const { codeVerifier, handle, did, pdsEndpoint, tokenEndpoint } = stateData;
+    const { handle, did, pdsEndpoint, tokenEndpoint } = stateData;
+    const webSessionId = stateData.sessionId;
+
+    if (!webSessionId) {
+      console.error("No session ID found in state for web OAuth");
+      return new Response(
+        `
+        <!DOCTYPE html>
+        <html>
+          <head><title>OAuth Error</title></head>
+          <body>
+            <h1>OAuth Error</h1>
+            <p>Invalid OAuth state - missing session ID</p>
+            <a href="/">Return to Dashboard</a>
+          </body>
+        </html>
+      `,
+        {
+          status: 400,
+          headers: { "Content-Type": "text/html" },
+        },
+      );
+    }
+
+    // Get stored web session and code verifier using session ID for better security
+    const webSessionResult = await sqlite.execute({
+      sql:
+        `SELECT dpop_private_key AS web_code_verifier FROM oauth_sessions WHERE session_id = ? AND access_token = 'WEB_PENDING'`,
+      args: [webSessionId],
+    });
+
+    if (!webSessionResult.rows || webSessionResult.rows.length === 0) {
+      console.error(
+        "No pending web session found for session ID:",
+        webSessionId,
+      );
+      return new Response(
+        `
+        <!DOCTYPE html>
+        <html>
+          <head><title>OAuth Error</title></head>
+          <body>
+            <h1>OAuth Error</h1>
+            <p>Web session not found or expired</p>
+            <a href="/">Return to Dashboard</a>
+          </body>
+        </html>
+      `,
+        {
+          status: 400,
+          headers: { "Content-Type": "text/html" },
+        },
+      );
+    }
+
+    const webCodeVerifier = webSessionResult.rows[0]
+      .web_code_verifier as string;
 
     // CRITICAL: Generate extractable DPoP key pair for this session
     const { privateKey: sessionPrivateKey, publicKey: sessionPublicKey } =
@@ -303,7 +432,7 @@ export async function handleOAuthCallback(request: Request): Promise<Response> {
       code,
       redirect_uri: OAUTH_CONFIG.REDIRECT_URI,
       client_id: OAUTH_CONFIG.CLIENT_ID,
-      code_verifier: codeVerifier,
+      code_verifier: webCodeVerifier,
     });
 
     // Exchange tokens using reusable DPoP function
@@ -363,20 +492,22 @@ export async function handleOAuthCallback(request: Request): Promise<Response> {
       ? Date.now() + (tokens.expires_in * 1000)
       : Date.now() + (2 * 60 * 60 * 1000); // 2 hours default
 
-    // Store session data with DPoP keys
-    const sessionData: OAuthSession = {
-      did,
-      handle,
-      pdsUrl: pdsEndpoint,
-      accessToken: tokens.access_token,
-      refreshToken: tokens.refresh_token,
-      dpopPrivateKey: privateKeyJWK,
-      dpopPublicKey: publicKeyJWK,
-      tokenExpiresAt,
-    };
-
-    // Store the session in SQLite
-    await storeOAuthSession(sessionData);
+    // Update the temporary web session with actual tokens
+    await sqlite.execute({
+      sql: `UPDATE oauth_sessions 
+        SET access_token = ?, refresh_token = ?, dpop_private_key = ?, dpop_public_key = ?, 
+            token_expires_at = ?, updated_at = ?
+        WHERE session_id = ? AND access_token = 'WEB_PENDING'`,
+      args: [
+        tokens.access_token,
+        tokens.refresh_token,
+        privateKeyJWK,
+        publicKeyJWK,
+        tokenExpiresAt,
+        Date.now(),
+        webSessionId,
+      ],
+    });
 
     console.log(`Session stored successfully for DID: ${did}`);
 
@@ -458,91 +589,114 @@ export async function handleOAuthCallback(request: Request): Promise<Response> {
   }
 }
 
-// Mobile OAuth callback handler - completes token exchange and redirects to mobile app
-export function handleMobileOAuthCallback(
+// Mobile OAuth callback handler - securely stores OAuth tokens and returns session ID to mobile app
+export async function handleMobileOAuthCallback(
   request: Request,
-): Response {
+): Promise<Response> {
   const url = new URL(request.url);
   const code = url.searchParams.get("code");
   const state = url.searchParams.get("state");
+  const error = url.searchParams.get("error");
+  const errorDescription = url.searchParams.get("error_description");
 
-  if (!code || !state) {
-    return new Response(
-      JSON.stringify({ error: "Missing authorization code or state" }),
-      {
-        status: 400,
-        headers: { "Content-Type": "application/json" },
-      },
+  // Handle OAuth errors
+  if (error) {
+    console.error("Mobile OAuth error:", error, errorDescription);
+    const redirectUrl = new URL("anchor-app://auth-callback");
+    redirectUrl.searchParams.set("error", error);
+    redirectUrl.searchParams.set(
+      "error_description",
+      errorDescription || "Unknown OAuth error",
     );
+
+    const html = `
+      <!DOCTYPE html>
+      <html>
+        <head>
+          <title>Authentication Failed</title>
+          <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        </head>
+        <body>
+          <div style="text-align: center; padding: 40px; font-family: system-ui;">
+            <h1>❌ Authentication Failed</h1>
+            <p>Error: ${error}</p>
+            <p>Redirecting to the Anchor app...</p>
+            <script>
+              window.location.href = "${redirectUrl.toString()}";
+            </script>
+          </div>
+        </body>
+      </html>
+    `;
+
+    return new Response(html, {
+      status: 200,
+      headers: { "Content-Type": "text/html" },
+    });
   }
 
-  // Success - return authorization code to mobile app for client-side token exchange
-  const redirectUrl = new URL("anchor-app://auth-callback");
-  redirectUrl.searchParams.set("code", code);
-  redirectUrl.searchParams.set("state", state);
+  if (!code || !state) {
+    const redirectUrl = new URL("anchor-app://auth-callback");
+    redirectUrl.searchParams.set("error", "invalid_request");
+    redirectUrl.searchParams.set(
+      "error_description",
+      "Missing authorization code or state",
+    );
 
-  const html = `
-    <!DOCTYPE html>
-    <html>
-      <head>
-        <title>Authentication Successful</title>
-        <meta name="viewport" content="width=device-width, initial-scale=1.0">
-      </head>
-      <body>
-        <div style="text-align: center; padding: 40px; font-family: system-ui;">
-          <h1>🎉 Authentication Successful!</h1>
-          <p>Redirecting to the Anchor app...</p>
-          <p>If the app doesn't open automatically, you can close this window.</p>
-          <script>
-            // Redirect to mobile app with authorization code
-            window.location.href = "${redirectUrl.toString()}";
-          </script>
-        </div>
-      </body>
-    </html>
-  `;
+    const html = `
+      <!DOCTYPE html>
+      <html>
+        <head>
+          <title>Authentication Failed</title>
+          <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        </head>
+        <body>
+          <div style="text-align: center; padding: 40px; font-family: system-ui;">
+            <h1>❌ Authentication Failed</h1>
+            <p>Missing authorization code or state</p>
+            <p>Redirecting to the Anchor app...</p>
+            <script>
+              window.location.href = "${redirectUrl.toString()}";
+            </script>
+          </div>
+        </body>
+      </html>
+    `;
 
-  return new Response(html, {
-    status: 200,
-    headers: { "Content-Type": "text/html" },
-  });
-}
+    return new Response(html, {
+      status: 200,
+      headers: { "Content-Type": "text/html" },
+    });
+  }
 
-// Mobile token exchange endpoint - exchange authorization code for tokens
-export async function handleMobileTokenExchange(
-  request: Request,
-): Promise<Response> {
   try {
-    const { code, state } = await request.json();
-
-    if (!code || !state) {
-      return new Response(
-        JSON.stringify({ error: "Authorization code and state are required" }),
-        {
-          status: 400,
-          headers: { "Content-Type": "application/json" },
-        },
-      );
-    }
-
     // Decode state data
     let stateData: OAuthStateData;
     try {
       stateData = JSON.parse(atob(state));
     } catch (parseError) {
       console.error("Failed to parse OAuth state:", parseError);
-      return new Response(
-        JSON.stringify({ error: "Invalid OAuth state" }),
-        {
-          status: 400,
-          headers: { "Content-Type": "application/json" },
-        },
-      );
+      throw new Error("Invalid OAuth state");
     }
 
-    const { codeVerifier, handle, did, pdsEndpoint, tokenEndpoint } = stateData;
+    const { handle, tokenEndpoint, sessionId } = stateData;
 
-    // Generate DPoP key pair for this session
+    // Find session by session ID to get mobile PKCE challenge and server code verifier
+    const sessionResult = await sqlite.execute({
+      sql:
+        `SELECT session_id, mobile_code_challenge, dpop_private_key AS server_code_verifier FROM oauth_sessions WHERE session_id = ? AND access_token = 'PENDING'`,
+      args: [sessionId],
+    });
+
+    if (!sessionResult.rows || sessionResult.rows.length === 0) {
+      console.error("No pending session found for session ID:", sessionId);
+      throw new Error("Session not found");
+    }
+
+    const sessionRow = sessionResult.rows[0];
+    const serverCodeVerifier = sessionRow.server_code_verifier as string;
+
+    // Generate DPoP key pair for token exchange
     const { privateKey, publicKey } = await generateKeyPair("ES256", {
       extractable: true,
     });
@@ -551,13 +705,13 @@ export async function handleMobileTokenExchange(
     );
     const publicKeyJWK = JSON.stringify(await exportJWK(publicKey));
 
-    // Exchange authorization code for tokens using reusable DPoP function
+    // Exchange authorization code for tokens using stored server PKCE verifier
     const requestBody = new URLSearchParams({
       grant_type: "authorization_code",
       code,
       redirect_uri: `${OAUTH_CONFIG.BASE_URL}/oauth/mobile-callback`,
       client_id: OAUTH_CONFIG.CLIENT_ID,
-      code_verifier: codeVerifier,
+      code_verifier: serverCodeVerifier, // Use stored server PKCE verifier
     });
 
     const { exchangeTokenWithDPoP } = await import("./dpop.ts");
@@ -571,13 +725,7 @@ export async function handleMobileTokenExchange(
     if (!tokenResponse.ok) {
       const errorText = await tokenResponse.text();
       console.error("Token exchange failed:", errorText);
-      return new Response(
-        JSON.stringify({ error: "Token exchange failed" }),
-        {
-          status: 400,
-          headers: { "Content-Type": "application/json" },
-        },
-      );
+      throw new Error("Token exchange failed");
     }
 
     const tokens = await tokenResponse.json();
@@ -587,72 +735,226 @@ export async function handleMobileTokenExchange(
       ? Date.now() + (tokens.expires_in * 1000)
       : Date.now() + (2 * 60 * 60 * 1000); // 2 hours default
 
-    // Store session data with DPoP keys
-    const sessionData: OAuthSession = {
-      did,
-      handle,
-      pdsUrl: pdsEndpoint,
-      accessToken: tokens.access_token,
-      refreshToken: tokens.refresh_token,
-      dpopPrivateKey: privateKeyJWK,
-      dpopPublicKey: publicKeyJWK,
-      tokenExpiresAt,
-    };
+    // Update session with actual tokens
+    await sqlite.execute({
+      sql: `UPDATE oauth_sessions 
+        SET access_token = ?, refresh_token = ?, dpop_private_key = ?, dpop_public_key = ?, 
+            token_expires_at = ?, updated_at = ?
+        WHERE session_id = ?`,
+      args: [
+        tokens.access_token,
+        tokens.refresh_token,
+        privateKeyJWK,
+        publicKeyJWK,
+        tokenExpiresAt,
+        Date.now(),
+        sessionId,
+      ],
+    });
 
-    // Store the session in SQLite
-    await storeOAuthSession(sessionData);
+    console.log(
+      `🔄 Mobile OAuth callback completed for ${handle}, session: ${sessionId}`,
+    );
 
-    console.log(`Mobile session stored successfully for DID: ${did}`);
+    // Redirect to mobile app with session ID (NOT the OAuth code)
+    const redirectUrl = new URL("anchor-app://auth-callback");
+    redirectUrl.searchParams.set("code", sessionId); // This is now the session ID, not OAuth code
+    redirectUrl.searchParams.set("state", state);
+
+    const html = `
+      <!DOCTYPE html>
+      <html>
+        <head>
+          <title>Authentication Successful</title>
+          <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        </head>
+        <body>
+          <div style="text-align: center; padding: 40px; font-family: system-ui;">
+            <h1>🎉 Authentication Successful!</h1>
+            <p>Redirecting to the Anchor app...</p>
+            <p>If the app doesn't open automatically, you can close this window.</p>
+            <script>
+              // Redirect to mobile app with session ID
+              window.location.href = "${redirectUrl.toString()}";
+            </script>
+          </div>
+        </body>
+      </html>
+    `;
+
+    return new Response(html, {
+      status: 200,
+      headers: { "Content-Type": "text/html" },
+    });
+  } catch (error) {
+    console.error("Mobile OAuth callback error:", error);
+
+    const redirectUrl = new URL("anchor-app://auth-callback");
+    redirectUrl.searchParams.set("error", "server_error");
+    redirectUrl.searchParams.set(
+      "error_description",
+      error instanceof Error ? error.message : "OAuth callback failed",
+    );
+
+    const html = `
+      <!DOCTYPE html>
+      <html>
+        <head>
+          <title>Authentication Failed</title>
+          <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        </head>
+        <body>
+          <div style="text-align: center; padding: 40px; font-family: system-ui;">
+            <h1>❌ Authentication Failed</h1>
+            <p>OAuth callback failed</p>
+            <p>Redirecting to the Anchor app...</p>
+            <script>
+              window.location.href = "${redirectUrl.toString()}";
+            </script>
+          </div>
+        </body>
+      </html>
+    `;
+
+    return new Response(html, {
+      status: 200,
+      headers: { "Content-Type": "text/html" },
+    });
+  }
+}
+
+// Mobile token exchange endpoint - exchange session ID for tokens with PKCE validation
+export async function handleMobileTokenExchange(
+  request: Request,
+): Promise<Response> {
+  try {
+    const { code: sessionId, code_verifier } = await request.json();
+
+    if (!sessionId || !code_verifier) {
+      return new Response(
+        JSON.stringify({ error: "session_id and code_verifier are required" }),
+        {
+          status: 400,
+          headers: { "Content-Type": "application/json" },
+        },
+      );
+    }
+
+    console.log(`🔄 Mobile token exchange for session: ${sessionId}`);
+
+    // Get session with stored mobile PKCE challenge
+    const sessionResult = await sqlite.execute({
+      sql:
+        `SELECT * FROM oauth_sessions WHERE session_id = ? AND access_token != 'PENDING'`,
+      args: [sessionId],
+    });
+
+    if (!sessionResult.rows || sessionResult.rows.length === 0) {
+      console.error("No completed session found for session ID:", sessionId);
+      return new Response(
+        JSON.stringify({ error: "Invalid session ID" }),
+        {
+          status: 400,
+          headers: { "Content-Type": "application/json" },
+        },
+      );
+    }
+
+    const sessionRow = sessionResult.rows[0];
+    const storedMobileChallenge = sessionRow.mobile_code_challenge as string;
+
+    if (!storedMobileChallenge) {
+      console.error("No mobile PKCE challenge stored for session:", sessionId);
+      return new Response(
+        JSON.stringify({ error: "Session missing PKCE challenge" }),
+        {
+          status: 400,
+          headers: { "Content-Type": "application/json" },
+        },
+      );
+    }
+
+    // Validate mobile PKCE: SHA256(code_verifier) should equal stored code_challenge
+    const encoder = new TextEncoder();
+    const data = encoder.encode(code_verifier);
+    const hashBuffer = await crypto.subtle.digest("SHA-256", data);
+    const hashArray = Array.from(new Uint8Array(hashBuffer));
+    const computedChallenge = btoa(String.fromCharCode(...hashArray))
+      .replace(/\+/g, "-")
+      .replace(/\//g, "_")
+      .replace(/=/g, "");
+
+    if (computedChallenge !== storedMobileChallenge) {
+      console.error("Mobile PKCE validation failed for session:", sessionId);
+      return new Response(
+        JSON.stringify({ error: "Invalid code_verifier" }),
+        {
+          status: 400,
+          headers: { "Content-Type": "application/json" },
+        },
+      );
+    }
+
+    console.log(
+      `✅ Mobile PKCE validation successful for session: ${sessionId}`,
+    );
+
+    // Get user profile for mobile response
+    const profileFetcher = new BlueskyProfileFetcher();
+    const profile = await profileFetcher.fetchProfile(sessionRow.did as string);
+
+    // Update profile info in database
+    await sqlite.execute({
+      sql:
+        `UPDATE oauth_sessions SET display_name = ?, avatar_url = ?, updated_at = ? WHERE session_id = ?`,
+      args: [
+        profile?.displayName || null,
+        profile?.avatar || null,
+        Date.now(),
+        sessionId,
+      ],
+    });
 
     // Register user for PDS crawling
     try {
       const { registerUser } = await import("../database/user-tracking.ts");
-      await registerUser(did, handle, pdsEndpoint);
-      console.log(`📝 Registered mobile user ${handle} for PDS crawling`);
+      await registerUser(
+        sessionRow.did as string,
+        sessionRow.handle as string,
+        sessionRow.pds_url as string,
+      );
+      console.log(
+        `📝 Registered mobile user ${sessionRow.handle} for PDS crawling`,
+      );
     } catch (registrationError) {
       console.error(
-        `Failed to register user ${handle}:`,
+        `Failed to register user ${sessionRow.handle}:`,
         registrationError,
       );
     }
 
-    // Get user profile for mobile response
-    const profileFetcher = new BlueskyProfileFetcher();
-    const profile = await profileFetcher.fetchProfile(did);
-
-    // Create session ID for mobile app
-    const sessionId = crypto.randomUUID();
-
-    // Store session ID and profile info in database for API authentication
-    await sqlite.execute({
-      sql:
-        `UPDATE oauth_sessions SET session_id = ?, display_name = ?, avatar_url = ? WHERE did = ?`,
-      args: [
-        sessionId,
-        profile?.displayName || null,
-        profile?.avatar || null,
-        did,
-      ],
-    });
-
     // Return complete authentication data following OAuth 2.1 spec
     const authResponse = {
-      access_token: tokens.access_token,
-      refresh_token: tokens.refresh_token,
-      expires_in: tokens.expires_in || 7200, // OAuth 2.1 standard: lifetime in seconds
+      access_token: sessionRow.access_token as string,
+      refresh_token: sessionRow.refresh_token as string,
+      expires_in: Math.floor(
+        ((sessionRow.token_expires_at as number) - Date.now()) / 1000,
+      ), // Seconds until expiration
       token_type: "Bearer",
       scope: "atproto transition:generic",
       // User info
-      did,
-      handle,
-      pds_url: pdsEndpoint,
+      did: sessionRow.did as string,
+      handle: sessionRow.handle as string,
+      pds_url: sessionRow.pds_url as string,
       session_id: sessionId,
       // Optional profile data
       ...(profile?.displayName && { display_name: profile.displayName }),
       ...(profile?.avatar && { avatar: profile.avatar }),
     };
 
-    console.log(`🔄 Mobile token exchange successful for ${handle}`);
+    console.log(
+      `🔄 Secure mobile token exchange successful for ${sessionRow.handle}`,
+    );
 
     return new Response(JSON.stringify(authResponse), {
       status: 200,

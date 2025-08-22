@@ -345,6 +345,18 @@ const MIGRATIONS = [
       CREATE INDEX IF NOT EXISTS idx_user_pdses_last_crawled ON user_pdses(last_crawled_at);
     `,
   },
+  {
+    version: "011_add_mobile_pkce_security",
+    description:
+      "Add mobile_code_challenge column for PKCE security in mobile OAuth flow",
+    sql: `
+      -- Add mobile_code_challenge column to oauth_sessions table for PKCE security
+      ALTER TABLE oauth_sessions ADD COLUMN mobile_code_challenge TEXT;
+      
+      -- Create index for efficient lookup during token exchange
+      CREATE INDEX IF NOT EXISTS idx_oauth_sessions_mobile_challenge ON oauth_sessions(mobile_code_challenge);
+    `,
+  },
 ];
 
 export async function runMigrations() {

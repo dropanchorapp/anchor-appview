@@ -18,13 +18,13 @@ export interface PKCEParams {
 }
 
 export interface OAuthStateData {
-  codeVerifier: string;
   handle: string;
   did: string;
   pdsEndpoint: string;
   authorizationEndpoint: string;
   tokenEndpoint: string;
   timestamp: number;
+  sessionId: string; // Session ID for secure OAuth lookup
 }
 
 export interface DPoPProofParams {

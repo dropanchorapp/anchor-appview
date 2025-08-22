@@ -17,6 +17,7 @@ import {
   handleOAuthCallback,
   handleOAuthStart,
 } from "./backend/oauth/endpoints.ts";
+import { getOAuthSessionStats } from "./backend/oauth/session-cleanup.ts";
 import anchorApiHandler from "./backend/api/anchor-api.ts";
 
 const app = new Hono();
@@ -290,6 +291,19 @@ app.all("/api/checkin/*", (c) => anchorApiHandler(c.req.raw));
 // Dashboard API Routes (for React frontend)
 // ========================================
 // Removed duplicate /api/feed endpoint - web and mobile both use /api/global
+
+app.get("/api/admin/oauth-stats", async (c) => {
+  try {
+    const stats = await getOAuthSessionStats();
+    return c.json({
+      success: true,
+      oauth_sessions: stats,
+    });
+  } catch (error) {
+    console.error("OAuth stats error:", error);
+    return c.json({ success: false, error: error.message }, 500);
+  }
+});
 
 app.get("/api/admin/stats", async (c) => {
   try {
