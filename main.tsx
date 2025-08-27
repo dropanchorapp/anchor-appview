@@ -4,21 +4,10 @@ import { Hono } from "https://esm.sh/hono";
 import { serveFile } from "https://esm.town/v/std/utils@85-main/index.ts";
 import { initializeTables } from "./backend/database/db.ts";
 import {
-  deleteOAuthSession,
   getDashboardStats,
   getSessionBySessionId as _getSessionBySessionId,
 } from "./backend/database/queries.ts";
-import { getStoredSession as _getStoredSession } from "./backend/oauth/session.ts";
-import {
-  handleClientMetadata,
-  handleMobileOAuthCallback,
-  handleMobileOAuthStart,
-  handleMobileSessionRetrieval,
-  handleMobileTokenExchange,
-  handleOAuthCallback,
-  handleOAuthStart,
-} from "./backend/oauth/endpoints.ts";
-import { getOAuthSessionStats } from "./backend/oauth/session-cleanup.ts";
+import { createOAuthRouter } from "./backend/oauth/iron-router.ts";
 import anchorApiHandler from "./backend/api/anchor-api.ts";
 
 const app = new Hono();
@@ -30,65 +19,8 @@ await initializeTables();
 app.get("/frontend/*", (c) => serveFile(c.req.path, import.meta.url));
 app.get("/shared/*", (c) => serveFile(c.req.path, import.meta.url));
 
-// OAuth endpoints
-app.get("/client-metadata.json", async (_c) => {
-  const response = await handleClientMetadata();
-  return new Response(response.body, {
-    status: response.status,
-    headers: Object.fromEntries(response.headers.entries()),
-  });
-});
-
-app.post("/api/auth/start", async (c) => {
-  const response = await handleOAuthStart(c.req.raw);
-  return new Response(response.body, {
-    status: response.status,
-    headers: Object.fromEntries(response.headers.entries()),
-  });
-});
-
-app.get("/oauth/callback", async (c) => {
-  const response = await handleOAuthCallback(c.req.raw);
-  return new Response(response.body, {
-    status: response.status,
-    headers: Object.fromEntries(response.headers.entries()),
-  });
-});
-
-// Mobile OAuth endpoints
-app.post("/api/auth/mobile-start", async (c) => {
-  const response = await handleMobileOAuthStart(c.req.raw);
-  return new Response(response.body, {
-    status: response.status,
-    headers: Object.fromEntries(response.headers.entries()),
-  });
-});
-
-app.get("/oauth/mobile-callback", async (c) => {
-  const response = await handleMobileOAuthCallback(c.req.raw);
-  return new Response(response.body, {
-    status: response.status,
-    headers: Object.fromEntries(response.headers.entries()),
-  });
-});
-
-// Mobile token exchange endpoint
-app.post("/api/auth/exchange", async (c) => {
-  const response = await handleMobileTokenExchange(c.req.raw);
-  return new Response(response.body, {
-    status: response.status,
-    headers: Object.fromEntries(response.headers.entries()),
-  });
-});
-
-// Mobile session retrieval endpoint
-app.post("/api/auth/session", async (c) => {
-  const response = await handleMobileSessionRetrieval(c.req.raw);
-  return new Response(response.body, {
-    status: response.status,
-    headers: Object.fromEntries(response.headers.entries()),
-  });
-});
+// Iron Session OAuth routes - replaces all old OAuth endpoints
+app.route("/", createOAuthRouter());
 
 // Terms of Service endpoint
 app.get("/terms", (_c) => {
@@ -301,19 +233,6 @@ app.all("/api/checkin/*", (c) => anchorApiHandler(c.req.raw));
 // Dashboard API Routes (for React frontend)
 // ========================================
 // Removed duplicate /api/feed endpoint - web and mobile both use /api/global
-
-app.get("/api/admin/oauth-stats", async (c) => {
-  try {
-    const stats = await getOAuthSessionStats();
-    return c.json({
-      success: true,
-      oauth_sessions: stats,
-    });
-  } catch (error) {
-    console.error("OAuth stats error:", error);
-    return c.json({ success: false, error: error.message }, 500);
-  }
-});
 
 app.get("/api/admin/stats", async (c) => {
   try {
@@ -727,68 +646,45 @@ app.post("/api/admin/backfill", async (c) => {
 
 app.get("/api/auth/session", async (c) => {
   try {
-    // Use unified authentication (supports both cookies and Bearer headers)
-    const { authenticateRequest } = await import(
-      "./backend/middleware/auth-middleware.ts"
-    );
-    const authResult = await authenticateRequest(c);
+    // Use Iron Session authentication
+    const { getIronSession } = await import("npm:iron-session@8.0.4");
+    const { valTownStorage } = await import("./backend/oauth/iron-storage.ts");
 
-    if (!authResult) {
+    const COOKIE_SECRET = Deno.env.get("COOKIE_SECRET") ||
+      "anchor-default-secret-for-development-only";
+
+    interface Session {
+      did: string;
+    }
+
+    const session = await getIronSession<Session>(c.req.raw, c.res, {
+      cookieName: "sid",
+      password: COOKIE_SECRET,
+    });
+
+    if (!session.did) {
       return c.json({ authenticated: false });
     }
 
-    const { session } = authResult;
-
-    // Touch the session to extend its lifetime (updates updated_at timestamp)
-    const { touchSession } = await import("./backend/oauth/session.ts");
-    await touchSession(session.did);
-
-    // Get display name and avatar from database
-    const { sqlite } = await import("https://esm.town/v/std/sqlite2");
-    const result = await sqlite.execute({
-      sql: `SELECT display_name, avatar_url FROM oauth_sessions WHERE did = ?`,
-      args: [session.did],
-    });
-
-    const displayName = result.rows?.[0]?.[0] as string | null;
-    const avatar = result.rows?.[0]?.[1] as string | null;
+    // Get OAuth session data from storage
+    const oauthSession = await valTownStorage.get(
+      `oauth_session:${session.did}`,
+    );
+    if (!oauthSession) {
+      return c.json({ authenticated: false });
+    }
 
     // Return user info without sensitive tokens
     return c.json({
       authenticated: true,
-      userHandle: session.handle,
+      userHandle: oauthSession.handle,
       userDid: session.did,
-      userDisplayName: displayName,
-      userAvatar: avatar,
+      userDisplayName: oauthSession.handle, // We can add displayName later if needed
+      userAvatar: null, // We can add avatar later if needed
     });
   } catch (error) {
     console.error("Session check error:", error);
     return c.json({ authenticated: false });
-  }
-});
-
-app.post("/api/auth/logout", async (c) => {
-  try {
-    const { did } = await c.req.json();
-
-    if (!did) {
-      return c.json({ error: "DID is required" }, 400);
-    }
-
-    await deleteOAuthSession(did);
-
-    // Clear the session cookie
-    return new Response(JSON.stringify({ success: true }), {
-      status: 200,
-      headers: {
-        "Content-Type": "application/json",
-        "Set-Cookie":
-          "anchor_session=; HttpOnly; Secure; SameSite=Strict; Max-Age=0; Path=/",
-      },
-    });
-  } catch (error) {
-    console.error("Logout error:", error);
-    return c.json({ error: "Logout failed" }, 500);
   }
 });
 
@@ -880,139 +776,7 @@ app.get("/checkin/*", async (c) => {
   return serveFile("/frontend/index.html", import.meta.url);
 });
 
-// Mobile token validation endpoint
-app.post("/api/auth/validate-mobile-session", async (c) => {
-  try {
-    const { access_token, refresh_token, did, handle, session_id } = await c.req
-      .json();
-
-    if (!access_token || !refresh_token || !did || !handle) {
-      return c.json(
-        { valid: false, error: "Missing required parameters" },
-        400,
-      );
-    }
-
-    // Validate that the tokens are properly formatted JWTs
-    const isValidJWT = (token: string) => {
-      try {
-        const parts = token.split(".");
-        return parts.length === 3 && parts.every((part) => part.length > 0);
-      } catch {
-        return false;
-      }
-    };
-
-    if (!isValidJWT(access_token) || !isValidJWT(refresh_token)) {
-      return c.json({ valid: false, error: "Invalid token format" }, 400);
-    }
-
-    // Get the stored session to check if tokens need refreshing
-    const storedSession = await _getStoredSession(did);
-    if (storedSession) {
-      // Touch the session to extend its lifetime (updates updated_at timestamp)
-      const { touchSession } = await import("./backend/oauth/session.ts");
-      await touchSession(did);
-
-      // Check if we should refresh the tokens (they're different from stored ones)
-      if (
-        storedSession.accessToken !== access_token ||
-        storedSession.refreshToken !== refresh_token
-      ) {
-        // Try to refresh the tokens using the stored session data
-        const { refreshOAuthToken } = await import("./backend/oauth/dpop.ts");
-        const refreshedSession = await refreshOAuthToken(storedSession);
-
-        if (refreshedSession) {
-          // Return the refreshed tokens to the mobile client
-          return c.json({
-            valid: true,
-            refreshed: true,
-            tokens: {
-              access_token: refreshedSession.accessToken,
-              refresh_token: refreshedSession.refreshToken,
-            },
-            user: {
-              did,
-              handle,
-              sessionId: session_id,
-            },
-          });
-        }
-      }
-    }
-
-    return c.json({
-      valid: true,
-      user: {
-        did,
-        handle,
-        sessionId: session_id,
-      },
-    });
-  } catch (error) {
-    console.error("Mobile session validation error:", error);
-    return c.json({ valid: false, error: "Validation failed" }, 500);
-  }
-});
-
-// Mobile token refresh endpoint - allows mobile clients to explicitly refresh tokens
-app.post("/api/auth/refresh-mobile-token", async (c) => {
-  try {
-    const { refresh_token, did, handle } = await c.req.json();
-
-    if (!refresh_token || !did || !handle) {
-      return c.json(
-        { success: false, error: "Missing required parameters" },
-        400,
-      );
-    }
-
-    // Get the stored session
-    const storedSession = await _getStoredSession(did);
-    if (!storedSession) {
-      return c.json(
-        { success: false, error: "Session not found" },
-        404,
-      );
-    }
-
-    // Verify the refresh token matches
-    if (storedSession.refreshToken !== refresh_token) {
-      return c.json(
-        { success: false, error: "Invalid refresh token" },
-        401,
-      );
-    }
-
-    // Try to refresh the tokens
-    const { refreshOAuthToken } = await import("./backend/oauth/dpop.ts");
-    const refreshedSession = await refreshOAuthToken(storedSession);
-
-    if (!refreshedSession) {
-      return c.json(
-        { success: false, error: "Token refresh failed" },
-        500,
-      );
-    }
-
-    // Return the new tokens
-    return c.json({
-      success: true,
-      tokens: {
-        access_token: refreshedSession.accessToken,
-        refresh_token: refreshedSession.refreshToken,
-      },
-      user: {
-        did: refreshedSession.did,
-        handle: refreshedSession.handle,
-      },
-    });
-  } catch (error) {
-    console.error("Mobile token refresh error:", error);
-    return c.json({ success: false, error: "Token refresh failed" }, 500);
-  }
-});
+// Old mobile OAuth endpoints removed - replaced by Iron Session OAuth router
 
 // ========================================
 // Frontend Routes (HTML/React views)

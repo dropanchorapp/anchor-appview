@@ -8,7 +8,17 @@ import {
 import { count, desc, eq, sql } from "https://esm.sh/drizzle-orm";
 import { ATProtocolProfileResolver } from "../utils/profile-resolver.ts";
 import { SqliteStorageProvider } from "../utils/storage-provider.ts";
-import type { OAuthSession } from "../oauth/types.ts";
+// OAuth types now managed by Iron Session
+interface OAuthSession {
+  did: string;
+  handle: string;
+  pdsUrl: string;
+  accessToken: string;
+  refreshToken: string;
+  dpopPrivateKey?: string;
+  dpopPublicKey?: string;
+  tokenExpiresAt?: number;
+}
 
 // Profile queries
 export async function getProfileByDid(did: string) {

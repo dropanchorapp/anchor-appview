@@ -161,33 +161,18 @@ export function App() {
     setShowLoginForm(true);
   };
 
-  const handleSubmitLogin = async (e: React.FormEvent) => {
+  const handleSubmitLogin = (e: React.FormEvent) => {
     e.preventDefault();
     setLoginLoading(true);
 
     try {
-      const response = await fetch("/api/auth/start", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({ handle: loginHandle }),
-      });
-
-      if (!response.ok) {
-        throw new Error("Login failed");
-      }
-
-      const data = await response.json();
-
-      if (data.authUrl) {
-        // Redirect to OAuth authorization
-        globalThis.location.href = data.authUrl;
-      }
+      // Iron Session OAuth: direct redirect to /login with handle parameter
+      globalThis.location.href = `/login?handle=${
+        encodeURIComponent(loginHandle)
+      }`;
     } catch (error) {
       console.error("Login failed:", error);
       alert("Login failed. Please try again.");
-    } finally {
       setLoginLoading(false);
     }
   };
