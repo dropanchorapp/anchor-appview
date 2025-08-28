@@ -2,7 +2,7 @@
 // Based on BookHive's auth/router.tsx but adapted for Val.town environment
 
 import { Hono } from "https://esm.sh/hono";
-import { getIronSession, sealData } from "npm:iron-session@8.0.4";
+import { getIronSession, sealData, unsealData } from "npm:iron-session@8.0.4";
 import { isValidHandle } from "npm:@atproto/syntax@0.4.0";
 import { CustomOAuthClient } from "./custom-oauth-client.ts";
 import { valTownStorage } from "./iron-storage.ts";
@@ -97,9 +97,39 @@ export function createOAuthRouter() {
         oauthSession,
       );
 
-      // For now, redirect to home - mobile redirects will be handled separately
-      // TODO: Implement mobile redirect handling
+      // Check if this is a mobile callback by parsing the state
+      let state;
+      try {
+        const stateParam = params.get("state");
+        state = stateParam ? JSON.parse(stateParam) : null;
+      } catch {
+        state = null;
+      }
 
+      // Handle mobile callback
+      if (
+        state && state.redirectUri &&
+        state.redirectUri.startsWith("anchor-app:")
+      ) {
+        console.log("Mobile OAuth callback detected");
+
+        // Create sealed session token for mobile
+        const sealedToken = await sealData({ did: oauthSession.did }, {
+          password: COOKIE_SECRET,
+        });
+
+        // Redirect to mobile app with sealed token
+        const mobileRedirectUrl = new URL(state.redirectUri);
+        mobileRedirectUrl.searchParams.set("session_token", sealedToken);
+        mobileRedirectUrl.searchParams.set("did", oauthSession.did);
+
+        console.log(
+          `Redirecting mobile app to: ${mobileRedirectUrl.toString()}`,
+        );
+        return c.redirect(mobileRedirectUrl.toString());
+      }
+
+      // Web callback - set cookies and redirect to home
       return c.redirect("/");
     } catch (err) {
       console.error("OAuth callback failed:", err);
@@ -148,26 +178,45 @@ export function createOAuthRouter() {
   // Mobile token refresh endpoint
   app.get("/mobile/refresh-token", async (c) => {
     try {
-      const session = await getIronSession<Session>(c.req.raw, c.res, {
-        cookieName: "sid",
-        password: COOKIE_SECRET,
-      });
-
-      if (!session.did) {
-        return c.json({ success: false, error: "No session found" }, 401);
+      // Get session token from Authorization header
+      const authHeader = c.req.header("Authorization");
+      if (!authHeader?.startsWith("Bearer ")) {
+        return c.json({ success: false, error: "Missing Bearer token" }, 401);
       }
 
-      // TODO: Implement token refresh with our custom OAuth client
-      // For now, just extend the session
-      await session.save();
+      const sealedToken = authHeader.slice(7); // Remove "Bearer " prefix
+
+      // Unseal the token to get session data
+      const sessionData = await unsealData(sealedToken, {
+        password: COOKIE_SECRET,
+      }) as { did: string };
+
+      if (!sessionData.did) {
+        return c.json({ success: false, error: "Invalid session token" }, 401);
+      }
+
+      // Check if OAuth session still exists
+      const oauthSession = await valTownStorage.get(
+        `oauth_session:${sessionData.did}`,
+      );
+      if (!oauthSession) {
+        return c.json(
+          { success: false, error: "OAuth session not found" },
+          401,
+        );
+      }
+
+      // TODO: Implement actual token refresh logic
+      // For now, just return a new sealed token with extended TTL
+      const newSealedToken = await sealData({ did: sessionData.did }, {
+        password: COOKIE_SECRET,
+      });
 
       return c.json({
         success: true,
         payload: {
-          sid: await sealData({ did: session.did }, {
-            password: COOKIE_SECRET,
-          }),
-          did: session.did,
+          session_token: newSealedToken,
+          did: sessionData.did,
         },
       });
     } catch (err) {

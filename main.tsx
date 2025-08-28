@@ -646,30 +646,57 @@ app.post("/api/admin/backfill", async (c) => {
 
 app.get("/api/auth/session", async (c) => {
   try {
-    // Use Iron Session authentication
-    const { getIronSession } = await import("npm:iron-session@8.0.4");
+    // Support both cookie-based (web) and Bearer token (mobile) authentication
+    const { getIronSession, unsealData } = await import(
+      "npm:iron-session@8.0.4"
+    );
     const { valTownStorage } = await import("./backend/oauth/iron-storage.ts");
 
     const COOKIE_SECRET = Deno.env.get("COOKIE_SECRET") ||
       "anchor-default-secret-for-development-only";
 
-    interface Session {
-      did: string;
+    let userDid: string | null = null;
+
+    // Try Bearer token first (mobile)
+    const authHeader = c.req.header("Authorization");
+    if (authHeader?.startsWith("Bearer ")) {
+      try {
+        const sealedToken = authHeader.slice(7);
+        const sessionData = await unsealData(sealedToken, {
+          password: COOKIE_SECRET,
+        }) as { did: string };
+        userDid = sessionData.did;
+        console.log("Bearer token authentication successful");
+      } catch (err) {
+        console.log("Bearer token authentication failed:", err);
+      }
     }
 
-    const session = await getIronSession<Session>(c.req.raw, c.res, {
-      cookieName: "sid",
-      password: COOKIE_SECRET,
-    });
+    // Fallback to cookie authentication (web)
+    if (!userDid) {
+      try {
+        interface Session {
+          did: string;
+        }
 
-    if (!session.did) {
+        const session = await getIronSession<Session>(c.req.raw, c.res, {
+          cookieName: "sid",
+          password: COOKIE_SECRET,
+        });
+
+        userDid = session.did;
+        console.log("Cookie authentication successful");
+      } catch (err) {
+        console.log("Cookie authentication failed:", err);
+      }
+    }
+
+    if (!userDid) {
       return c.json({ authenticated: false });
     }
 
     // Get OAuth session data from storage
-    const oauthSession = await valTownStorage.get(
-      `oauth_session:${session.did}`,
-    );
+    const oauthSession = await valTownStorage.get(`oauth_session:${userDid}`);
     if (!oauthSession) {
       return c.json({ authenticated: false });
     }
@@ -678,7 +705,7 @@ app.get("/api/auth/session", async (c) => {
     return c.json({
       authenticated: true,
       userHandle: oauthSession.handle,
-      userDid: session.did,
+      userDid: userDid,
       userDisplayName: oauthSession.handle, // We can add displayName later if needed
       userAvatar: null, // We can add avatar later if needed
     });
