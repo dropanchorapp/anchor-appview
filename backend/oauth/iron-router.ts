@@ -16,6 +16,24 @@ export interface Session {
   did: string;
 }
 
+// Helper functions for PKCE (same as CustomOAuthClient)
+function _generateCodeVerifier(): string {
+  const array = new Uint8Array(32);
+  crypto.getRandomValues(array);
+  return btoa(String.fromCharCode(...array))
+    .replace(/[+/]/g, (match) => match === "+" ? "-" : "_")
+    .replace(/=/g, "");
+}
+
+async function _generateCodeChallenge(verifier: string): Promise<string> {
+  const encoder = new TextEncoder();
+  const data = encoder.encode(verifier);
+  const digest = await crypto.subtle.digest("SHA-256", data);
+  return btoa(String.fromCharCode(...new Uint8Array(digest)))
+    .replace(/[+/]/g, (match) => match === "+" ? "-" : "_")
+    .replace(/=/g, "");
+}
+
 export function createOAuthRouter() {
   const app = new Hono<{ Variables: { oauthClient: CustomOAuthClient } }>();
   let oauthClient: CustomOAuthClient | null = null;
@@ -135,6 +153,262 @@ export function createOAuthRouter() {
       console.error("OAuth callback failed:", err);
       return c.text(`Login failed: ${(err as Error).message}`, 400);
     }
+  });
+
+  // Direct mobile login endpoint - serves HTML form for handle entry
+  app.get("/mobile/login-direct", (c) => {
+    const { redirect_uri: redirectUri } = c.req.query();
+
+    if (typeof redirectUri !== "string") {
+      return c.text("redirect_uri is required for mobile login", 400);
+    }
+
+    try {
+      // Validate redirect URI
+      const redirectUrl = new URL(redirectUri);
+      if (redirectUrl.protocol !== "anchor-app:") {
+        return c.text("Invalid redirect_uri - must use anchor-app scheme", 400);
+      }
+    } catch {
+      return c.text("Invalid redirect_uri format", 400);
+    }
+
+    // Serve mobile login form
+    const html = `<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sign in to Anchor</title>
+    <style>
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+        }
+        
+        .container {
+            background: white;
+            border-radius: 16px;
+            box-shadow: 0 20px 40px rgba(0,0,0,0.1);
+            padding: 40px;
+            width: 100%;
+            max-width: 400px;
+        }
+        
+        .logo {
+            text-align: center;
+            margin-bottom: 32px;
+        }
+        
+        .logo-icon {
+            width: 64px;
+            height: 64px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            border-radius: 16px;
+            margin: 0 auto 16px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-size: 28px;
+        }
+        
+        h1 {
+            font-size: 24px;
+            font-weight: 600;
+            color: #1a202c;
+            margin-bottom: 8px;
+        }
+        
+        .subtitle {
+            color: #718096;
+            font-size: 16px;
+            margin-bottom: 32px;
+        }
+        
+        .form-group {
+            margin-bottom: 24px;
+        }
+        
+        label {
+            display: block;
+            font-weight: 500;
+            color: #2d3748;
+            margin-bottom: 8px;
+        }
+        
+        input {
+            width: 100%;
+            padding: 12px 16px;
+            border: 2px solid #e2e8f0;
+            border-radius: 8px;
+            font-size: 16px;
+            transition: border-color 0.2s;
+        }
+        
+        input:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+        
+        .btn {
+            width: 100%;
+            padding: 14px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            border-radius: 8px;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: transform 0.2s;
+        }
+        
+        .btn:hover {
+            transform: translateY(-1px);
+        }
+        
+        .btn:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+            transform: none;
+        }
+        
+        .security-note {
+            margin-top: 24px;
+            padding: 16px;
+            background: #f7fafc;
+            border-radius: 8px;
+            font-size: 14px;
+            color: #4a5568;
+            text-align: center;
+        }
+        
+        .security-icon {
+            color: #48bb78;
+            margin-right: 4px;
+        }
+        
+        .error {
+            color: #e53e3e;
+            font-size: 14px;
+            margin-top: 8px;
+            text-align: center;
+        }
+        
+        @media (max-width: 480px) {
+            .container {
+                padding: 32px 24px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="logo">
+            <div class="logo-icon">⚓</div>
+            <h1>Sign in to Anchor</h1>
+            <p class="subtitle">Enter your Bluesky handle to continue</p>
+        </div>
+        
+        <form id="loginForm">
+            <div class="form-group">
+                <label for="handle">Bluesky Handle</label>
+                <input 
+                    type="text" 
+                    id="handle" 
+                    name="handle" 
+                    placeholder="username.bsky.social or your.domain"
+                    required
+                    autocomplete="username"
+                    autocapitalize="none"
+                    autocorrect="off"
+                />
+            </div>
+            
+            <button type="submit" class="btn" id="submitBtn">
+                Continue with Bluesky
+            </button>
+            
+            <div id="error" class="error" style="display: none;"></div>
+        </form>
+        
+        <div class="security-note">
+            <span class="security-icon">🔒</span>
+            Your password will be entered securely on Bluesky's servers. Anchor never sees your password.
+        </div>
+    </div>
+    
+    <script>
+        const form = document.getElementById('loginForm');
+        const handleInput = document.getElementById('handle');
+        const submitBtn = document.getElementById('submitBtn');
+        const errorDiv = document.getElementById('error');
+        
+        form.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            
+            const handle = handleInput.value.trim();
+            if (!handle) {
+                showError('Please enter your Bluesky handle');
+                return;
+            }
+            
+            submitBtn.disabled = true;
+            submitBtn.textContent = 'Connecting...';
+            errorDiv.style.display = 'none';
+            
+            try {
+                // Start OAuth flow with the entered handle
+                const response = await fetch('/mobile/login', {
+                    method: 'GET',
+                    headers: {
+                        'Accept': 'text/plain'
+                    }
+                });
+                
+                if (!response.ok) {
+                    throw new Error('Failed to start OAuth flow');
+                }
+                
+                // Redirect to OAuth flow
+                const params = new URLSearchParams({
+                    handle: handle,
+                    redirect_uri: '${redirectUri}'
+                });
+                
+                window.location.href = '/mobile/login?' + params.toString();
+                
+            } catch (error) {
+                showError('Failed to connect. Please try again.');
+                submitBtn.disabled = false;
+                submitBtn.textContent = 'Continue with Bluesky';
+            }
+        });
+        
+        function showError(message) {
+            errorDiv.textContent = message;
+            errorDiv.style.display = 'block';
+        }
+        
+        // Focus the handle input on load
+        handleInput.focus();
+    </script>
+</body>
+</html>`;
+
+    return c.html(html);
   });
 
   // Mobile login endpoint
