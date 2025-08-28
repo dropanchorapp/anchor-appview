@@ -8,7 +8,10 @@ import {
   makeDPoPRequest,
 } from "./custom-dpop.ts";
 import type { ValTownStorage } from "./iron-storage.ts";
-import { resolveHandleWithSlingshot } from "./slingshot-resolver.ts";
+import {
+  discoverOAuthEndpointsFromPDS,
+  resolveHandleWithSlingshot,
+} from "./slingshot-resolver.ts";
 
 const BASE_URL = (Deno.env.get("ANCHOR_BASE_URL") || "https://dropanchor.app")
   .replace(/\/$/, "");
@@ -46,10 +49,14 @@ export class CustomOAuthClient {
     const resolved = await resolveHandleWithSlingshot(handle);
     console.log(`Resolved PDS: ${resolved.pds} for DID: ${resolved.did}`);
 
-    // AT Protocol OAuth is centralized at bsky.social
-    // Individual PDSs don't have OAuth endpoints - they return 404
-    const authServer = "https://bsky.social";
-    console.log(`Using centralized AT Protocol OAuth server: ${authServer}`);
+    // Discover OAuth endpoints from the PDS
+    console.log(`Discovering OAuth endpoints for PDS: ${resolved.pds}`);
+    const oauthEndpoints = await discoverOAuthEndpointsFromPDS(resolved.pds);
+    const authServer = oauthEndpoints.authorizationEndpoint.replace(
+      /\/oauth\/authorize$/,
+      "",
+    );
+    console.log(`Discovered OAuth server: ${authServer}`);
 
     // Generate PKCE
     const codeVerifier = this.generateCodeVerifier();

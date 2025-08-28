@@ -177,24 +177,34 @@ export function createOAuthRouter() {
   });
 
   // Logout handler
-  app.post("/logout", async (c) => {
-    const session = await getIronSession<Session>(c.req.raw, c.res, {
-      cookieName: "sid",
-      password: COOKIE_SECRET,
-    });
+  app.post("/api/auth/logout", async (c) => {
+    try {
+      const session = await getIronSession<Session>(c.req.raw, c.res, {
+        cookieName: "sid",
+        password: COOKIE_SECRET,
+      });
 
-    if (session.did) {
-      // TODO: Implement session revocation
-      // For now, just clean up local storage
-      try {
-        await valTownStorage.del(`oauth_session:${session.did}`);
-      } catch (err) {
-        console.error("Error cleaning up session:", err);
+      console.log("Logout: session DID:", session.did);
+
+      if (session.did) {
+        // Clean up server-side OAuth session data
+        try {
+          await valTownStorage.del(`oauth_session:${session.did}`);
+          console.log("Logout: Cleaned up OAuth session data");
+        } catch (err) {
+          console.error("Error cleaning up OAuth session:", err);
+        }
       }
-    }
 
-    await session.destroy();
-    return c.redirect("/");
+      // Destroy the Iron Session (clears the cookie)
+      await session.destroy();
+      console.log("Logout: Session destroyed");
+
+      return c.json({ success: true });
+    } catch (err) {
+      console.error("Logout failed:", err);
+      return c.json({ success: false, error: "Logout failed" }, 500);
+    }
   });
 
   // Session validation endpoint (for API authentication)
