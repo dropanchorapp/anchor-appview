@@ -255,6 +255,66 @@ export class CustomOAuthClient {
     );
   }
 
+  // Refresh access token using refresh token
+  async refreshAccessToken(session: OAuthSession): Promise<OAuthSession> {
+    // Discover OAuth endpoints from the user's PDS
+    const oauthEndpoints = await discoverOAuthEndpointsFromPDS(session.pdsUrl);
+    const tokenUrl = oauthEndpoints.tokenEndpoint;
+
+    // Prepare refresh token request
+    const tokenRequest = {
+      grant_type: "refresh_token",
+      refresh_token: session.refreshToken,
+      client_id: this.clientId,
+    };
+
+    // Create DPoP proof for the refresh request
+    const privateKey = await crypto.subtle.importKey(
+      "jwk",
+      session.dpopPrivateKeyJWK,
+      {
+        name: "ECDSA",
+        namedCurve: "P-256",
+      },
+      false,
+      ["sign"],
+    );
+
+    const dpopProof = await generateDPoPProof(
+      "POST",
+      tokenUrl,
+      privateKey,
+      session.dpopPublicKeyJWK,
+    );
+
+    // Make refresh token request
+    const response = await fetch(tokenUrl, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/x-www-form-urlencoded",
+        "DPoP": dpopProof,
+      },
+      body: new URLSearchParams(tokenRequest),
+    });
+
+    if (!response.ok) {
+      const error = await response.text();
+      throw new Error(`Token refresh failed: ${error}`);
+    }
+
+    const tokens = await response.json();
+
+    // Return updated session with new tokens
+    const updatedSession: OAuthSession = {
+      ...session,
+      accessToken: tokens.access_token,
+      refreshToken: tokens.refresh_token || session.refreshToken, // Some servers don't rotate refresh tokens
+      tokenExpiresAt: Date.now() + (tokens.expires_in * 1000),
+    };
+
+    return updatedSession;
+  }
+
   // Helper: Generate PKCE code verifier
   private generateCodeVerifier(): string {
     const array = new Uint8Array(32);

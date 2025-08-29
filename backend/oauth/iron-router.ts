@@ -509,19 +509,53 @@ export function createOAuthRouter() {
         );
       }
 
-      // TODO: Implement actual token refresh logic
-      // For now, just return a new sealed token with extended TTL
-      const newSealedToken = await sealData({ did: sessionData.did }, {
-        password: COOKIE_SECRET,
-      });
+      // Implement actual token refresh logic using AT Protocol OAuth
+      const oauthClient = new CustomOAuthClient(valTownStorage);
 
-      return c.json({
-        success: true,
-        payload: {
-          session_token: newSealedToken,
-          did: sessionData.did,
-        },
-      });
+      try {
+        // Refresh the OAuth tokens with the PDS
+        const refreshedSession = await oauthClient.refreshAccessToken(
+          oauthSession,
+        );
+
+        // Update the stored OAuth session with new tokens
+        await valTownStorage.set(
+          `oauth_session:${sessionData.did}`,
+          refreshedSession,
+        );
+
+        // Create a new sealed token for the mobile client
+        const newSealedToken = await sealData({ did: sessionData.did }, {
+          password: COOKIE_SECRET,
+        });
+
+        return c.json({
+          success: true,
+          payload: {
+            session_token: newSealedToken,
+            did: sessionData.did,
+            access_token: refreshedSession.accessToken,
+            refresh_token: refreshedSession.refreshToken,
+            expires_at: refreshedSession.tokenExpiresAt,
+          },
+        });
+      } catch (refreshError) {
+        console.error("AT Protocol token refresh failed:", refreshError);
+
+        // Fallback: just return a new sealed session token (legacy behavior)
+        const newSealedToken = await sealData({ did: sessionData.did }, {
+          password: COOKIE_SECRET,
+        });
+
+        return c.json({
+          success: true,
+          payload: {
+            session_token: newSealedToken,
+            did: sessionData.did,
+          },
+          warning: "OAuth token refresh failed, using cached tokens",
+        });
+      }
     } catch (err) {
       console.error("Token refresh failed:", err);
       return c.json({ success: false, error: "Token refresh failed" }, 500);
