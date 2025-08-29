@@ -147,16 +147,302 @@ interface CheckinResponse {
   error?: string;
 }
 
-// Create a checkin with address using StrongRef architecture
-export function createCheckin(c: Context): Response {
-  // TODO: Reimplement checkin creation with Iron Session authentication
-  return c.json({
-    success: false,
-    error: "Checkin creation temporarily disabled during OAuth migration",
-  }, 503);
+// Helper function to authenticate user with Iron Session (both web and mobile)
+async function authenticateUser(
+  c: Context,
+): Promise<{ did: string; oauthSession: any } | null> {
+  try {
+    const { getIronSession, unsealData } = await import(
+      "npm:iron-session@8.0.4"
+    );
+    const { valTownStorage } = await import("../oauth/iron-storage.ts");
+
+    const COOKIE_SECRET = Deno.env.get("COOKIE_SECRET") ||
+      "anchor-default-secret-for-development-only";
+
+    let userDid: string | null = null;
+
+    // Try Bearer token first (mobile)
+    const authHeader = c.req.header("Authorization");
+    if (authHeader?.startsWith("Bearer ")) {
+      try {
+        const sealedToken = authHeader.slice(7);
+        const sessionData = await unsealData(sealedToken, {
+          password: COOKIE_SECRET,
+        }) as { did: string };
+        userDid = sessionData.did;
+      } catch (err) {
+        console.log("Bearer token authentication failed:", err);
+      }
+    }
+
+    // Fallback to cookie authentication (web)
+    if (!userDid) {
+      try {
+        interface Session {
+          did: string;
+        }
+        const session = await getIronSession<Session>(c.req.raw, c.res, {
+          cookieName: "sid",
+          password: COOKIE_SECRET,
+        });
+        userDid = session.did;
+      } catch (err) {
+        console.log("Cookie authentication failed:", err);
+      }
+    }
+
+    if (!userDid) {
+      return null;
+    }
+
+    // Get OAuth session data
+    const oauthSession = await valTownStorage.get(`oauth_session:${userDid}`);
+    if (!oauthSession) {
+      return null;
+    }
+
+    return { did: userDid, oauthSession };
+  } catch (err) {
+    console.error("Authentication failed:", err);
+    return null;
+  }
 }
 
-// TODO: Restore these functions when Iron Session integration is complete
+// Create a checkin with address using StrongRef architecture
+export async function createCheckin(c: Context): Promise<Response> {
+  try {
+    // Authenticate user with Iron Session
+    const authResult = await authenticateUser(c);
+    if (!authResult) {
+      return c.json({
+        success: false,
+        error: "Authentication required",
+      }, 401);
+    }
+
+    const { oauthSession } = authResult;
+
+    // Parse request body
+    const body = await c.req.json();
+
+    // Validate required fields
+    if (
+      !body.place || !body.place.name || !body.place.latitude ||
+      !body.place.longitude
+    ) {
+      return c.json({
+        success: false,
+        error:
+          "Invalid request: place with name, latitude, and longitude required",
+      }, 400);
+    }
+
+    const { message } = body;
+
+    // Convert API input to proper Place object and validate coordinates
+    const place = _sanitizePlaceInput(body.place);
+    const lat = place.latitude;
+    const lng = place.longitude;
+
+    if (
+      typeof lat !== "number" || typeof lng !== "number" ||
+      isNaN(lat) || isNaN(lng) ||
+      Math.abs(lat) > 90 || Math.abs(lng) > 180
+    ) {
+      return c.json({
+        success: false,
+        error: "Invalid coordinates",
+      }, 400);
+    }
+
+    console.log("🚀 Starting checkin creation process...");
+
+    // Create OAuth client for AT Protocol operations
+    const { CustomOAuthClient } = await import(
+      "../oauth/custom-oauth-client.ts"
+    );
+    const { valTownStorage } = await import("../oauth/iron-storage.ts");
+    const oauthClient = new CustomOAuthClient(valTownStorage);
+
+    // Create address and checkin records via AT Protocol
+    const createResult = await createAddressAndCheckin(
+      oauthClient,
+      oauthSession,
+      place,
+      message || "",
+    );
+
+    if (!createResult.success) {
+      return c.json({
+        success: false,
+        error: createResult.error,
+      }, 500);
+    }
+
+    console.log("✅ Checkin created successfully");
+
+    return c.json({
+      success: true,
+      checkinUri: createResult.checkinUri,
+      addressUri: createResult.addressUri,
+    });
+  } catch (err) {
+    console.error("❌ Checkin creation failed:", err);
+    return c.json({
+      success: false,
+      error: "Internal server error",
+    }, 500);
+  }
+}
+
+// Helper function to extract rkey from AT Protocol URI
+function extractRkey(uri: string): string {
+  const parts = uri.split("/");
+  return parts[parts.length - 1];
+}
+
+// Create address and checkin records via AT Protocol
+async function createAddressAndCheckin(
+  oauthClient: any,
+  oauthSession: any,
+  place: Place,
+  message: string,
+): Promise<
+  { success: boolean; checkinUri?: string; addressUri?: string; error?: string }
+> {
+  try {
+    // Get enhanced address using existing OverpassService logic
+    const addressRecord = await _getEnhancedAddressRecord(place);
+
+    // Build coordinates using validated values
+    const coordinates: GeoCoordinates = {
+      latitude: place.latitude,
+      longitude: place.longitude,
+    };
+
+    // Use category information from the sanitized place object
+    const category = place.category;
+    const categoryGroup = place.categoryGroup;
+    const categoryIcon = place.icon;
+
+    console.log(
+      `🔰 Creating checkin for ${place.name} by ${oauthSession.handle}`,
+    );
+
+    // Step 1: Create address record
+    const addressResponse = await oauthClient.makeAuthenticatedRequest(
+      "POST",
+      `${oauthSession.pdsUrl}/xrpc/com.atproto.repo.createRecord`,
+      oauthSession,
+      JSON.stringify({
+        repo: oauthSession.did,
+        collection: "community.lexicon.location.address",
+        record: addressRecord,
+      }),
+    );
+
+    if (!addressResponse.ok) {
+      const error = await addressResponse.text();
+      console.error("Failed to create address record:", error);
+      return {
+        success: false,
+        error: "Failed to create address record",
+      };
+    }
+
+    const addressResult = await addressResponse.json();
+    console.log(`✅ Created address record: ${addressResult.uri}`);
+
+    // Step 2: Create checkin record with StrongRef to address
+    const checkinRecord: CheckinRecord = {
+      $type: "app.dropanchor.checkin",
+      text: message,
+      createdAt: new Date().toISOString(),
+      addressRef: {
+        uri: addressResult.uri,
+        cid: addressResult.cid,
+      },
+      coordinates,
+      category,
+      categoryGroup,
+      categoryIcon,
+    };
+
+    const checkinResponse = await oauthClient.makeAuthenticatedRequest(
+      "POST",
+      `${oauthSession.pdsUrl}/xrpc/com.atproto.repo.createRecord`,
+      oauthSession,
+      JSON.stringify({
+        repo: oauthSession.did,
+        collection: "app.dropanchor.checkin",
+        record: checkinRecord,
+      }),
+    );
+
+    if (!checkinResponse.ok) {
+      // Cleanup: Delete orphaned address record
+      const addressRkey = extractRkey(addressResult.uri);
+      await oauthClient.makeAuthenticatedRequest(
+        "POST",
+        `${oauthSession.pdsUrl}/xrpc/com.atproto.repo.deleteRecord`,
+        oauthSession,
+        JSON.stringify({
+          repo: oauthSession.did,
+          collection: "community.lexicon.location.address",
+          rkey: addressRkey,
+        }),
+      ).catch(console.error); // Best effort cleanup
+
+      const error = await checkinResponse.text();
+      console.error("Failed to create checkin record:", error);
+      return {
+        success: false,
+        error: "Failed to create checkin record",
+      };
+    }
+
+    const checkinResult = await checkinResponse.json();
+    console.log(`✅ Created checkin record: ${checkinResult.uri}`);
+
+    // IMMEDIATELY save to local database for instant feed updates
+    try {
+      const rkey = extractRkey(checkinResult.uri);
+      await _processCheckinEvent({
+        did: oauthSession.did,
+        time_us: Date.now() * 1000, // Convert to microseconds
+        commit: {
+          rkey: rkey,
+          collection: "app.dropanchor.checkin",
+          operation: "create",
+          record: checkinRecord,
+          cid: checkinResult.cid,
+        },
+      });
+      console.log(`✅ Saved checkin to local database: ${rkey}`);
+    } catch (localSaveError) {
+      console.error(
+        "Failed to save checkin to local database:",
+        localSaveError,
+      );
+      // Don't fail the request - AT Protocol save succeeded, local save can be retried later
+    }
+
+    return {
+      success: true,
+      checkinUri: checkinResult.uri,
+      addressUri: addressResult.uri,
+    };
+  } catch (err) {
+    console.error("❌ Create address and checkin failed:", err);
+    return {
+      success: false,
+      error: "Internal server error",
+    };
+  }
+}
+
+// TODO: Clean up old disabled code when integration is verified working
 /*
 export async function handleCheckinCreation_DISABLED(c: Context): Promise<Response> {
   try {

@@ -526,24 +526,6 @@ app.post("/api/admin/run-migrations", async (c) => {
   }
 });
 
-app.post("/api/admin/migrate-users", (c) => {
-  // TODO: Implement user migration script
-  return c.json({
-    success: false,
-    error: "User migration endpoint not yet implemented",
-    timestamp: new Date().toISOString(),
-  });
-});
-
-app.post("/api/admin/cleanup-invalid-checkins", (c) => {
-  // TODO: Implement cleanup script
-  return c.json({
-    success: false,
-    error: "Cleanup endpoint not yet implemented",
-    timestamp: new Date().toISOString(),
-  });
-});
-
 app.post("/api/admin/crawl-followers", async (c) => {
   try {
     console.log("Starting followers crawler...");
