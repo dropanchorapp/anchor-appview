@@ -102,8 +102,8 @@ export function createOAuthRouter() {
       const clientSession = await getIronSession<Session>(c.req.raw, c.res, {
         cookieName: "sid",
         password: COOKIE_SECRET,
-        // Set session TTL to 24 hours, independent of token expiration
-        ttl: 60 * 60 * 24,
+        // Set session TTL to 7 days with sliding expiration
+        ttl: 60 * 60 * 24 * 7,
       });
 
       clientSession.did = oauthSession.did;
@@ -612,6 +612,9 @@ export function createOAuthRouter() {
       if (!oauthSession) {
         return c.json({ valid: false }, 401);
       }
+
+      // Extend session TTL (sliding expiration)
+      await session.save();
 
       return c.json({
         valid: true,

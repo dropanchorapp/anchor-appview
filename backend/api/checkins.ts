@@ -187,6 +187,11 @@ async function authenticateUser(
           password: COOKIE_SECRET,
         });
         userDid = session.did;
+
+        // Extend session TTL if valid (sliding expiration)
+        if (userDid) {
+          await session.save();
+        }
       } catch (err) {
         console.log("Cookie authentication failed:", err);
       }
