@@ -132,6 +132,7 @@ export class ValTownStorage {
   get = this.getItem;
   set = this.setItem;
   del = this.removeItem;
+  delete = this.removeItem;
 }
 
 // Create singleton instance

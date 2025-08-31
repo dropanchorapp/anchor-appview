@@ -264,11 +264,16 @@ export async function createCheckin(c: Context): Promise<Response> {
     console.log("🚀 Starting checkin creation process...");
 
     // Create OAuth client for AT Protocol operations
-    const { CustomOAuthClient } = await import(
-      "../oauth/custom-oauth-client.ts"
-    );
+    const { OAuthClient } = await import("jsr:@tijs/oauth-client-deno@0.1.2");
     const { valTownStorage } = await import("../oauth/iron-storage.ts");
-    const oauthClient = new CustomOAuthClient(valTownStorage);
+    const BASE_URL =
+      (Deno.env.get("ANCHOR_BASE_URL") || "https://dropanchor.app")
+        .replace(/\/$/, "");
+    const oauthClient = new OAuthClient({
+      clientId: `${BASE_URL}/client-metadata.json`,
+      redirectUri: `${BASE_URL}/oauth/callback`,
+      storage: valTownStorage,
+    });
 
     // Create address and checkin records via AT Protocol
     const createResult = await createAddressAndCheckin(
@@ -309,14 +314,19 @@ function extractRkey(uri: string): string {
 
 // Create address and checkin records via AT Protocol
 async function createAddressAndCheckin(
-  oauthClient: any,
-  oauthSession: any,
+  _oauthClient: any,
+  oauthSessionData: any,
   place: Place,
   message: string,
 ): Promise<
   { success: boolean; checkinUri?: string; addressUri?: string; error?: string }
 > {
   try {
+    // Import Session from the new OAuth client
+    const { Session } = await import("jsr:@tijs/oauth-client-deno@0.1.2");
+    // Create session object from stored data
+    const oauthSession = new Session(oauthSessionData);
+
     // Get enhanced address using existing OverpassService logic
     const addressRecord = await _getEnhancedAddressRecord(place);
 
@@ -336,15 +346,16 @@ async function createAddressAndCheckin(
     );
 
     // Step 1: Create address record
-    const addressResponse = await oauthClient.makeAuthenticatedRequest(
+    const addressResponse = await oauthSession.makeRequest(
       "POST",
       `${oauthSession.pdsUrl}/xrpc/com.atproto.repo.createRecord`,
-      oauthSession,
-      JSON.stringify({
-        repo: oauthSession.did,
-        collection: "community.lexicon.location.address",
-        record: addressRecord,
-      }),
+      {
+        body: JSON.stringify({
+          repo: oauthSession.did,
+          collection: "community.lexicon.location.address",
+          record: addressRecord,
+        }),
+      },
     );
 
     if (!addressResponse.ok) {
@@ -374,29 +385,31 @@ async function createAddressAndCheckin(
       categoryIcon,
     };
 
-    const checkinResponse = await oauthClient.makeAuthenticatedRequest(
+    const checkinResponse = await oauthSession.makeRequest(
       "POST",
       `${oauthSession.pdsUrl}/xrpc/com.atproto.repo.createRecord`,
-      oauthSession,
-      JSON.stringify({
-        repo: oauthSession.did,
-        collection: "app.dropanchor.checkin",
-        record: checkinRecord,
-      }),
+      {
+        body: JSON.stringify({
+          repo: oauthSession.did,
+          collection: "app.dropanchor.checkin",
+          record: checkinRecord,
+        }),
+      },
     );
 
     if (!checkinResponse.ok) {
       // Cleanup: Delete orphaned address record
       const addressRkey = extractRkey(addressResult.uri);
-      await oauthClient.makeAuthenticatedRequest(
+      await oauthSession.makeRequest(
         "POST",
         `${oauthSession.pdsUrl}/xrpc/com.atproto.repo.deleteRecord`,
-        oauthSession,
-        JSON.stringify({
-          repo: oauthSession.did,
-          collection: "community.lexicon.location.address",
-          rkey: addressRkey,
-        }),
+        {
+          body: JSON.stringify({
+            repo: oauthSession.did,
+            collection: "community.lexicon.location.address",
+            rkey: addressRkey,
+          }),
+        },
       ).catch(console.error); // Best effort cleanup
 
       const error = await checkinResponse.text();
