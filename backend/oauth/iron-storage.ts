@@ -1,67 +1,76 @@
 // Simple Val.town-compatible storage for OAuth client
-// Uses SQLite for state/session storage
+// Uses Drizzle ORM for type safety and consistency
 
-import { sqlite } from "https://esm.town/v/std/sqlite2";
+import { db } from "../database/db.ts";
+import { ironSessionStorageTable } from "../database/schema.ts";
+import {
+  and,
+  eq,
+  gt,
+  isNotNull,
+  isNull,
+  lte,
+  or,
+} from "https://esm.sh/drizzle-orm";
 
 // Simple storage interface that works with OAuth client
 export class ValTownStorage {
   private initialized = false;
 
-  async init() {
+  init() {
     if (this.initialized) return;
-
-    // Initialize storage table for Iron Session data
-    await sqlite.execute({
-      sql: `CREATE TABLE IF NOT EXISTS iron_session_storage (
-        key TEXT PRIMARY KEY,
-        value TEXT NOT NULL,
-        expires_at INTEGER,
-        created_at INTEGER NOT NULL,
-        updated_at INTEGER NOT NULL
-      )`,
-      args: [],
-    });
-
-    // Create index for efficient cleanup
-    await sqlite.execute({
-      sql: `CREATE INDEX IF NOT EXISTS idx_iron_session_expires 
-            ON iron_session_storage(expires_at)`,
-      args: [],
-    });
-
+    // Table creation is handled by Drizzle migrations (012_iron_session_storage)
     this.initialized = true;
   }
 
   async hasItem(key: string): Promise<boolean> {
-    await this.init();
+    this.init();
 
-    const result = await sqlite.execute({
-      sql: `SELECT 1 FROM iron_session_storage 
-            WHERE key = ? AND (expires_at IS NULL OR expires_at > ?)`,
-      args: [key, Date.now()],
-    });
+    const now = Date.now();
+    const result = await db.select({ key: ironSessionStorageTable.key })
+      .from(ironSessionStorageTable)
+      .where(
+        and(
+          eq(ironSessionStorageTable.key, key),
+          // Either no expiration (null) or expires in the future
+          or(
+            isNull(ironSessionStorageTable.expiresAt),
+            gt(ironSessionStorageTable.expiresAt, now),
+          ),
+        ),
+      )
+      .limit(1);
 
-    return result.rows.length > 0;
+    return result.length > 0;
   }
 
   async getItem<T = any>(key: string): Promise<T | null> {
-    await this.init();
+    this.init();
 
-    const result = await sqlite.execute({
-      sql: `SELECT value FROM iron_session_storage 
-            WHERE key = ? AND (expires_at IS NULL OR expires_at > ?)`,
-      args: [key, Date.now()],
-    });
+    const now = Date.now();
+    const result = await db.select({ value: ironSessionStorageTable.value })
+      .from(ironSessionStorageTable)
+      .where(
+        and(
+          eq(ironSessionStorageTable.key, key),
+          // Either no expiration (null) or expires in the future
+          or(
+            isNull(ironSessionStorageTable.expiresAt),
+            gt(ironSessionStorageTable.expiresAt, now),
+          ),
+        ),
+      )
+      .limit(1);
 
-    if (result.rows.length === 0) {
+    if (result.length === 0) {
       return null;
     }
 
     try {
-      const value = result.rows[0][0] as string;
+      const value = result[0].value;
       return JSON.parse(value) as T;
     } catch {
-      return result.rows[0][0] as T;
+      return result[0].value as T;
     }
   }
 
@@ -70,7 +79,7 @@ export class ValTownStorage {
     value: any,
     options?: { ttl?: number },
   ): Promise<void> {
-    await this.init();
+    this.init();
 
     const now = Date.now();
     const expiresAt = options?.ttl ? now + (options.ttl * 1000) : null;
@@ -78,54 +87,68 @@ export class ValTownStorage {
       ? value
       : JSON.stringify(value);
 
-    await sqlite.execute({
-      sql: `INSERT OR REPLACE INTO iron_session_storage 
-            (key, value, expires_at, created_at, updated_at)
-            VALUES (?, ?, ?, ?, ?)`,
-      args: [key, serializedValue, expiresAt, now, now],
-    });
+    await db.insert(ironSessionStorageTable)
+      .values({
+        key,
+        value: serializedValue,
+        expiresAt,
+        createdAt: now,
+        updatedAt: now,
+      })
+      .onConflictDoUpdate({
+        target: ironSessionStorageTable.key,
+        set: {
+          value: serializedValue,
+          expiresAt,
+          updatedAt: now,
+        },
+      });
   }
 
   async removeItem(key: string): Promise<void> {
-    await this.init();
+    this.init();
 
-    await sqlite.execute({
-      sql: `DELETE FROM iron_session_storage WHERE key = ?`,
-      args: [key],
-    });
+    await db.delete(ironSessionStorageTable)
+      .where(eq(ironSessionStorageTable.key, key));
   }
 
   async getKeys(): Promise<string[]> {
-    await this.init();
+    this.init();
 
-    const result = await sqlite.execute({
-      sql: `SELECT key FROM iron_session_storage 
-            WHERE expires_at IS NULL OR expires_at > ?`,
-      args: [Date.now()],
-    });
+    const now = Date.now();
+    const result = await db.select({ key: ironSessionStorageTable.key })
+      .from(ironSessionStorageTable)
+      .where(
+        // Either no expiration (null) or expires in the future
+        or(
+          isNull(ironSessionStorageTable.expiresAt),
+          gt(ironSessionStorageTable.expiresAt, now),
+        ),
+      );
 
-    return result.rows.map((row) => row[0] as string);
+    return result.map((row) => row.key);
   }
 
   async clear(): Promise<void> {
-    await this.init();
+    this.init();
 
-    await sqlite.execute({
-      sql: `DELETE FROM iron_session_storage`,
-      args: [],
-    });
+    await db.delete(ironSessionStorageTable);
   }
 
   // Cleanup expired entries
   async cleanup(): Promise<void> {
-    await this.init();
+    this.init();
 
     const now = Date.now();
-    await sqlite.execute({
-      sql:
-        `DELETE FROM iron_session_storage WHERE expires_at IS NOT NULL AND expires_at <= ?`,
-      args: [now],
-    });
+    await db.delete(ironSessionStorageTable)
+      .where(
+        and(
+          // Has an expiration time (not null)
+          isNotNull(ironSessionStorageTable.expiresAt),
+          // And is expired (less than or equal to now)
+          lte(ironSessionStorageTable.expiresAt, now),
+        ),
+      );
   }
 
   // Aliases for OAuth client compatibility

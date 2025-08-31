@@ -1,6 +1,6 @@
 // @val-town anchorAPI
 // Main HTTP API handler for Anchor AppView
-import { db, initializeTables, rawDb } from "../database/db.ts";
+import { db, initializeTables } from "../database/db.ts";
 import {
   checkinsTable,
   processingLogTable,
@@ -9,8 +9,8 @@ import {
 import { and, desc, eq, inArray, lt, sql } from "https://esm.sh/drizzle-orm";
 import { ATProtocolProfileResolver } from "../utils/profile-resolver.ts";
 import {
+  DrizzleStorageProvider,
   ProfileData,
-  SqliteStorageProvider,
 } from "../utils/storage-provider.ts";
 import { OverpassService } from "../services/overpass-service.ts";
 import { CategoryService } from "../services/category-service.ts";
@@ -137,7 +137,7 @@ async function getGlobalFeed(
 
   // Resolve profiles for all authors
   const dids = [...new Set(rows.map((row) => row.did))];
-  const storage = new SqliteStorageProvider(rawDb); // Use rawDb not Drizzle db
+  const storage = new DrizzleStorageProvider(db); // Use Drizzle db for type safety
   const profileResolver = new ATProtocolProfileResolver(storage);
   const profiles = await profileResolver.batchResolveProfiles(dids);
 
@@ -221,7 +221,7 @@ async function getNearbyCheckins(
   const dids = [
     ...new Set(nearbyRows.map((row: any) => row.did as string)),
   ];
-  const storage = new SqliteStorageProvider(rawDb);
+  const storage = new DrizzleStorageProvider(db);
   const profileResolver = new ATProtocolProfileResolver(storage);
   const profiles = await profileResolver.batchResolveProfiles(dids);
 
@@ -275,7 +275,7 @@ async function getUserCheckins(
 
   // Resolve profiles
   const dids = [...new Set(rows.map((row) => row.did))];
-  const storage = new SqliteStorageProvider(rawDb);
+  const storage = new DrizzleStorageProvider(db);
   const profileResolver = new ATProtocolProfileResolver(storage);
   const profiles = await profileResolver.batchResolveProfiles(dids);
 
@@ -358,7 +358,7 @@ async function getFollowingFeed(
 
   // Resolve profiles
   const dids = [...new Set(rows.map((row) => row.did))];
-  const storage = new SqliteStorageProvider(rawDb);
+  const storage = new DrizzleStorageProvider(db);
   const profileResolver = new ATProtocolProfileResolver(storage);
   const profiles = await profileResolver.batchResolveProfiles(dids);
 
@@ -648,7 +648,7 @@ async function getCheckinById(
     const row = rows[0];
 
     // Get profile data for the author
-    const storage = new SqliteStorageProvider(rawDb);
+    const storage = new DrizzleStorageProvider(db);
     const profileResolver = new ATProtocolProfileResolver(storage);
     const profiles = await profileResolver.batchResolveProfiles([row.did]);
 

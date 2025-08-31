@@ -2,7 +2,7 @@
 // Main HTTP entry point for Anchor AppView - unified endpoints
 import { Hono } from "https://esm.sh/hono";
 import { serveFile } from "https://esm.town/v/std/utils@85-main/index.ts";
-import { initializeTables } from "./backend/database/db.ts";
+import { db, initializeTables } from "./backend/database/db.ts";
 import {
   getDashboardStats,
   getSessionBySessionId as _getSessionBySessionId,
@@ -293,13 +293,11 @@ app.post("/api/admin/backfill-profiles", async (c) => {
     }
 
     // Initialize storage
-    const { SqliteStorageProvider } = await import(
+    const { DrizzleStorageProvider } = await import(
       "./backend/utils/storage-provider.ts"
     );
-    // Force refresh - using sqlite2
-    const { sqlite } = await import("https://esm.town/v/std/sqlite2");
-
-    const storage = new SqliteStorageProvider(sqlite);
+    // Use Drizzle db instance for type safety
+    const storage = new DrizzleStorageProvider(db);
 
     // Force resolve all profiles using direct fetching
     const { BlueskyProfileFetcher } = await import(

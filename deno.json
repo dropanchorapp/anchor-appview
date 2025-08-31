@@ -8,7 +8,7 @@
     "noImplicitAny": false,
     "strict": false,
     "types": [
-      "https://www.val.town/types/valtown.d.ts"
+      "./types/valtown-fallback.d.ts"
     ],
     "lib": [
       "dom",

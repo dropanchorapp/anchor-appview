@@ -1,15 +1,15 @@
 // @val-town profileRefreshJob
 // Cron job: Runs every hour to refresh stale profile data
 import { ATProtocolProfileResolver } from "./profile-resolver.ts";
-import { SqliteStorageProvider } from "./storage-provider.ts";
+import { DrizzleStorageProvider } from "./storage-provider.ts";
+import { db } from "../database/db.ts";
 
 export default async function () {
   console.log("Starting profile refresh job...");
 
   try {
-    // Initialize profile resolver with database connection
-    const { sqlite } = await import("https://esm.town/v/std/sqlite2");
-    const storage = new SqliteStorageProvider(sqlite);
+    // Initialize profile resolver with Drizzle database connection
+    const storage = new DrizzleStorageProvider(db);
     const resolver = new ATProtocolProfileResolver(storage);
 
     // Refresh up to 100 stale profiles per run

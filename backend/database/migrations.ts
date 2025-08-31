@@ -357,6 +357,25 @@ const MIGRATIONS = [
       CREATE INDEX IF NOT EXISTS idx_oauth_sessions_mobile_challenge ON oauth_sessions(mobile_code_challenge);
     `,
   },
+  {
+    version: "012_iron_session_storage",
+    description:
+      "Create iron_session_storage table for encrypted session cookies",
+    sql: `
+      -- Create iron_session_storage table for Iron Session encrypted cookie storage
+      CREATE TABLE IF NOT EXISTS iron_session_storage (
+        key TEXT PRIMARY KEY,
+        value TEXT NOT NULL,
+        expires_at INTEGER,
+        created_at INTEGER NOT NULL,
+        updated_at INTEGER NOT NULL
+      );
+
+      -- Create index for efficient cleanup of expired sessions
+      CREATE INDEX IF NOT EXISTS idx_iron_session_expires 
+      ON iron_session_storage(expires_at);
+    `,
+  },
 ];
 
 export async function runMigrations() {
@@ -375,9 +394,9 @@ export async function runMigrations() {
       args: [],
     });
 
-    // Get executed versions from Row objects
+    // Get executed versions from row arrays (sqlite2 returns arrays, not objects)
     const executedVersions = new Set(
-      executed.rows?.map((row) => row.version as string) || [],
+      executed.rows?.map((row) => row[0] as string) || [],
     );
 
     // Run pending migrations

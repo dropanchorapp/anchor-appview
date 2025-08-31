@@ -30,9 +30,10 @@ export async function initializeTables() {
 export async function testDatabase() {
   try {
     await initializeTables();
-    const result = await rawDb.execute(
-      "SELECT name FROM sqlite_master WHERE type='table'",
-    );
+    const result = await rawDb.execute({
+      sql: "SELECT name FROM sqlite_master WHERE type='table'",
+      args: [],
+    });
     console.log("Database tables:", result.rows);
     return true;
   } catch (error) {

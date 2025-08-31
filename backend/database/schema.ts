@@ -126,6 +126,15 @@ export const userPdsesTable = sqliteTable("user_pdses", {
   createdAt: text("created_at").default(sql`CURRENT_TIMESTAMP`), // When first discovered
 });
 
+// Iron Session storage for encrypted session cookies
+export const ironSessionStorageTable = sqliteTable("iron_session_storage", {
+  key: text("key").primaryKey(),
+  value: text("value").notNull(),
+  expiresAt: integer("expires_at"),
+  createdAt: integer("created_at").notNull(),
+  updatedAt: integer("updated_at").notNull(),
+});
+
 // Export types for use in queries
 export type CheckinInsert = typeof checkinsTable.$inferInsert;
 export type CheckinSelect = typeof checkinsTable.$inferSelect;
@@ -140,3 +149,5 @@ export type OAuthSessionInsert = typeof oauthSessionsTable.$inferInsert;
 export type OAuthSessionSelect = typeof oauthSessionsTable.$inferSelect;
 export type UserPdsInsert = typeof userPdsesTable.$inferInsert;
 export type UserPdsSelect = typeof userPdsesTable.$inferSelect;
+export type IronSessionInsert = typeof ironSessionStorageTable.$inferInsert;
+export type IronSessionSelect = typeof ironSessionStorageTable.$inferSelect;

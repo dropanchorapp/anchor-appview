@@ -7,7 +7,7 @@ import {
 } from "./schema.ts";
 import { count, desc, eq, sql } from "https://esm.sh/drizzle-orm";
 import { ATProtocolProfileResolver } from "../utils/profile-resolver.ts";
-import { SqliteStorageProvider } from "../utils/storage-provider.ts";
+import { DrizzleStorageProvider } from "../utils/storage-provider.ts";
 // OAuth types now managed by Iron Session
 interface OAuthSession {
   did: string;
@@ -139,7 +139,7 @@ export async function getDashboardStats() {
 
   // Get all unique DIDs for profile resolution
   const dids = [...new Set(rows.map((row) => row.did))];
-  const storage = new SqliteStorageProvider(db);
+  const storage = new DrizzleStorageProvider(db);
   const profileResolver = new ATProtocolProfileResolver(storage);
   const profiles = await profileResolver.batchResolveProfiles(dids);
 

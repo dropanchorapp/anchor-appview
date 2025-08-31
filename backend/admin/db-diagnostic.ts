@@ -7,9 +7,10 @@ export async function dbDiagnostic() {
   try {
     // First test basic connectivity
     console.log("Testing raw database connection...");
-    const tables = await rawDb.execute(
-      "SELECT name FROM sqlite_master WHERE type='table' ORDER BY name",
-    );
+    const tables = await rawDb.execute({
+      sql: "SELECT name FROM sqlite_master WHERE type='table' ORDER BY name",
+      args: [],
+    });
     console.log(
       "Database tables found:",
       tables.rows?.map((row) => row[0]) || [],
@@ -24,24 +25,28 @@ export async function dbDiagnostic() {
     if (anchorUsersExists) {
       // Try a simple count query directly on SQLite
       console.log("Testing direct count query...");
-      const countResult = await rawDb.execute(
-        "SELECT COUNT(*) as count FROM anchor_users",
-      );
+      const countResult = await rawDb.execute({
+        sql: "SELECT COUNT(*) as count FROM anchor_users",
+        args: [],
+      });
       console.log("Raw count result:", countResult.rows);
 
       // Check table structure
       console.log("Checking anchor_users table structure...");
-      const tableInfo = await rawDb.execute(
-        "PRAGMA table_info(anchor_users)",
-      );
+      const tableInfo = await rawDb.execute({
+        sql: "PRAGMA table_info(anchor_users)",
+        args: [],
+      });
       console.log("Table structure:", tableInfo.rows);
 
       // Try the failing query directly
       console.log("Testing the query that was failing...");
       try {
-        const testResult = await rawDb.execute(
-          'SELECT "did", "handle", "pds", "added_at" FROM "anchor_users" ORDER BY "anchor_users"."added_at" DESC LIMIT 5',
-        );
+        const testResult = await rawDb.execute({
+          sql:
+            'SELECT "did", "handle", "pds", "added_at" FROM "anchor_users" ORDER BY "anchor_users"."added_at" DESC LIMIT 5',
+          args: [],
+        });
         console.log("Direct query result:", testResult.rows);
       } catch (queryError) {
         console.log("Direct query failed:", queryError.message);
@@ -50,9 +55,11 @@ export async function dbDiagnostic() {
       // Test the PDS crawler query that's now failing
       console.log("Testing PDS crawler query...");
       try {
-        const pdsTestResult = await rawDb.execute(
-          'SELECT "did", "handle", "pds", "added_at", "last_checkin_crawl" FROM "anchor_users" LIMIT 3',
-        );
+        const pdsTestResult = await rawDb.execute({
+          sql:
+            'SELECT "did", "handle", "pds", "added_at", "last_checkin_crawl" FROM "anchor_users" LIMIT 3',
+          args: [],
+        });
         console.log("PDS crawler query result:", pdsTestResult.rows);
       } catch (pdsQueryError) {
         console.log("PDS crawler query failed:", pdsQueryError.message);
@@ -66,9 +73,10 @@ export async function dbDiagnostic() {
     if (anchorUsersExists) {
       // Get table structure
       try {
-        const tableInfo = await rawDb.execute(
-          "PRAGMA table_info(anchor_users)",
-        );
+        const tableInfo = await rawDb.execute({
+          sql: "PRAGMA table_info(anchor_users)",
+          args: [],
+        });
         tableStructure = tableInfo.rows;
       } catch (error) {
         tableStructure = `Error getting table structure: ${error.message}`;
@@ -76,9 +84,10 @@ export async function dbDiagnostic() {
 
       // Test direct query
       try {
-        const testResult = await rawDb.execute(
-          'SELECT COUNT(*) as count FROM "anchor_users"',
-        );
+        const testResult = await rawDb.execute({
+          sql: 'SELECT COUNT(*) as count FROM "anchor_users"',
+          args: [],
+        });
         directQueryResult = testResult.rows;
       } catch (error) {
         directQueryResult = `Error in direct query: ${error.message}`;
@@ -86,9 +95,10 @@ export async function dbDiagnostic() {
 
       // Test PDS crawler query
       try {
-        const pdsTestResult = await rawDb.execute(
-          'SELECT "did", "handle", "pds" FROM "anchor_users" LIMIT 3',
-        );
+        const pdsTestResult = await rawDb.execute({
+          sql: 'SELECT "did", "handle", "pds" FROM "anchor_users" LIMIT 3',
+          args: [],
+        });
         pdsQueryResult = pdsTestResult.rows;
       } catch (error) {
         pdsQueryResult = `Error in PDS query: ${error.message}`;
