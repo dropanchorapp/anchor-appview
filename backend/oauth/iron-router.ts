@@ -7,7 +7,7 @@ import { isValidHandle } from "npm:@atproto/syntax@0.4.0";
 import {
   OAuthClient,
   Session as OAuthSession,
-} from "jsr:@tijs/oauth-client-deno@0.1.2";
+} from "jsr:@tijs/oauth-client-deno@1.0.0";
 import { valTownStorage } from "./iron-storage.ts";
 
 const COOKIE_SECRET = Deno.env.get("COOKIE_SECRET") ||
@@ -68,7 +68,7 @@ export function createOAuthRouter() {
       const state = crypto.randomUUID();
       const url = await c.get("oauthClient").authorize(handle, { state });
       console.log(`Generated authorization URL: ${url}`);
-      return c.redirect(url);
+      return c.redirect(url.toString());
     } catch (err) {
       console.error("OAuth authorize failed:", err);
       return c.text(
@@ -84,12 +84,8 @@ export function createOAuthRouter() {
       // Use new OAuth client callback
       console.log(`Processing OAuth callback`);
       const params = new URLSearchParams(c.req.url.split("?")[1]);
-      const callbackParams = {
-        code: params.get("code") || "",
-        state: params.get("state") || "",
-      };
       const callbackResult: any = await c.get("oauthClient").callback(
-        callbackParams,
+        params,
       );
 
       console.log(
@@ -202,7 +198,7 @@ export function createOAuthRouter() {
 
       return c.json({
         success: true,
-        authUrl,
+        authUrl: authUrl.toString(),
       });
     } catch (err) {
       console.error("Mobile OAuth start failed:", err);

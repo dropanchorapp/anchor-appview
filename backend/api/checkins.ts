@@ -264,7 +264,7 @@ export async function createCheckin(c: Context): Promise<Response> {
     console.log("🚀 Starting checkin creation process...");
 
     // Create OAuth client for AT Protocol operations
-    const { OAuthClient } = await import("jsr:@tijs/oauth-client-deno@0.1.2");
+    const { OAuthClient } = await import("jsr:@tijs/oauth-client-deno@1.0.0");
     const { valTownStorage } = await import("../oauth/iron-storage.ts");
     const BASE_URL =
       (Deno.env.get("ANCHOR_BASE_URL") || "https://dropanchor.app")
@@ -323,7 +323,7 @@ async function createAddressAndCheckin(
 > {
   try {
     // Import Session from the new OAuth client
-    const { Session } = await import("jsr:@tijs/oauth-client-deno@0.1.2");
+    const { Session } = await import("jsr:@tijs/oauth-client-deno@1.0.0");
     // Create session object from stored data
     const oauthSession = new Session(oauthSessionData);
 
