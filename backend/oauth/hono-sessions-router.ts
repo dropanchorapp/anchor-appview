@@ -1,7 +1,7 @@
 // OAuth routes using @tijs/hono-oauth-sessions package
 import { Hono } from "jsr:@hono/hono@^4.9.6";
-import { OAuthClient } from "@tijs/oauth-client-deno";
-import { HonoOAuthSessions } from "@tijs/hono-oauth-sessions";
+import { OAuthClient } from "jsr:@tijs/oauth-client-deno@1.0.0";
+import { HonoOAuthSessions } from "jsr:@tijs/hono-oauth-sessions@0.1.1";
 import { valTownStorage } from "./iron-storage.ts";
 
 const COOKIE_SECRET = Deno.env.get("COOKIE_SECRET") ||

@@ -627,8 +627,10 @@ app.post("/api/admin/backfill", async (c) => {
 app.get("/api/auth/session", async (c) => {
   try {
     // Create OAuth sessions instance
-    const { OAuthClient } = await import("@tijs/oauth-client-deno");
-    const { HonoOAuthSessions } = await import("@tijs/hono-oauth-sessions");
+    const { OAuthClient } = await import("jsr:@tijs/oauth-client-deno@1.0.0");
+    const { HonoOAuthSessions } = await import(
+      "jsr:@tijs/hono-oauth-sessions@0.1.1"
+    );
     const { valTownStorage } = await import("./backend/oauth/iron-storage.ts");
 
     const COOKIE_SECRET = Deno.env.get("COOKIE_SECRET") ||
