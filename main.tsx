@@ -1,6 +1,6 @@
 // @val-town anchordashboard
 // Main HTTP entry point for Anchor AppView - unified endpoints
-import { Hono } from "https://esm.sh/hono";
+import { Hono } from "@hono/hono";
 import { serveFile } from "https://esm.town/v/std/utils@85-main/index.ts";
 import { db, initializeTables } from "./backend/database/db.ts";
 import {
@@ -651,7 +651,7 @@ app.get("/api/auth/session", async (c) => {
     });
 
     // Use the HonoOAuthSessions validateSession method with automatic token refresh
-    const result = await sessions.validateSession(c as any);
+    const result = await sessions.validateSession(c);
 
     if (result.valid) {
       return c.json({

@@ -1,5 +1,5 @@
 // OAuth routes using @tijs/hono-oauth-sessions package
-import { Hono } from "https://esm.sh/hono";
+import { Hono } from "@hono/hono";
 import { OAuthClient } from "@tijs/oauth-client-deno";
 import { HonoOAuthSessions } from "@tijs/hono-oauth-sessions";
 import { valTownStorage } from "./iron-storage.ts";
@@ -69,7 +69,7 @@ export function createOAuthRouter() {
   // OAuth callback
   app.get("/oauth/callback", async (c) => {
     try {
-      return await sessions.handleCallback(c as any);
+      return await sessions.handleCallback(c);
     } catch (err) {
       console.error("OAuth callback failed:", err);
       return c.text(`Login failed: ${(err as Error).message}`, 400);
@@ -133,7 +133,7 @@ export function createOAuthRouter() {
   // Session validation endpoint
   app.get("/validate-session", async (c) => {
     try {
-      const result = await sessions.validateSession(c as any);
+      const result = await sessions.validateSession(c);
       if (result.valid) {
         return c.json({
           valid: true,
@@ -152,7 +152,7 @@ export function createOAuthRouter() {
   // Logout handler
   app.post("/api/auth/logout", async (c) => {
     try {
-      await sessions.logout(c as any);
+      await sessions.logout(c);
       return c.json({ success: true });
     } catch (err) {
       console.error("Logout failed:", err);

@@ -1,5 +1,5 @@
 // Checkin creation API endpoint for Anchor
-import type { Context } from "https://esm.sh/hono";
+import type { Context } from "@hono/hono";
 import { OverpassService } from "../services/overpass-service.ts";
 import type { Place } from "../models/place-models.ts";
 import { processCheckinEvent as _processCheckinEvent } from "../ingestion/record-processor.ts";

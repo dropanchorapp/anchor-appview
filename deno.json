@@ -3,7 +3,8 @@
   "lock": false,
   "imports": {
     "@tijs/oauth-client-deno": "jsr:@tijs/oauth-client-deno@1.0.0",
-    "@tijs/hono-oauth-sessions": "jsr:@tijs/hono-oauth-sessions@0.1.1"
+    "@tijs/hono-oauth-sessions": "jsr:@tijs/hono-oauth-sessions@0.1.1",
+    "@hono/hono": "jsr:@hono/hono@^4.9.6"
   },
   "compilerOptions": {
     "noImplicitAny": false,
