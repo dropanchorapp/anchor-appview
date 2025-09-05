@@ -185,14 +185,15 @@ category system locally.
 ### OAuth Authentication API
 
 - `/client-metadata.json` - OAuth client metadata endpoint
-- `/api/auth/start` - Initiate OAuth flow (POST with handle)
+- `/login` - Initiate OAuth flow (GET with handle parameter)
 - `/oauth/callback` - Complete OAuth token exchange
-- `/api/auth/session` - Session validation for web and mobile (auto-extends
-  session lifetime)
+- `/api/auth/session` - Session validation for web and mobile with automatic
+  token refresh (auto-extends session lifetime)
 - `/api/auth/logout` - Session cleanup
-- `/api/auth/validate-mobile-session` - Mobile token validation with automatic
-  token refresh
-- `/api/auth/refresh-mobile-token` - Explicit mobile token refresh endpoint
+- `/api/auth/mobile-start` - Mobile OAuth initiation endpoint (POST with handle
+  and code_challenge)
+- `/mobile/refresh-token` - Mobile token refresh endpoint (GET with Bearer
+  token)
 
 ### Mobile OAuth WebView
 
@@ -251,13 +252,14 @@ anchor-app://auth-callback?access_token=...&refresh_token=...&did=...&handle=...
 - **Extended Sessions**: Sessions now persist for 30+ days with automatic
   lifetime extension
 - **Token Refresh**: Automatic token refresh when AT Protocol access tokens
-  expire
-- **Session Touching**: Session validation endpoints automatically extend
-  session lifetime
+  expire via `/api/auth/session` endpoint for web clients and
+  `/mobile/refresh-token` for mobile clients
+- **Session Touching**: The `/api/auth/session` endpoint automatically extends
+  session lifetime and refreshes expired tokens
 - **Database Cleanup**: Sessions are only cleaned up after 90 days of inactivity
   (extended from 30 days)
-- **Mobile Token Refresh**: Dedicated endpoint for mobile clients to explicitly
-  refresh tokens
+- **Mobile Token Refresh**: Dedicated `/mobile/refresh-token` endpoint for
+  mobile clients to explicitly refresh tokens using Bearer token authentication
 
 ## Implementation Phases
 

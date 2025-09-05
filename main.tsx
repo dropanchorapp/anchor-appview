@@ -7,7 +7,7 @@ import {
   getDashboardStats,
   getSessionBySessionId as _getSessionBySessionId,
 } from "./backend/database/queries.ts";
-import { createOAuthRouter } from "./backend/oauth/iron-router.ts";
+import { createOAuthRouter } from "./backend/oauth/hono-sessions-router.ts";
 import anchorApiHandler from "./backend/api/anchor-api.ts";
 
 const app = new Hono();
@@ -626,69 +626,44 @@ app.post("/api/admin/backfill", async (c) => {
 
 app.get("/api/auth/session", async (c) => {
   try {
-    // Support both cookie-based (web) and Bearer token (mobile) authentication
-    const { getIronSession, unsealData } = await import(
-      "npm:iron-session@8.0.4"
-    );
+    // Create OAuth sessions instance
+    const { OAuthClient } = await import("@tijs/oauth-client-deno");
+    const { HonoOAuthSessions } = await import("@tijs/hono-oauth-sessions");
     const { valTownStorage } = await import("./backend/oauth/iron-storage.ts");
 
     const COOKIE_SECRET = Deno.env.get("COOKIE_SECRET") ||
       "anchor-default-secret-for-development-only";
+    const BASE_URL =
+      (Deno.env.get("ANCHOR_BASE_URL") || "https://dropanchor.app")
+        .replace(/\/$/, "");
 
-    let userDid: string | null = null;
-
-    // Try Bearer token first (mobile)
-    const authHeader = c.req.header("Authorization");
-    if (authHeader?.startsWith("Bearer ")) {
-      try {
-        const sealedToken = authHeader.slice(7);
-        const sessionData = await unsealData(sealedToken, {
-          password: COOKIE_SECRET,
-        }) as { did: string };
-        userDid = sessionData.did;
-        console.log("Bearer token authentication successful");
-      } catch (err) {
-        console.log("Bearer token authentication failed:", err);
-      }
-    }
-
-    // Fallback to cookie authentication (web)
-    if (!userDid) {
-      try {
-        interface Session {
-          did: string;
-        }
-
-        const session = await getIronSession<Session>(c.req.raw, c.res, {
-          cookieName: "sid",
-          password: COOKIE_SECRET,
-        });
-
-        userDid = session.did;
-        console.log("Cookie authentication successful");
-      } catch (err) {
-        console.log("Cookie authentication failed:", err);
-      }
-    }
-
-    if (!userDid) {
-      return c.json({ authenticated: false });
-    }
-
-    // Get OAuth session data from storage
-    const oauthSession = await valTownStorage.get(`oauth_session:${userDid}`);
-    if (!oauthSession) {
-      return c.json({ authenticated: false });
-    }
-
-    // Return user info without sensitive tokens
-    return c.json({
-      authenticated: true,
-      userHandle: oauthSession.handle,
-      userDid: userDid,
-      userDisplayName: oauthSession.handle, // We can add displayName later if needed
-      userAvatar: null, // We can add avatar later if needed
+    const oauthClient = new OAuthClient({
+      clientId: `${BASE_URL}/client-metadata.json`,
+      redirectUri: `${BASE_URL}/oauth/callback`,
+      storage: valTownStorage,
     });
+
+    const sessions = new HonoOAuthSessions({
+      oauthClient,
+      storage: valTownStorage,
+      cookieSecret: COOKIE_SECRET,
+      baseUrl: BASE_URL,
+    });
+
+    // Use the HonoOAuthSessions validateSession method with automatic token refresh
+    const result = await sessions.validateSession(c as any);
+
+    if (result.valid) {
+      return c.json({
+        authenticated: true,
+        userHandle: result.handle,
+        userDid: result.did,
+        userDisplayName: result.displayName || result.handle,
+        userAvatar: null, // We can add avatar later if needed
+      });
+    } else {
+      return c.json({ authenticated: false });
+    }
   } catch (error) {
     console.error("Session check error:", error);
     return c.json({ authenticated: false });
