@@ -1,6 +1,6 @@
 // @val-town anchordashboard
 // Main HTTP entry point for Anchor AppView - unified endpoints
-import { Hono } from "@hono/hono";
+import { Hono } from "jsr:@hono/hono@^4.9.6";
 import { serveFile } from "https://esm.town/v/std/utils@85-main/index.ts";
 import { db, initializeTables } from "./backend/database/db.ts";
 import {

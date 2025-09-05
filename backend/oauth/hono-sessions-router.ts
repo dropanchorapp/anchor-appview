@@ -1,5 +1,5 @@
 // OAuth routes using @tijs/hono-oauth-sessions package
-import { Hono } from "@hono/hono";
+import { Hono } from "jsr:@hono/hono@^4.9.6";
 import { OAuthClient } from "@tijs/oauth-client-deno";
 import { HonoOAuthSessions } from "@tijs/hono-oauth-sessions";
 import { valTownStorage } from "./iron-storage.ts";
