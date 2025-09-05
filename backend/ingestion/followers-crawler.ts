@@ -20,7 +20,7 @@ interface FollowsResponse {
   cursor?: string;
 }
 
-export default async function followersCrawler(): Promise<Response> {
+async function followersCrawler(): Promise<Response> {
   const startTime = Date.now();
   let totalFollowsProcessed = 0;
   let totalErrors = 0;
@@ -210,3 +210,6 @@ function createResponse(
     },
   );
 }
+
+export { followersCrawler as crawlFollowers };
+export default followersCrawler;

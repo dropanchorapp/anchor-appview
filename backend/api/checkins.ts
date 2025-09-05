@@ -3,6 +3,9 @@ import type { Context } from "jsr:@hono/hono@^4.9.6";
 import { OverpassService } from "../services/overpass-service.ts";
 import type { Place } from "../models/place-models.ts";
 import { processCheckinEvent as _processCheckinEvent } from "../ingestion/record-processor.ts";
+import { db } from "../database/db.ts";
+import { checkinsTable } from "../database/schema.ts";
+import { eq } from "https://esm.sh/drizzle-orm";
 
 // Global service instance for address enhancement
 const overpassService = new OverpassService();
@@ -673,3 +676,17 @@ export async function handleCheckinCreation_DISABLED(c: Context): Promise<Respon
 //   return parts[parts.length - 1];
 // }
 */
+
+// Simple function to get a checkin by ID for frontend routes
+export async function getCheckinById(checkinId: string) {
+  try {
+    const results = await db.select().from(checkinsTable)
+      .where(eq(checkinsTable.id, checkinId))
+      .limit(1);
+
+    return results.length > 0 ? results[0] : null;
+  } catch (error) {
+    console.error(`Error getting checkin ${checkinId}:`, error);
+    return null;
+  }
+}

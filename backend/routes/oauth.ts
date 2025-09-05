@@ -1,34 +1,33 @@
-// OAuth routes using @tijs/hono-oauth-sessions package
-import { Hono } from "jsr:@hono/hono@^4.9.6";
-import { OAuthClient } from "jsr:@tijs/oauth-client-deno@1.0.0";
-import { HonoOAuthSessions } from "jsr:@tijs/hono-oauth-sessions@0.1.1";
-import { valTownStorage } from "./iron-storage.ts";
+// OAuth authentication routes
+import { Hono } from "jsr:@hono/hono@4.9.6";
+import { OAuthClient } from "jsr:@tijs/oauth-client-deno@1.0.1";
+import { HonoOAuthSessions } from "jsr:@tijs/hono-oauth-sessions@0.1.4";
+import { valTownStorage } from "../oauth/iron-storage.ts";
 
 const COOKIE_SECRET = Deno.env.get("COOKIE_SECRET") ||
   "anchor-default-secret-for-development-only";
 const BASE_URL = (Deno.env.get("ANCHOR_BASE_URL") || "https://dropanchor.app")
   .replace(/\/$/, "");
 
-export function createOAuthRouter() {
+// Create OAuth client and sessions manager
+const oauthClient = new OAuthClient({
+  clientId: `${BASE_URL}/client-metadata.json`,
+  redirectUri: `${BASE_URL}/oauth/callback`,
+  storage: valTownStorage,
+});
+
+const sessions = new HonoOAuthSessions({
+  oauthClient,
+  storage: valTownStorage,
+  cookieSecret: COOKIE_SECRET,
+  baseUrl: BASE_URL,
+  mobileScheme: "anchor-app://auth-callback",
+});
+
+export function createOAuthRoutes() {
   const app = new Hono();
 
-  // Create OAuth client
-  const oauthClient = new OAuthClient({
-    clientId: `${BASE_URL}/client-metadata.json`,
-    redirectUri: `${BASE_URL}/oauth/callback`,
-    storage: valTownStorage,
-  });
-
-  // Create OAuth sessions manager
-  const sessions = new HonoOAuthSessions({
-    oauthClient,
-    storage: valTownStorage,
-    cookieSecret: COOKIE_SECRET,
-    baseUrl: BASE_URL,
-    mobileScheme: "anchor-app://auth-callback",
-  });
-
-  // Client metadata endpoint
+  // OAuth client metadata
   app.get("/client-metadata.json", (c) => {
     return c.json({
       client_name: "Anchor Location Feed",
@@ -76,7 +75,7 @@ export function createOAuthRouter() {
     }
   });
 
-  // Mobile OAuth start endpoint
+  // Mobile OAuth start
   app.post("/api/auth/mobile-start", async (c) => {
     try {
       const body = await c.req.json();
@@ -111,7 +110,7 @@ export function createOAuthRouter() {
     }
   });
 
-  // Mobile token refresh endpoint
+  // Mobile token refresh
   app.get("/mobile/refresh-token", async (c) => {
     try {
       const authHeader = c.req.header("Authorization");
@@ -130,7 +129,7 @@ export function createOAuthRouter() {
     }
   });
 
-  // Session validation endpoint
+  // Session validation
   app.get("/validate-session", async (c) => {
     try {
       const result = await sessions.validateSession(c);
@@ -149,7 +148,38 @@ export function createOAuthRouter() {
     }
   });
 
-  // Logout handler
+  // Session validation for API (extended)
+  app.get("/api/auth/session", async (c) => {
+    try {
+      const result = await sessions.validateSession(c);
+
+      if (!result.valid || !result.did) {
+        return c.json({ valid: false }, 401);
+      }
+
+      // Get additional OAuth session data for API access
+      const oauthData = await sessions.getStoredOAuthData(result.did);
+      if (!oauthData) {
+        return c.json({ valid: false }, 401);
+      }
+
+      return c.json({
+        valid: true,
+        did: result.did,
+        handle: result.handle || oauthData.handle,
+        displayName: result.displayName || oauthData.displayName,
+        avatar: oauthData.avatar,
+        accessToken: oauthData.accessToken,
+        refreshToken: oauthData.refreshToken,
+        expiresAt: oauthData.expiresAt,
+      });
+    } catch (err) {
+      console.error("Session validation failed:", err);
+      return c.json({ valid: false }, 401);
+    }
+  });
+
+  // Logout
   app.post("/api/auth/logout", async (c) => {
     try {
       await sessions.logout(c);

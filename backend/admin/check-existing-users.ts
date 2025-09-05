@@ -11,7 +11,7 @@ import {
 } from "../database/schema.ts";
 import { count, desc, sql } from "https://esm.sh/drizzle-orm";
 
-async function checkExistingUsers(): Promise<void> {
+export async function checkExistingUsers() {
   console.log("🔍 Checking existing user data in database...");
 
   try {
@@ -164,6 +164,13 @@ async function checkExistingUsers(): Promise<void> {
       `Currently tracked for PDS crawling: ${currentTracked[0]?.count || 0}`,
     );
     console.log("=================");
+
+    return {
+      oauthSessions: oauthCount[0]?.count || 0,
+      uniqueCheckinAuthors: uniqueAuthors[0]?.count || 0,
+      cachedProfiles: profileCount[0]?.count || 0,
+      currentlyTracked: currentTracked[0]?.count || 0,
+    };
   } catch (error) {
     console.error("❌ Error checking existing users:", error);
     throw error;

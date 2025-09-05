@@ -177,3 +177,21 @@ export async function getUsersNeedingFollowsRefresh(
     lastFollowerCrawl: row.lastFollowerCrawl || undefined,
   }));
 }
+
+// Cron job function for processing followers from queue
+export function processFollowersFromQueue() {
+  console.log(
+    "⚠️ processFollowersFromQueue called but no queue processing logic implemented",
+  );
+  console.log(
+    "This would typically process a backlog of users needing follow sync",
+  );
+
+  return {
+    processedUsers: 0,
+    totalFollows: 0,
+    errors: 0,
+    message:
+      "No follower queue processing implemented - followers are processed via direct crawler",
+  };
+}

@@ -276,7 +276,7 @@ async function processCheckin(checkin: any, stats: BackfillStats) {
 /**
  * Main backfill function
  */
-async function backfillAddresses() {
+export async function backfillAddresses() {
   const stats: BackfillStats = {
     total: 0,
     processed: 0,
@@ -326,6 +326,12 @@ async function backfillAddresses() {
       console.log("   Run without --dry-run to actually update the database");
     }
   }
+
+  return {
+    resolved: stats.updated,
+    failed: stats.errors,
+    errors: stats.errors > 0 ? [`${stats.errors} errors occurred`] : [],
+  };
 }
 
 // Run the backfill

@@ -351,7 +351,7 @@ export class CheckinBackfillService {
 }
 
 // Default export for Val Town compatibility
-export default async function (
+async function backfillCheckins(
   options?: Partial<BackfillOptions>,
 ): Promise<Response> {
   const backfillOptions: BackfillOptions = {
@@ -415,3 +415,6 @@ export default async function (
     );
   }
 }
+
+export { backfillCheckins };
+export default backfillCheckins;

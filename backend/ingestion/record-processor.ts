@@ -203,3 +203,21 @@ async function resolveAddressRecord(
     return null;
   }
 }
+
+// Cron job function for processing recent checkins
+export function processRecentCheckins() {
+  console.log(
+    "⚠️ processRecentCheckins called but no recent checkin processing logic implemented",
+  );
+  console.log(
+    "This function would typically crawl recent records from the firehose or PDS",
+  );
+
+  return {
+    processed: 0,
+    saved: 0,
+    errors: 0,
+    message:
+      "No recent checkin processing implemented - checkins are processed via direct API saves",
+  };
+}

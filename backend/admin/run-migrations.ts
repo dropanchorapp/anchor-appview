@@ -17,6 +17,8 @@ export async function runMigrationsManually() {
     return {
       success: true,
       message: "Database migrations completed successfully",
+      applied: 0, // Migrations don't return count in this system
+      migrations: [],
     };
   } catch (error) {
     console.error("❌ Migration failed:", error);

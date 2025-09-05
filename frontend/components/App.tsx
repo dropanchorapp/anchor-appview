@@ -9,12 +9,29 @@ import { AuthState, CheckinData, FeedType } from "../types/index.ts";
 
 export function App() {
   // Check if we're on the mobile-auth route first, before any hooks
-  const isMobileAuth = globalThis.location?.pathname === "/mobile-auth";
+  let isMobileAuth = false;
+  try {
+    isMobileAuth = globalThis.location?.pathname === "/mobile-auth";
+  } catch (error) {
+    console.error("Error checking mobile auth route:", error);
+    isMobileAuth = false;
+  }
 
   // Check if we're on a checkin detail route
-  const checkinMatch = globalThis.location?.pathname.match(/^\/checkin\/(.+)$/);
-  const isCheckinDetail = !!checkinMatch;
-  const checkinId = checkinMatch?.[1];
+  let checkinMatch = null;
+  let isCheckinDetail = false;
+  let checkinId = null;
+
+  try {
+    const pathname = globalThis.location?.pathname || "";
+    checkinMatch = pathname.match(/^\/checkin\/(.+)$/);
+    isCheckinDetail = !!checkinMatch;
+    checkinId = checkinMatch?.[1];
+  } catch (error) {
+    console.error("Error parsing checkin route:", error);
+    isCheckinDetail = false;
+    checkinId = null;
+  }
 
   if (isMobileAuth) {
     return <MobileAuth />;
@@ -72,13 +89,13 @@ export function App() {
         const response = await fetch("/api/auth/session");
         const data = await response.json();
 
-        if (data.authenticated) {
+        if (data.valid) {
           setAuth({
             isAuthenticated: true,
-            userHandle: data.userHandle,
-            userDid: data.userDid,
-            userDisplayName: data.userDisplayName,
-            userAvatar: data.userAvatar,
+            userHandle: data.handle,
+            userDid: data.did,
+            userDisplayName: data.displayName,
+            userAvatar: data.avatar,
           });
         }
       } catch (error) {
@@ -129,20 +146,34 @@ export function App() {
 
         let url = "/api/global";
         if (feedType === "following" && auth.isAuthenticated && auth.userDid) {
-          url = `/api/following?user=${auth.userDid}`;
+          url = `/api/following?user=${encodeURIComponent(auth.userDid)}`;
         } else if (
           feedType === "timeline" && auth.isAuthenticated && auth.userDid
         ) {
-          url = `/api/user?did=${auth.userDid}`;
+          url = `/api/user?did=${encodeURIComponent(auth.userDid)}`;
         }
 
         const response = await fetch(url);
         if (!response.ok) {
-          throw new Error(`Failed to fetch: ${response.status}`);
+          const errorText = await response.text();
+          console.error("API error response:", errorText);
+          throw new Error(`Failed to fetch: ${response.status} - ${errorText}`);
         }
 
-        const data = await response.json();
-        setCheckins(data.checkins || []);
+        let data;
+        try {
+          data = await response.json();
+        } catch (jsonError) {
+          console.error("Failed to parse JSON response:", jsonError);
+          throw new Error("Invalid response format from server");
+        }
+
+        if (data && typeof data === "object") {
+          setCheckins(data.checkins || []);
+        } else {
+          console.error("Unexpected response format:", data);
+          throw new Error("Unexpected response format from server");
+        }
       } catch (error) {
         console.error("Failed to load feed:", error);
         setError(

@@ -2,8 +2,8 @@
   "$schema": "https://raw.githubusercontent.com/denoland/deno/348900b8b79f4a434cab4c74b3bc8d4d2fa8ee74/cli/schemas/config-file.v1.json",
   "lock": false,
   "imports": {
-    "@tijs/oauth-client-deno": "jsr:@tijs/oauth-client-deno@1.0.0",
-    "@tijs/hono-oauth-sessions": "jsr:@tijs/hono-oauth-sessions@0.1.1",
+    "@tijs/oauth-client-deno": "jsr:@tijs/oauth-client-deno@1.0.1",
+    "@tijs/hono-oauth-sessions": "jsr:@tijs/hono-oauth-sessions@0.1.4",
     "@hono/hono": "jsr:@hono/hono@^4.9.6"
   },
   "compilerOptions": {
@@ -45,6 +45,7 @@
     "test:integration": "deno test --allow-all tests/integration/",
     "test:watch": "deno test --allow-all --watch tests/",
     "quality": "deno fmt && deno lint && deno check --allow-import && deno test --allow-all tests/",
+    "quality-no-check": "deno fmt && deno lint && deno test --allow-all tests/",
     "deploy": "deno task quality && vt push"
   }
 }
