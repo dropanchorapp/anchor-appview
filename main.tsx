@@ -38,6 +38,10 @@ app.get("/api/places/nearby", async (c) => {
   return await anchorApiHandler(c.req.raw);
 });
 
+app.get("/api/places/search", async (c) => {
+  return await anchorApiHandler(c.req.raw);
+});
+
 app.get("/api/places/categories", async (c) => {
   return await anchorApiHandler(c.req.raw);
 });

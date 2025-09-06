@@ -14,6 +14,7 @@ import {
 } from "../utils/storage-provider.ts";
 import { OverpassService } from "../services/overpass-service.ts";
 import { CategoryService } from "../services/category-service.ts";
+import { NominatimService } from "../services/nominatim-service.ts";
 import { PlacesNearbyResponse } from "../models/place-models.ts";
 import { createCheckin } from "./checkins.ts";
 import { getCheckinCounts, getRecentActivity } from "../database/queries.ts";
@@ -82,6 +83,8 @@ export default async function (req: Request): Promise<Response> {
       return await getFollowingFeed(url, corsHeaders);
     case "/api/places/nearby":
       return await getNearbyPlaces(url, corsHeaders);
+    case "/api/places/search":
+      return await searchPlaces(url, corsHeaders);
     case "/api/places/categories":
       return getPlaceCategories(corsHeaders);
     case "/api/stats":
@@ -512,8 +515,110 @@ function getPlaceCategories(corsHeaders: CorsHeaders): Response {
   }
 }
 
-// Create a single OverpassService instance to reuse
+// Create service instances to reuse
 const overpassService = new OverpassService();
+const nominatimService = new NominatimService();
+
+async function searchPlaces(
+  url: URL,
+  corsHeaders: CorsHeaders,
+): Promise<Response> {
+  // Parse and validate parameters
+  const query = url.searchParams.get("q");
+  const lat = parseFloat(url.searchParams.get("lat") || "0");
+  const lng = parseFloat(url.searchParams.get("lng") || "0");
+  const country = url.searchParams.get("country");
+  const limit = Math.min(
+    parseInt(url.searchParams.get("limit") || "10"),
+    25, // max 25 results
+  );
+
+  // Validate required parameters
+  if (!query || query.trim() === "") {
+    return new Response(
+      JSON.stringify({ error: "Query parameter 'q' is required" }),
+      {
+        status: 400,
+        headers: corsHeaders,
+      },
+    );
+  }
+
+  if (!lat || !lng || lat === 0 || lng === 0) {
+    return new Response(
+      JSON.stringify({
+        error: "Valid latitude and longitude parameters are required",
+      }),
+      {
+        status: 400,
+        headers: corsHeaders,
+      },
+    );
+  }
+
+  // Validate coordinate ranges
+  if (lat < -90 || lat > 90 || lng < -180 || lng > 180) {
+    return new Response(
+      JSON.stringify({ error: "Invalid latitude or longitude values" }),
+      {
+        status: 400,
+        headers: corsHeaders,
+      },
+    );
+  }
+
+  try {
+    console.log(
+      `Searching places: "${query}" near ${lat}, ${lng} (country: ${
+        country || "any"
+      })`,
+    );
+
+    // Search for places using Nominatim
+    const places = await nominatimService.searchPlaces(
+      query.trim(),
+      { latitude: lat, longitude: lng },
+      {
+        country,
+        limit,
+        radiusKm: 2, // 2km search radius for 4x4km box as requested
+      },
+    );
+
+    console.log(`Found ${places.length} places for query: "${query}"`);
+
+    // Format response to match the existing places API structure
+    const response = {
+      places,
+      query,
+      center: {
+        latitude: lat,
+        longitude: lng,
+      },
+      radius: 2000, // 2km in meters
+      count: places.length,
+    };
+
+    return new Response(JSON.stringify(response), { headers: corsHeaders });
+  } catch (error) {
+    console.error("Places search error:", error);
+    const errorResponse = {
+      error: "Failed to search for places",
+      details: error instanceof Error ? error.message : "Unknown error",
+    };
+
+    // Return appropriate status code based on error type
+    const status =
+      error instanceof Error && error.message.includes("Rate limit")
+        ? 429
+        : 500;
+
+    return new Response(JSON.stringify(errorResponse), {
+      status,
+      headers: corsHeaders,
+    });
+  }
+}
 
 async function formatCheckinWithPlaces(
   row: any,
