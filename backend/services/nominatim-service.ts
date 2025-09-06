@@ -21,6 +21,7 @@ export interface NominatimAddress {
   county?: string;
   state?: string;
   country?: string;
+  country_code?: string; // ISO 3166-1 alpha-2 code
   postcode?: string;
 }
 
@@ -63,11 +64,17 @@ export class NominatimService {
   private lastRequestTime = 0;
 
   constructor(config?: Partial<NominatimServiceConfig>) {
+    // Allow configurable Nominatim instance via environment variable
+    const baseURL = Deno.env.get("NOMINATIM_BASE_URL") ||
+      "https://nominatim.geocoding.ai";
+
+    console.log(`🌐 NominatimService configured with baseURL: ${baseURL}`);
+
     this.config = {
-      baseURL: "https://nominatim.openstreetmap.org",
+      baseURL,
       userAgent:
         "Anchor-AppView/1.0 (atproto check-in app; https://dropanchor.app)",
-      timeout: 10000, // 10 seconds
+      timeout: 15000, // 15 seconds (increased for reliability)
       rateLimitDelay: 1100, // 1.1 seconds between requests (slightly over 1/sec)
       ...config,
     };
@@ -152,11 +159,8 @@ export class NominatimService {
     // Region mapping (state/province)
     const region = address.state;
 
-    // Country standardization
-    let country = address.country;
-    if (country) {
-      country = this.standardizeCountryName(country);
-    }
+    // Use ISO country code (uppercase for standard format)
+    const country = address.country_code?.toUpperCase();
 
     return {
       $type: "community.lexicon.location.address",
@@ -167,36 +171,6 @@ export class NominatimService {
       country,
       postalCode: address.postcode,
     };
-  }
-
-  /**
-   * Standardize country names to ISO 3166-1 alpha-2 codes
-   */
-  private standardizeCountryName(country: string): string {
-    const countryMap: Record<string, string> = {
-      "Nederland": "NL",
-      "United States": "US",
-      "United Kingdom": "GB",
-      "Deutschland": "DE",
-      "France": "FR",
-      "España": "ES",
-      "Italia": "IT",
-      "Canada": "CA",
-      "Australia": "AU",
-      "België": "BE",
-      "Schweiz": "CH",
-      "Österreich": "AT",
-      "Sverige": "SE",
-      "Norge": "NO",
-      "Danmark": "DK",
-      "Suomi": "FI",
-      "Portugal": "PT",
-      "Polska": "PL",
-      "Česká republika": "CZ",
-      "Magyarország": "HU",
-    };
-
-    return countryMap[country] || country;
   }
 
   /**
@@ -213,43 +187,70 @@ export class NominatimService {
   ): Promise<PlaceWithDistance[]> {
     await this.enforceRateLimit();
 
-    const { country, limit = 10, radiusKm = 2 } = options || {};
+    const { country, limit = 10 } = options || {};
 
-    // Calculate viewbox (±radiusKm around center)
-    // Rough approximation: 1 degree ≈ 111km
-    const latOffset = radiusKm / 111;
-    const lngOffset = radiusKm /
-      (111 * Math.cos(center.latitude * Math.PI / 180));
+    // Try to get city name for location context, but fall back gracefully
+    let locationQuery = query; // Default to original query
 
-    const viewbox = [
-      center.longitude - lngOffset, // left
-      center.latitude + latOffset, // top
-      center.longitude + lngOffset, // right
-      center.latitude - latOffset, // bottom
-    ];
+    try {
+      const reverseResult = await this.reverseGeocode(center);
+      const cityName = reverseResult?.locality;
+      if (cityName && cityName !== "unknown") {
+        locationQuery = `${query} near ${cityName}`;
+        console.log(`🎯 Using location-aware query: "${locationQuery}"`);
+      } else {
+        console.log(`⚠️ No city name found, using direct query: "${query}"`);
+      }
+    } catch (error) {
+      console.warn(
+        "Failed to get city name for search context, using direct query:",
+        error,
+      );
+    }
 
     const url = new URL(`${this.config.baseURL}/search`);
     url.searchParams.set("format", "json");
-    url.searchParams.set("q", query);
-    url.searchParams.set("viewbox", viewbox.join(","));
-    url.searchParams.set("bounded", "1"); // Restrict to viewbox
+    url.searchParams.set("q", locationQuery); // Use location-aware query
     url.searchParams.set("addressdetails", "1");
-    url.searchParams.set("extratags", "1");
-    url.searchParams.set("namedetails", "1");
-    url.searchParams.set("limit", Math.min(limit, 25).toString()); // Max 25 results
-    url.searchParams.set("layer", "poi,natural"); // POIs and natural features
+    url.searchParams.set("limit", Math.min(limit, 25).toString());
     url.searchParams.set("email", "hello@dropanchor.app");
 
     if (country) {
       url.searchParams.set("countrycodes", country.toLowerCase());
     }
 
+    // Add viewbox for location-specific search (4x4km as originally requested)
+    const radiusKm = 2; // 2km radius = 4km x 4km box
+    const latOffset = radiusKm / 111; // Rough km to degree conversion for lat
+    const lngOffset = radiusKm /
+      (111 * Math.cos(center.latitude * Math.PI / 180)); // Adjust for longitude
+
+    const viewbox = [
+      center.longitude - lngOffset, // left (min longitude)
+      center.latitude + latOffset, // top (max latitude)
+      center.longitude + lngOffset, // right (max longitude)
+      center.latitude - latOffset, // bottom (min latitude)
+    ].join(",");
+
+    url.searchParams.set("viewbox", viewbox);
+    url.searchParams.set("bounded", "1"); // Only return results within viewbox
+
     try {
       const controller = new AbortController();
       const timeoutId = setTimeout(
-        () => controller.abort(),
+        () => {
+          console.warn(
+            `Nominatim search timeout after ${this.config.timeout}ms for query: "${query}"`,
+          );
+          controller.abort();
+        },
         this.config.timeout,
       );
+
+      console.log(
+        `🌐 Nominatim search: "${query}" near ${center.latitude},${center.longitude}`,
+      );
+      const startTime = Date.now();
 
       const response = await fetch(url.toString(), {
         signal: controller.signal,
@@ -259,10 +260,14 @@ export class NominatimService {
       });
 
       clearTimeout(timeoutId);
+      const responseTime = Date.now() - startTime;
+      console.log(
+        `📊 Nominatim response: ${response.status} (${responseTime}ms)`,
+      );
 
       if (!response.ok) {
         if (response.status === 429) {
-          throw new Error("Rate limit exceeded");
+          throw new Error("Rate limit exceeded - try again in a few seconds");
         }
         throw new Error(`HTTP ${response.status}: ${response.statusText}`);
       }
@@ -322,11 +327,22 @@ export class NominatimService {
         })
         .sort((a, b) => a.distanceMeters - b.distanceMeters); // Sort by distance
 
+      console.log(
+        `✅ Nominatim search completed: ${places.length} places found`,
+      );
       return places;
     } catch (error) {
       if (error instanceof DOMException && error.name === "AbortError") {
-        throw new Error("Request timeout");
+        console.error(
+          `⏰ Nominatim search timeout for "${query}" after ${this.config.timeout}ms`,
+        );
+        throw new Error(
+          `Search timeout after ${
+            this.config.timeout / 1000
+          } seconds - Nominatim may be slow, try again`,
+        );
       }
+      console.error(`❌ Nominatim search error for "${query}":`, error);
       throw error;
     }
   }
