@@ -675,6 +675,65 @@ export class CategoryService {
         socialRelevance: false,
       },
     },
+
+    // === HEALTH ===
+    {
+      tag: "amenity",
+      value: "healthcare",
+      group: PlaceCategoryGroup.HEALTH,
+      icon: "🏥",
+      metadata: {
+        includeInDefaultSearch: true,
+        addressStrategy: "venue",
+        socialRelevance: true,
+      },
+    },
+    {
+      tag: "healthcare",
+      value: "physiotherapist",
+      group: PlaceCategoryGroup.HEALTH,
+      icon: "🏥",
+      metadata: {
+        includeInDefaultSearch: true,
+        addressStrategy: "venue",
+        socialRelevance: true,
+      },
+    },
+    {
+      tag: "amenity",
+      value: "doctors",
+      group: PlaceCategoryGroup.HEALTH,
+      icon: "👩‍⚕️",
+      metadata: {
+        includeInDefaultSearch: true,
+        addressStrategy: "venue",
+        socialRelevance: true,
+      },
+    },
+    {
+      tag: "amenity",
+      value: "dentist",
+      group: PlaceCategoryGroup.HEALTH,
+      icon: "🦷",
+      metadata: {
+        includeInDefaultSearch: true,
+        addressStrategy: "venue",
+        socialRelevance: true,
+      },
+    },
+
+    // === NATURE ===
+    {
+      tag: "natural",
+      value: "peak",
+      group: PlaceCategoryGroup.NATURE,
+      icon: "⛰️",
+      metadata: {
+        includeInDefaultSearch: true,
+        addressStrategy: "geographic",
+        socialRelevance: true,
+      },
+    },
   ];
 
   // Category group definitions

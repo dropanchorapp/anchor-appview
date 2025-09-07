@@ -98,7 +98,7 @@ Deno.test("NominatimService - searchPlaces with valid query", async () => {
     const mountain = results.find((r) => r.category === "peak");
     assertExists(mountain);
     assertEquals(mountain.name, "Test Mountain");
-    assertEquals(mountain.icon, "⛰️");
+    assertEquals(mountain.icon, "⛰️"); // Mountain icon from CategoryService
     assertEquals(mountain.elementType, "way");
   } finally {
     // Restore original fetch

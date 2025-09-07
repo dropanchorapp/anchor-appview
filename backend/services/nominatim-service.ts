@@ -6,6 +6,7 @@ import {
   CommunityAddressRecord,
   PlaceWithDistance,
 } from "../models/place-models.ts";
+import { CategoryService } from "./category-service.ts";
 
 export interface NominatimAddress {
   amenity?: string;
@@ -189,28 +190,12 @@ export class NominatimService {
 
     const { country, limit = 10 } = options || {};
 
-    // Try to get city name for location context, but fall back gracefully
-    let locationQuery = query; // Default to original query
-
-    try {
-      const reverseResult = await this.reverseGeocode(center);
-      const cityName = reverseResult?.locality;
-      if (cityName && cityName !== "unknown") {
-        locationQuery = `${query} near ${cityName}`;
-        console.log(`🎯 Using location-aware query: "${locationQuery}"`);
-      } else {
-        console.log(`⚠️ No city name found, using direct query: "${query}"`);
-      }
-    } catch (error) {
-      console.warn(
-        "Failed to get city name for search context, using direct query:",
-        error,
-      );
-    }
+    // Use original query unchanged - rely on viewbox for geographic constraints
+    console.log(`🎯 Using original query unchanged: "${query}"`);
 
     const url = new URL(`${this.config.baseURL}/search`);
     url.searchParams.set("format", "json");
-    url.searchParams.set("q", locationQuery); // Use location-aware query
+    url.searchParams.set("q", query); // Use original query unchanged
     url.searchParams.set("addressdetails", "1");
     url.searchParams.set("limit", Math.min(limit, 25).toString());
     url.searchParams.set("email", "hello@dropanchor.app");
@@ -303,8 +288,15 @@ export class NominatimService {
               ),
             };
 
-          // Determine icon based on OSM class/type
-          const icon = this.getIconForOsmClassType(result.class, result.type);
+          // Create proper tags from OSM class/type for CategoryService
+          const tags = { [result.class]: result.type };
+
+          // Use CategoryService for consistent category and icon assignment
+          const _categoryGroup = CategoryService.getCategoryGroup(
+            result.class,
+            result.type,
+          );
+          const icon = CategoryService.getIcon(result.class, result.type);
 
           return {
             id,
@@ -317,7 +309,7 @@ export class NominatimService {
             name,
             latitude,
             longitude,
-            tags: { class: result.class, type: result.type }, // Minimal tags from search
+            tags,
             address,
             category: result.type,
             icon,
@@ -376,46 +368,6 @@ export class NominatimService {
       return parts[parts.length - 2];
     }
     return undefined;
-  }
-
-  /**
-   * Get appropriate icon for OSM class/type
-   */
-  private getIconForOsmClassType(osmClass: string, osmType: string): string {
-    const iconMap: Record<string, string> = {
-      // Amenities
-      "amenity:restaurant": "🍽️",
-      "amenity:cafe": "☕",
-      "amenity:bar": "🍺",
-      "amenity:pub": "🍻",
-      "amenity:fast_food": "🍔",
-      "amenity:bank": "🏦",
-      "amenity:hospital": "🏥",
-      "amenity:pharmacy": "💊",
-      "amenity:fuel": "⛽",
-      "amenity:school": "🏫",
-      "amenity:library": "📚",
-      "amenity:post_office": "📮",
-      "amenity:place_of_worship": "⛪",
-      // Tourism
-      "tourism:attraction": "🎯",
-      "tourism:museum": "🏛️",
-      "tourism:hotel": "🏨",
-      "tourism:guest_house": "🏠",
-      // Natural features
-      "natural:peak": "⛰️",
-      "natural:beach": "🏖️",
-      "natural:forest": "🌲",
-      "natural:lake": "🏞️",
-      "natural:park": "🌳",
-      // Leisure
-      "leisure:park": "🌳",
-      "leisure:sports_centre": "🏋️",
-      "leisure:swimming_pool": "🏊",
-      "leisure:playground": "🛝",
-    };
-
-    return iconMap[`${osmClass}:${osmType}`] || "📍";
   }
 
   /**
