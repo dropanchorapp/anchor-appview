@@ -10,8 +10,9 @@
 config/secrets.json
 
 # === Deno ===
-# Deno cache (but keep lock file for consistent dependencies)
+# Deno cache and lock files (Val Town doesn't support import maps or lock files)
 .deno/
+deno.lock
 
 # === Val Town ===
 # Val Town CLI cache and temp files

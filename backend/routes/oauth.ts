@@ -1,7 +1,7 @@
 // OAuth authentication routes
 import { Hono } from "jsr:@hono/hono@4.9.6";
-import { OAuthClient } from "jsr:@tijs/oauth-client-deno@1.0.1";
-import { HonoOAuthSessions } from "jsr:@tijs/hono-oauth-sessions@0.1.4";
+import { OAuthClient } from "jsr:@tijs/oauth-client-deno@1.0.5";
+import { HonoOAuthSessions } from "jsr:@tijs/hono-oauth-sessions@0.2.3";
 import { valTownStorage } from "../oauth/iron-storage.ts";
 
 const COOKIE_SECRET = Deno.env.get("COOKIE_SECRET") ||
@@ -23,6 +23,9 @@ const sessions = new HonoOAuthSessions({
   baseUrl: BASE_URL,
   mobileScheme: "anchor-app://auth-callback",
 });
+
+// Export sessions instance for clean API access
+export { sessions };
 
 export function createOAuthRoutes() {
   const app = new Hono();
@@ -151,7 +154,20 @@ export function createOAuthRoutes() {
   // Session validation for API (extended)
   app.get("/api/auth/session", async (c) => {
     try {
-      const result = await sessions.validateSession(c);
+      let result;
+
+      // Check if request has Authorization header (mobile) or uses cookies (web)
+      const authHeader = c.req.header("Authorization");
+
+      if (authHeader && authHeader.startsWith("Bearer ")) {
+        // Mobile client with Bearer token
+        console.log("Using mobile session validation for Bearer token");
+        result = await sessions.validateMobileSession(authHeader);
+      } else {
+        // Web client with cookies
+        console.log("Using cookie-based session validation");
+        result = await sessions.validateSession(c);
+      }
 
       if (!result.valid || !result.did) {
         return c.json({ valid: false }, 401);
@@ -167,6 +183,7 @@ export function createOAuthRoutes() {
         valid: true,
         did: result.did,
         handle: result.handle || oauthData.handle,
+        userHandle: result.handle || oauthData.handle, // Add userHandle for mobile client compatibility
         displayName: result.displayName || oauthData.displayName,
         avatar: oauthData.avatar,
         accessToken: oauthData.accessToken,

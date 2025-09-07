@@ -1,5 +1,5 @@
 // Checkin creation API endpoint for Anchor
-import type { Context } from "jsr:@hono/hono@^4.9.6";
+import type { Context } from "jsr:@hono/hono@4.9.6";
 import { OverpassService } from "../services/overpass-service.ts";
 import type { Place } from "../models/place-models.ts";
 import { processCheckinEvent as _processCheckinEvent } from "../ingestion/record-processor.ts";
@@ -229,7 +229,7 @@ export async function createCheckin(c: Context): Promise<Response> {
       }, 401);
     }
 
-    const { oauthSession } = authResult;
+    const { did } = authResult;
 
     // Parse request body
     const body = await c.req.json();
@@ -266,22 +266,13 @@ export async function createCheckin(c: Context): Promise<Response> {
 
     console.log("🚀 Starting checkin creation process...");
 
-    // Create OAuth client for AT Protocol operations
-    const { OAuthClient } = await import("jsr:@tijs/oauth-client-deno@1.0.0");
-    const { valTownStorage } = await import("../oauth/iron-storage.ts");
-    const BASE_URL =
-      (Deno.env.get("ANCHOR_BASE_URL") || "https://dropanchor.app")
-        .replace(/\/$/, "");
-    const oauthClient = new OAuthClient({
-      clientId: `${BASE_URL}/client-metadata.json`,
-      redirectUri: `${BASE_URL}/oauth/callback`,
-      storage: valTownStorage,
-    });
+    // Get sessions instance for clean OAuth API access
+    const { sessions } = await import("../routes/oauth.ts");
 
     // Create address and checkin records via AT Protocol
     const createResult = await createAddressAndCheckin(
-      oauthClient,
-      oauthSession,
+      sessions,
+      did,
       place,
       message || "",
     );
@@ -315,20 +306,34 @@ function extractRkey(uri: string): string {
   return parts[parts.length - 1];
 }
 
-// Create address and checkin records via AT Protocol
+// Create address and checkin records via AT Protocol using clean OAuth API
 async function createAddressAndCheckin(
-  _oauthClient: any,
-  oauthSessionData: any,
+  sessions: any, // HonoOAuthSessions instance
+  did: string,
   place: Place,
   message: string,
 ): Promise<
   { success: boolean; checkinUri?: string; addressUri?: string; error?: string }
 > {
   try {
-    // Import Session from the new OAuth client
-    const { Session } = await import("jsr:@tijs/oauth-client-deno@1.0.0");
-    // Create session object from stored data
-    const oauthSession = new Session(oauthSessionData);
+    console.log(`🔰 Getting OAuth session for DID: ${did}`);
+
+    // Use the clean API to get a ready-to-use OAuth session
+    const oauthSession = await sessions.getOAuthSession(did);
+    if (!oauthSession) {
+      console.error("Failed to get OAuth session for DID:", did);
+      return {
+        success: false,
+        error: "Failed to get OAuth session",
+      };
+    }
+
+    console.log(`✅ Got OAuth session for ${oauthSession.handle || did}`);
+    const sessionData = oauthSession.toJSON();
+    console.log(
+      "DPoP private key JWK:",
+      JSON.stringify(sessionData.dpopPrivateKeyJWK, null, 2),
+    );
 
     // Get enhanced address using existing OverpassService logic
     const addressRecord = await _getEnhancedAddressRecord(place);
@@ -345,14 +350,17 @@ async function createAddressAndCheckin(
     const categoryIcon = place.icon;
 
     console.log(
-      `🔰 Creating checkin for ${place.name} by ${oauthSession.handle}`,
+      `🔰 Creating checkin for ${place.name} by ${oauthSession.handle || did}`,
     );
 
-    // Step 1: Create address record
+    // Step 1: Create address record using OAuth session's makeRequest method
     const addressResponse = await oauthSession.makeRequest(
       "POST",
       `${oauthSession.pdsUrl}/xrpc/com.atproto.repo.createRecord`,
       {
+        headers: {
+          "Content-Type": "application/json",
+        },
         body: JSON.stringify({
           repo: oauthSession.did,
           collection: "community.lexicon.location.address",
@@ -392,6 +400,9 @@ async function createAddressAndCheckin(
       "POST",
       `${oauthSession.pdsUrl}/xrpc/com.atproto.repo.createRecord`,
       {
+        headers: {
+          "Content-Type": "application/json",
+        },
         body: JSON.stringify({
           repo: oauthSession.did,
           collection: "app.dropanchor.checkin",
@@ -407,6 +418,9 @@ async function createAddressAndCheckin(
         "POST",
         `${oauthSession.pdsUrl}/xrpc/com.atproto.repo.deleteRecord`,
         {
+          headers: {
+            "Content-Type": "application/json",
+          },
           body: JSON.stringify({
             repo: oauthSession.did,
             collection: "community.lexicon.location.address",

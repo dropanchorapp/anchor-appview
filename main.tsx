@@ -50,6 +50,11 @@ app.get("/api/checkin/*", async (c) => {
   return await anchorApiHandler(c.req.raw);
 });
 
+// Check-in creation endpoint
+app.post("/api/checkins", async (c) => {
+  return await anchorApiHandler(c.req.raw);
+});
+
 // Mount other route groups
 app.route("/", createOAuthRoutes());
 app.route("/", createAdminRoutes());
@@ -59,3 +64,4 @@ app.route("/", createCronRoutes());
 app.route("/", createFrontendRoutes());
 
 export default app.fetch;
+// Force Val Town cache refresh for oauth-client-deno@1.0.2 DPoP fix
