@@ -286,10 +286,18 @@ async function getUserCheckins(
     rows.map((row) => formatCheckinWithPlaces(row, profiles)),
   );
 
+  // Get user info from first checkin (they should all be from the same user)
+  const userInfo = rows.length > 0
+    ? {
+      did: rows[0].did,
+      handle: rows[0].handle,
+    }
+    : { did };
+
   return new Response(
     JSON.stringify({
       checkins,
-      user: { did },
+      user: userInfo,
     }),
     { headers: corsHeaders },
   );

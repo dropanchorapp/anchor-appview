@@ -2,7 +2,7 @@
 // Main HTTP entry point for Anchor AppView - organized route groups
 import { Hono } from "jsr:@hono/hono@4.9.6";
 import { initializeTables } from "./backend/database/db.ts";
-import { createOAuthRoutes } from "./backend/routes/oauth.ts";
+import { oauthRoutes } from "./backend/routes/oauth.ts";
 import { createAdminRoutes } from "./backend/routes/admin.ts";
 import { createCronRoutes } from "./backend/routes/cron.ts";
 import { createFrontendRoutes } from "./backend/routes/frontend.ts";
@@ -56,7 +56,7 @@ app.post("/api/checkins", async (c) => {
 });
 
 // Mount other route groups
-app.route("/", createOAuthRoutes());
+app.route("/", oauthRoutes);
 app.route("/", createAdminRoutes());
 app.route("/", createCronRoutes());
 

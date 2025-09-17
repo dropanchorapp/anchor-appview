@@ -158,7 +158,7 @@ async function authenticateUser(
     const { getIronSession, unsealData } = await import(
       "npm:iron-session@8.0.4"
     );
-    const { valTownStorage } = await import("../oauth/iron-storage.ts");
+    const { storage } = await import("../oauth/storage-adapter.ts");
 
     const COOKIE_SECRET = Deno.env.get("COOKIE_SECRET") ||
       "anchor-default-secret-for-development-only";
@@ -205,7 +205,7 @@ async function authenticateUser(
     }
 
     // Get OAuth session data
-    const oauthSession = await valTownStorage.get(`oauth_session:${userDid}`);
+    const oauthSession = await storage.get(`oauth_session:${userDid}`);
     if (!oauthSession) {
       return null;
     }
