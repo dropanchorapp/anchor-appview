@@ -1,5 +1,5 @@
-/** @jsxImportSource https://esm.sh/react */
-import { createRoot } from "https://esm.sh/react-dom/client";
+/** @jsxImportSource https://esm.sh/react@19.1.0 */
+import { createRoot } from "https://esm.sh/react-dom@19.1.0/client";
 import { App } from "./components/App.tsx";
 
 const root = createRoot(document.getElementById("root")!);

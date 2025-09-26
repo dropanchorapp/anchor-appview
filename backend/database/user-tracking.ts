@@ -7,7 +7,7 @@ import {
   profileCacheTable,
   userPdsesTable,
 } from "./schema.ts";
-import { count, eq, sql } from "https://esm.sh/drizzle-orm";
+import { count, eq, sql } from "https://esm.sh/drizzle-orm@0.44.5";
 
 export interface AnchorUser {
   did: string;

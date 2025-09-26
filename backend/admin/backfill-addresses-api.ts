@@ -5,7 +5,13 @@
 
 import { db } from "../database/db.ts";
 import { checkinsTable } from "../database/schema.ts";
-import { and, eq, isNotNull, isNull, or } from "https://esm.sh/drizzle-orm";
+import {
+  and,
+  eq,
+  isNotNull,
+  isNull,
+  or,
+} from "https://esm.sh/drizzle-orm@0.44.5";
 
 interface BackfillStats {
   total: number;

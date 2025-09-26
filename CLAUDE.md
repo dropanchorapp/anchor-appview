@@ -26,7 +26,7 @@ includes a complete OAuth WebView implementation for mobile app integration.
 
 1. **HTTP Server (main.tsx)** - Unified Hono server handling all routes:
    - OAuth authentication endpoints
-   - AppView API endpoints (global, nearby, user, following feeds)
+   - AppView API endpoints (nearby, user, following feeds)
    - Mobile OAuth WebView pages
    - React frontend serving
    - Admin API endpoints
@@ -125,7 +125,6 @@ The project includes several Deno tasks for common development workflows:
 
 ### AppView API
 
-- `/api/global` - Recent check-ins from all users with pagination
 - `/api/nearby` - Spatial queries for check-ins within specified radius
 - `/api/user` - User-specific check-ins
 - `/api/following` - Check-ins from followed users (requires social graph sync)
@@ -267,7 +266,7 @@ The project is structured in phases:
 
 1. **Phase 1**: Core infrastructure and basic ingestion
 2. **Phase 2**: Address resolution and caching
-3. **Phase 3**: Global feed APIs and spatial queries
+3. **Phase 3**: Feed APIs and spatial queries
 4. **Phase 4**: Social features and following feeds
 
 ## Val Town Deployment

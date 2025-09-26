@@ -1,7 +1,13 @@
 // Followers processor - handles syncing following relationships to database
 import { db } from "../database/db.ts";
 import { anchorUsersTable, userFollowsTable } from "../database/schema.ts";
-import { and, count, eq, inArray, sql } from "https://esm.sh/drizzle-orm";
+import {
+  and,
+  count,
+  eq,
+  inArray,
+  sql,
+} from "https://esm.sh/drizzle-orm@0.44.5";
 
 interface FollowRelationship {
   did: string;

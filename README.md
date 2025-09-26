@@ -10,7 +10,7 @@ The system consists of 4 main components:
 
 - **Check-in Creation** - Immediate database saves when check-ins are created
   via mobile app
-- **API** - RESTful APIs for global, nearby, user, and following feeds
+- **API** - RESTful APIs for nearby, user, and following feeds
 - **Web Interface** - React-based web frontend for viewing feeds and shareable
   checkin detail pages
 - **Social** - Social graph sync from Bluesky for following feeds
@@ -35,7 +35,7 @@ frontend/
 ├── main.tsx           # React app entry point and routing
 ├── components/        # React components
 │   ├── CheckinDetail.tsx  # Individual checkin detail view with map
-│   ├── Feed.tsx          # Global feed component
+│   ├── Feed.tsx          # Feed components
 │   └── Layout.tsx        # App layout and navigation
 └── types/
     └── index.ts       # TypeScript type definitions
@@ -85,14 +85,6 @@ deno task deploy              # Runs quality checks and pushes to Val Town
 
 ### Feed APIs
 
-#### Global Feed
-
-```http
-GET https://dropanchor.app/api/global?limit=50&cursor=2025-06-29T15:00:00Z
-```
-
-Recent check-ins from all users with pagination.
-
 #### Nearby Checkins
 
 ```http
@@ -141,13 +133,13 @@ AppView health metrics and processing statistics.
 
 ### Public Web Pages
 
-#### Global Feed
+#### Feed Interface
 
 ```
 https://dropanchor.app/
 ```
 
-Web interface showing the global feed of check-ins.
+Web interface showing user feeds and check-ins.
 
 #### Shareable Checkin Details
 
@@ -190,7 +182,8 @@ The system uses 5 main SQLite tables:
 
 ### Web Interface Features
 
-- **Global Feed View**: Browse all check-ins with author profiles and timestamps
+- **Feed Views**: Browse user and following feeds with author profiles and
+  timestamps
 - **Shareable Checkin Pages**: Individual checkin detail pages with interactive
   maps
 - **Interactive Maps**: OpenStreetMap integration via Leaflet with CartoDB tiles

@@ -1,5 +1,5 @@
-/** @jsxImportSource https://esm.sh/react */
-import React, { useState } from "https://esm.sh/react";
+/** @jsxImportSource https://esm.sh/react@19.1.0 */
+import React, { useState } from "https://esm.sh/react@19.1.0";
 
 interface MobileLoginProps {
   redirectUri: string;

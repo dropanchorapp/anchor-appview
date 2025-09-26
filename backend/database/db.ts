@@ -1,5 +1,5 @@
 // Drizzle ORM database module using Val Town's sqlite
-import { drizzle } from "https://esm.sh/drizzle-orm/sqlite-proxy";
+import { drizzle } from "https://esm.sh/drizzle-orm@0.44.5/sqlite-proxy";
 import { sqlite } from "https://esm.town/v/std/sqlite2";
 import * as schema from "./schema.ts";
 

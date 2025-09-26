@@ -26,7 +26,7 @@ export class DrizzleStorageProvider implements StorageProvider {
 
   async getProfile(did: string): Promise<ProfileData | null> {
     const { profileCacheTable } = await import("../database/schema.ts");
-    const { eq } = await import("https://esm.sh/drizzle-orm");
+    const { eq } = await import("https://esm.sh/drizzle-orm@0.44.5");
 
     const result = await this.db
       .select()
@@ -81,7 +81,7 @@ export class DrizzleStorageProvider implements StorageProvider {
     staleThresholdHours: number,
   ): Promise<ProfileData[]> {
     const { profileCacheTable } = await import("../database/schema.ts");
-    const { lt } = await import("https://esm.sh/drizzle-orm");
+    const { lt } = await import("https://esm.sh/drizzle-orm@0.44.5");
 
     const staleThreshold = new Date();
     staleThreshold.setHours(staleThreshold.getHours() - staleThresholdHours);

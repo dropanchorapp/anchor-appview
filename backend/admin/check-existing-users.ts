@@ -9,7 +9,7 @@ import {
   profileCacheTable,
   userPdsesTable,
 } from "../database/schema.ts";
-import { count, desc, sql } from "https://esm.sh/drizzle-orm";
+import { count, desc, sql } from "https://esm.sh/drizzle-orm@0.44.5";
 
 export async function checkExistingUsers() {
   console.log("🔍 Checking existing user data in database...");

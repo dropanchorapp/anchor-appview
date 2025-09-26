@@ -34,4 +34,4 @@ export interface AuthState {
   userDisplayName?: string;
 }
 
-export type FeedType = "timeline" | "following" | "global";
+export type FeedType = "timeline" | "following";

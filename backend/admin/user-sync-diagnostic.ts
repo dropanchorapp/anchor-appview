@@ -3,7 +3,7 @@
 
 import { db } from "../database/db.ts";
 import { anchorUsersTable, oauthSessionsTable } from "../database/schema.ts";
-import { count } from "https://esm.sh/drizzle-orm";
+import { count } from "https://esm.sh/drizzle-orm@0.44.5";
 
 export async function userSyncDiagnostic() {
   console.log("🔍 Running user sync diagnostic...");

@@ -6,7 +6,7 @@ import {
   checkinsTable,
   profileCacheTable,
 } from "../database/schema.ts";
-import { count, eq } from "https://esm.sh/drizzle-orm";
+import { count, eq } from "https://esm.sh/drizzle-orm@0.44.5";
 
 interface CheckinRecord {
   uri: string;

@@ -5,7 +5,8 @@ import type { Place } from "../models/place-models.ts";
 import { processCheckinEvent as _processCheckinEvent } from "../ingestion/record-processor.ts";
 import { db } from "../database/db.ts";
 import { checkinsTable } from "../database/schema.ts";
-import { eq } from "https://esm.sh/drizzle-orm";
+import { eq } from "https://esm.sh/drizzle-orm@0.44.5";
+import type { OAuthSessionsInterface } from "jsr:@tijs/atproto-oauth-hono@^0.2.6";
 
 // Global service instance for address enhancement
 const overpassService = new OverpassService();
@@ -135,19 +136,6 @@ interface PlaceInput {
   category?: string;
   categoryGroup?: any;
   icon?: string;
-}
-
-interface CheckinRequest {
-  place: PlaceInput;
-  message?: string;
-  session_id?: string; // For mobile authentication
-}
-
-interface CheckinResponse {
-  success: boolean;
-  checkinUri?: string;
-  addressUri?: string;
-  error?: string;
 }
 
 // Helper function to authenticate user with Iron Session (both web and mobile)
@@ -308,7 +296,7 @@ function extractRkey(uri: string): string {
 
 // Create address and checkin records via AT Protocol using clean OAuth API
 async function createAddressAndCheckin(
-  sessions: any, // HonoOAuthSessions instance
+  sessions: OAuthSessionsInterface,
   did: string,
   place: Place,
   message: string,
@@ -476,220 +464,6 @@ async function createAddressAndCheckin(
     };
   }
 }
-
-// TODO: Clean up old disabled code when integration is verified working
-/*
-export async function handleCheckinCreation_DISABLED(c: Context): Promise<Response> {
-  try {
-    console.log("🚀 Starting checkin creation process...");
-
-    const { session } = authResult;
-//     if (
-//       !body.place || !body.place.name || !body.place.latitude ||
-//       !body.place.longitude
-//     ) {
-//       return c.json({
-//         success: false,
-//         error:
-//           "Invalid request: place with name, latitude, and longitude required",
-//       }, 400);
-//     }
-//
-//     const { message } = body;
-//
-//     // Convert API input to proper Place object and validate coordinates
-//     const place = sanitizePlaceInput(body.place);
-//     const lat = place.latitude;
-//     const lng = place.longitude;
-//
-//     if (
-//       typeof lat !== "number" || typeof lng !== "number" ||
-//       isNaN(lat) || isNaN(lng) ||
-//       Math.abs(lat) > 90 || Math.abs(lng) > 180
-//     ) {
-//       return c.json({
-//         success: false,
-//         error:
-//           `Invalid coordinates: lat=${place.latitude}, lng=${place.longitude}. Must be valid numbers within bounds (lat: -90 to 90, lng: -180 to 180)`,
-//       }, 400);
-//     }
-//
-//     // Validate place name is not empty string
-//     if (!place.name.trim()) {
-//       return c.json({
-//         success: false,
-//         error: "Place name cannot be empty",
-//       }, 400);
-//     }
-//
-//     // Validate message length if provided
-//     const checkinMessage = message?.trim() || "";
-//     if (checkinMessage.length > 1000) { // Reasonable limit for checkin messages
-//       return c.json({
-//         success: false,
-//         error: "Message too long. Maximum 1000 characters allowed.",
-//       }, 400);
-//     }
-//
-//     // Get enhanced address using existing OverpassService logic
-//     // This prevents name/locality duplication and ensures proper country/region data
-//     const addressRecord = await getEnhancedAddressRecord(place);
-//
-//     // Build coordinates using validated values
-//     const coordinates: GeoCoordinates = {
-//       latitude: lat,
-//       longitude: lng,
-//     };
-//
-//     // Use category information from the sanitized place object
-//     const category = place.category;
-//     const categoryGroup = place.categoryGroup;
-//     const categoryIcon = place.icon;
-//
-//     console.log(`🔰 Creating checkin for ${place.name} by ${session.handle}`);
-//
-//     // Step 1: Create address record
-//     const addressResponse = await makeDPoPRequest(
-//       "POST",
-//       `${session.pdsUrl}/xrpc/com.atproto.repo.createRecord`,
-//       session,
-//       JSON.stringify({
-//         repo: session.did,
-//         collection: "community.lexicon.location.address",
-//         record: addressRecord,
-//       }),
-//     );
-//
-//     if (!addressResponse.response.ok) {
-//       let error = "Unknown error";
-//       try {
-//         // Try to read the response body only if it hasn't been consumed
-//         if (addressResponse.response.body) {
-//           error = await addressResponse.response.text();
-//         }
-//       } catch (e) {
-//         console.warn("Could not read response body:", e);
-//         error =
-//           `HTTP ${addressResponse.response.status}: ${addressResponse.response.statusText}`;
-//       }
-//       console.error("Failed to create address record:", error);
-//       return c.json({
-//         success: false,
-//         error: "Failed to create address record",
-//       }, 500);
-//     }
-//
-//     const addressResult = await addressResponse.response.json();
-//     console.log(`✅ Created address record: ${addressResult.uri}`);
-//
-//     // Use the potentially updated session from address creation (in case token was refreshed)
-//     const updatedSession = addressResponse.session;
-//
-//     // Step 2: Create checkin record with StrongRef to address
-//     const checkinRecord: CheckinRecord = {
-//       $type: "app.dropanchor.checkin",
-//       text: checkinMessage,
-//       createdAt: new Date().toISOString(),
-//       addressRef: {
-//         uri: addressResult.uri,
-//         cid: addressResult.cid,
-//       },
-//       coordinates,
-//       category,
-//       categoryGroup,
-//       categoryIcon,
-//     };
-//
-//     const checkinResponse = await makeDPoPRequest(
-//       "POST",
-//       `${updatedSession.pdsUrl}/xrpc/com.atproto.repo.createRecord`,
-//       updatedSession,
-//       JSON.stringify({
-//         repo: updatedSession.did,
-//         collection: "app.dropanchor.checkin",
-//         record: checkinRecord,
-//       }),
-//     );
-//
-//     if (!checkinResponse.response.ok) {
-//       // Cleanup: Delete orphaned address record using the most recent session
-//       const addressRkey = extractRkey(addressResult.uri);
-//       const finalSession = checkinResponse.session; // Use session from checkin response (may have been refreshed again)
-//       await makeDPoPRequest(
-//         "POST",
-//         `${finalSession.pdsUrl}/xrpc/com.atproto.repo.deleteRecord`,
-//         finalSession,
-//         JSON.stringify({
-//           repo: finalSession.did,
-//           collection: "community.lexicon.location.address",
-//           rkey: addressRkey,
-//         }),
-//       ).catch(console.error); // Best effort cleanup
-//
-//       let error = "Unknown error";
-//       try {
-//         // Try to read the response body only if it hasn't been consumed
-//         if (checkinResponse.response.body) {
-//           error = await checkinResponse.response.text();
-//         }
-//       } catch (e) {
-//         console.warn("Could not read response body:", e);
-//         error =
-//           `HTTP ${checkinResponse.response.status}: ${checkinResponse.response.statusText}`;
-//       }
-//       console.error("Failed to create checkin record:", error);
-//       return c.json({
-//         success: false,
-//         error: "Failed to create checkin record",
-//       }, 500);
-//     }
-//
-//     const checkinResult = await checkinResponse.response.json();
-//     console.log(`✅ Created checkin record: ${checkinResult.uri}`);
-//
-//     // IMMEDIATELY save to local database for instant feed updates
-//     try {
-//       const rkey = extractRkey(checkinResult.uri);
-//       await processCheckinEvent({
-//         did: updatedSession.did,
-//         time_us: Date.now() * 1000, // Convert to microseconds
-//         commit: {
-//           rkey: rkey,
-//           collection: "app.dropanchor.checkin",
-//           operation: "create",
-//           record: checkinRecord,
-//           cid: checkinResult.cid,
-//         },
-//       });
-//       console.log(`✅ Saved checkin to local database: ${rkey}`);
-//     } catch (localSaveError) {
-//       console.error(
-//         "Failed to save checkin to local database:",
-//         localSaveError,
-//       );
-//       // Don't fail the request - AT Protocol save succeeded, local save can be retried later
-//     }
-//
-//     return c.json({
-//       success: true,
-//       checkinUri: checkinResult.uri,
-//       addressUri: addressResult.uri,
-//     });
-//   } catch (error) {
-//     console.error("Checkin creation error:", error);
-//     return c.json({
-//       success: false,
-//       error: "Internal server error",
-//     }, 500);
-//   }
-// }
-//
-// // Extract rkey from AT URI (at://did:plc:abc/collection/rkey)
-// function extractRkey(uri: string): string {
-//   const parts = uri.split("/");
-//   return parts[parts.length - 1];
-// }
-*/
 
 // Simple function to get a checkin by ID for frontend routes
 export async function getCheckinById(checkinId: string) {

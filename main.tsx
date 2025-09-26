@@ -14,10 +14,6 @@ const app = new Hono();
 await initializeTables();
 
 // Mount API routes FIRST (before catch-all frontend routes)
-app.get("/api/global", async (c) => {
-  return await anchorApiHandler(c.req.raw);
-});
-
 app.get("/api/nearby", async (c) => {
   return await anchorApiHandler(c.req.raw);
 });

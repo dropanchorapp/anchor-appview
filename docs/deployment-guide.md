@@ -176,7 +176,6 @@ Check the `processing_log_v1` table to monitor ingestion health and performance.
 
 The deployed AppView provides these endpoints for the Anchor client:
 
-- **Global Feed**: Recent check-ins from all users
 - **Nearby Feed**: Location-based spatial queries
 - **User Feed**: Personal check-in history
 - **Following Feed**: Social feed based on Bluesky follows

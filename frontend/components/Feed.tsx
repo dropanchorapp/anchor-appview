@@ -1,4 +1,4 @@
-/** @jsxImportSource https://esm.sh/react */
+/** @jsxImportSource https://esm.sh/react@19.1.0 */
 import { AuthState, CheckinData, FeedType } from "../types/index.ts";
 import { CheckinCard } from "./CheckinCard.tsx";
 
@@ -86,28 +86,6 @@ export function Feed(
             }}
           >
             Following
-          </button>
-          <button
-            type="button"
-            onClick={() => setFeedType("global")}
-            style={{
-              flex: "1",
-              padding: "8px 16px",
-              textAlign: "center",
-              borderRadius: "6px",
-              fontSize: "14px",
-              fontWeight: "500",
-              border: "none",
-              background: feedType === "global" ? "white" : "none",
-              cursor: "pointer",
-              color: feedType === "global" ? "#007aff" : "#3c3c43",
-              transition: "all 0.2s",
-              boxShadow: feedType === "global"
-                ? "0 1px 2px rgba(0,0,0,0.1)"
-                : "none",
-            }}
-          >
-            Global
           </button>
         </div>
       </div>
@@ -234,7 +212,7 @@ export function Feed(
               </div>
             )
             : (
-              /* Show regular empty state for global feed or authenticated empty feeds */
+              /* Show regular empty state for authenticated empty feeds */
               <>
                 <img
                   src="https://res.cloudinary.com/dru3aznlk/image/upload/v1754731275/seagull-looking_yanxxb.png"
@@ -253,9 +231,7 @@ export function Feed(
                     margin: "0 0 8px 0",
                   }}
                 >
-                  {feedType === "global"
-                    ? "No check-ins yet"
-                    : feedType === "following"
+                  {feedType === "following"
                     ? "No check-ins from people you follow"
                     : "Your timeline is empty"}
                 </h3>
@@ -268,9 +244,7 @@ export function Feed(
                     lineHeight: "1.4",
                   }}
                 >
-                  {feedType === "global"
-                    ? "Check-ins from the community will appear here as people start sharing their locations."
-                    : feedType === "following"
+                  {feedType === "following"
                     ? "Check-ins from people you follow will appear here."
                     : "Your personalized timeline is empty. Check back later!"}
                 </p>

@@ -1,4 +1,4 @@
-/** @jsxImportSource https://esm.sh/react */
+/** @jsxImportSource https://esm.sh/react@19.1.0 */
 import { CheckinData } from "../types/index.ts";
 
 interface CheckinCardProps {

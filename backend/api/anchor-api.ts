@@ -6,7 +6,14 @@ import {
   processingLogTable,
   userFollowsTable,
 } from "../database/schema.ts";
-import { and, desc, eq, inArray, lt, sql } from "https://esm.sh/drizzle-orm";
+import {
+  and,
+  desc,
+  eq,
+  inArray,
+  lt,
+  sql,
+} from "https://esm.sh/drizzle-orm@0.44.5";
 import { ATProtocolProfileResolver } from "../utils/profile-resolver.ts";
 import {
   DrizzleStorageProvider,
@@ -73,8 +80,6 @@ export default async function (req: Request): Promise<Response> {
 
   // Route to appropriate handler - let errors bubble up
   switch (url.pathname) {
-    case "/api/global":
-      return await getGlobalFeed(url, corsHeaders);
     case "/api/nearby":
       return await getNearbyCheckins(url, corsHeaders);
     case "/api/user":
@@ -102,61 +107,6 @@ export default async function (req: Request): Promise<Response> {
         headers: corsHeaders,
       });
   }
-}
-
-async function getGlobalFeed(
-  url: URL,
-  corsHeaders: CorsHeaders,
-): Promise<Response> {
-  const limit = Math.min(parseInt(url.searchParams.get("limit") || "50"), 100);
-  const cursor = url.searchParams.get("cursor");
-
-  // Type-safe Drizzle query - no more field name confusion!
-  const baseQuery = db.select({
-    id: checkinsTable.id,
-    uri: checkinsTable.uri,
-    did: checkinsTable.did,
-    handle: checkinsTable.handle,
-    text: checkinsTable.text,
-    createdAt: checkinsTable.createdAt,
-    latitude: checkinsTable.latitude,
-    longitude: checkinsTable.longitude,
-    venueName: checkinsTable.venueName, // UNIFIED venue name field
-    addressStreet: checkinsTable.addressStreet,
-    addressLocality: checkinsTable.addressLocality,
-    addressRegion: checkinsTable.addressRegion,
-    addressCountry: checkinsTable.addressCountry,
-    addressPostalCode: checkinsTable.addressPostalCode,
-  }).from(checkinsTable);
-
-  const rows = cursor
-    ? await baseQuery
-      .where(sql`${checkinsTable.createdAt} < ${cursor}`)
-      .orderBy(desc(checkinsTable.createdAt))
-      .limit(limit)
-    : await baseQuery
-      .orderBy(desc(checkinsTable.createdAt))
-      .limit(limit);
-
-  // Resolve profiles for all authors
-  const dids = [...new Set(rows.map((row) => row.did))];
-  const storage = new DrizzleStorageProvider(db); // Use Drizzle db for type safety
-  const profileResolver = new ATProtocolProfileResolver(storage);
-  const profiles = await profileResolver.batchResolveProfiles(dids);
-
-  const checkins = await Promise.all(
-    rows.map((row) => formatCheckinWithPlaces(row, profiles)),
-  );
-
-  return new Response(
-    JSON.stringify({
-      checkins,
-      cursor: checkins.length > 0
-        ? checkins[checkins.length - 1].createdAt
-        : null,
-    }),
-    { headers: corsHeaders },
-  );
 }
 
 async function getNearbyCheckins(

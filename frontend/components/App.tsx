@@ -1,7 +1,13 @@
-/** @jsxImportSource https://esm.sh/react */
-import React, { useEffect, useRef, useState } from "https://esm.sh/react";
+/** @jsxImportSource https://esm.sh/react@19.1.0 */
+import React, {
+  useEffect,
+  useRef,
+  useState,
+} from "https://esm.sh/react@19.1.0";
 import { Header } from "./Header.tsx";
 import { Feed } from "./Feed.tsx";
+import { About } from "./About.tsx";
+import { PrivacyPolicy } from "./PrivacyPolicy.tsx";
 import { LoginForm } from "./LoginForm.tsx";
 import { MobileAuth } from "./MobileAuth.tsx";
 import { CheckinDetail } from "./CheckinDetail.tsx";
@@ -10,11 +16,14 @@ import { AuthState, CheckinData, FeedType } from "../types/index.ts";
 export function App() {
   // Check if we're on the mobile-auth route first, before any hooks
   let isMobileAuth = false;
+  let isPrivacyPolicy = false;
   try {
     isMobileAuth = globalThis.location?.pathname === "/mobile-auth";
+    isPrivacyPolicy = globalThis.location?.pathname === "/privacy-policy";
   } catch (error) {
-    console.error("Error checking mobile auth route:", error);
+    console.error("Error checking routes:", error);
     isMobileAuth = false;
+    isPrivacyPolicy = false;
   }
 
   // Check if we're on a checkin detail route
@@ -35,6 +44,10 @@ export function App() {
 
   if (isMobileAuth) {
     return <MobileAuth />;
+  }
+
+  if (isPrivacyPolicy) {
+    return <PrivacyPolicy />;
   }
 
   if (isCheckinDetail && checkinId) {
@@ -144,13 +157,20 @@ export function App() {
           return;
         }
 
-        let url = "/api/global";
+        let url = "";
         if (feedType === "following" && auth.isAuthenticated && auth.userDid) {
           url = `/api/following?user=${encodeURIComponent(auth.userDid)}`;
         } else if (
           feedType === "timeline" && auth.isAuthenticated && auth.userDid
         ) {
           url = `/api/user?did=${encodeURIComponent(auth.userDid)}`;
+        }
+
+        // If no valid URL, don't fetch
+        if (!url) {
+          setCheckins([]);
+          setLoading(false);
+          return;
         }
 
         const response = await fetch(url);
@@ -246,14 +266,18 @@ export function App() {
           margin: "0 auto",
         }}
       >
-        <Feed
-          feedType={feedType}
-          setFeedType={setFeedType}
-          checkins={checkins}
-          loading={loading}
-          auth={auth}
-          onLogin={handleLogin}
-        />
+        {auth.isAuthenticated
+          ? (
+            <Feed
+              feedType={feedType}
+              setFeedType={setFeedType}
+              checkins={checkins}
+              loading={loading}
+              auth={auth}
+              onLogin={handleLogin}
+            />
+          )
+          : <About onLogin={handleLogin} />}
       </div>
 
       <LoginForm

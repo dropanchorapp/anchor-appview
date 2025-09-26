@@ -1,5 +1,5 @@
-/** @jsxImportSource https://esm.sh/react */
-import React, { useEffect, useState } from "https://esm.sh/react";
+/** @jsxImportSource https://esm.sh/react@19.1.0 */
+import React, { useEffect, useState } from "https://esm.sh/react@19.1.0";
 
 export function MobileAuth() {
   const [handle, setHandle] = useState("");

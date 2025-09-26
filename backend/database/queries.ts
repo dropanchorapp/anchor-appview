@@ -5,7 +5,7 @@ import {
   oauthSessionsTable,
   profileCacheTable,
 } from "./schema.ts";
-import { count, desc, eq, sql } from "https://esm.sh/drizzle-orm";
+import { count, desc, eq, sql } from "https://esm.sh/drizzle-orm@0.44.5";
 import { ATProtocolProfileResolver } from "../utils/profile-resolver.ts";
 import { DrizzleStorageProvider } from "../utils/storage-provider.ts";
 // OAuth types now managed by Iron Session

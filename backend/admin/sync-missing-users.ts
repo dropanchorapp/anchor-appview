@@ -92,7 +92,7 @@ export async function syncMissingUsers(dryRun: boolean = true) {
             });
 
           // Import dependencies for PDS tracking
-          const { sql } = await import("https://esm.sh/drizzle-orm");
+          const { sql } = await import("https://esm.sh/drizzle-orm@0.44.5");
           const { userPdsesTable } = await import("../database/schema.ts");
 
           // Update PDS reference count

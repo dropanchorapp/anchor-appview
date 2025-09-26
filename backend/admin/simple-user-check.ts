@@ -1,7 +1,7 @@
 // Simple diagnostic to check anchor_users table
 import { db } from "../database/db.ts";
 import { anchorUsersTable } from "../database/schema.ts";
-import { count } from "https://esm.sh/drizzle-orm";
+import { count } from "https://esm.sh/drizzle-orm@0.44.5";
 
 export async function simpleUserCheck() {
   console.log("🔍 Running simple user check...");

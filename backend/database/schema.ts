@@ -7,8 +7,8 @@ import {
   real,
   sqliteTable,
   text,
-} from "https://esm.sh/drizzle-orm/sqlite-core";
-import { sql } from "https://esm.sh/drizzle-orm";
+} from "https://esm.sh/drizzle-orm@0.44.5/sqlite-core";
+import { sql } from "https://esm.sh/drizzle-orm@0.44.5";
 
 // Main checkins table - single source of truth for all checkin data
 export const checkinsTable = sqliteTable("checkins", {

@@ -77,15 +77,6 @@ function createTestAPIHandler() {
     }
 
     switch (url.pathname) {
-      case "/global":
-        return new Response(
-          JSON.stringify({
-            checkins: await getMockCheckins(),
-            cursor: null,
-          }),
-          { headers: corsHeaders },
-        );
-
       case "/stats":
         return new Response(
           JSON.stringify({
@@ -213,25 +204,11 @@ function createTestAPIHandler() {
 
 Deno.test("API Integration - OPTIONS request returns CORS headers", async () => {
   const handler = await createTestAPIHandler();
-  const req = new Request("http://localhost/global", { method: "OPTIONS" });
+  const req = new Request("http://localhost/stats", { method: "OPTIONS" });
   const response = await handler(req);
 
   assertEquals(response.status, 200);
   assertEquals(response.headers.get("Access-Control-Allow-Origin"), "*");
-});
-
-Deno.test("API Integration - /global endpoint returns checkin data", async () => {
-  const handler = await createTestAPIHandler();
-  const req = new Request("http://localhost/global");
-  const response = await handler(req);
-
-  assertEquals(response.status, 200);
-
-  const data = await response.json();
-  assertExists(data.checkins);
-  assertEquals(Array.isArray(data.checkins), true);
-  assertEquals(data.checkins.length, 1);
-  assertEquals(data.checkins[0].id, "test123");
 });
 
 Deno.test("API Integration - /stats endpoint returns statistics", async () => {

@@ -75,56 +75,7 @@ Each check-in in the response includes full profile information:
 
 ## Endpoints
 
-### 1. Global Feed
-
-Get recent check-ins from all users with pagination support.
-
-**Endpoint:** `GET /api/global`
-
-**Parameters:**
-
-- `limit` (optional): Number of check-ins to return (default: 50, max: 100)
-- `cursor` (optional): ISO timestamp for pagination
-
-**Example Request:**
-
-```bash
-curl "https://dropanchor.app/api/global?limit=10&cursor=2025-07-04T10:00:00Z"
-```
-
-**Example Response:**
-
-```json
-{
-  "checkins": [
-    {
-      "id": "record123",
-      "uri": "at://did:plc:example123/app.dropanchor.checkin/record123",
-      "author": {
-        "did": "did:plc:example123",
-        "handle": "alice.bsky.social"
-      },
-      "text": "Amazing coffee and cozy atmosphere!",
-      "createdAt": "2025-07-04T10:15:00Z",
-      "coordinates": {
-        "latitude": 52.3676,
-        "longitude": 4.9041
-      },
-      "address": {
-        "name": "Cafe Central",
-        "street": "Damrak 123",
-        "locality": "Amsterdam",
-        "region": "North Holland",
-        "country": "Netherlands",
-        "postalCode": "1012 LP"
-      }
-    }
-  ],
-  "cursor": "2025-07-04T10:15:00Z"
-}
-```
-
-### 2. Nearby Check-ins
+### 1. Nearby Check-ins
 
 Get check-ins within a specified radius of coordinates using spatial queries.
 
@@ -505,16 +456,6 @@ interface Checkin {
 class AnchorAPI {
   private baseURL = "https://dropanchor.app/api";
 
-  async getGlobalFeed(limit = 50, cursor?: string) {
-    const params = new URLSearchParams({
-      limit: limit.toString(),
-      ...(cursor && { cursor }),
-    });
-
-    const response = await fetch(`${this.baseURL}/global?${params}`);
-    return response.json();
-  }
-
   async getNearbyCheckins(lat: number, lng: number, radius = 5, limit = 50) {
     const params = new URLSearchParams({
       lat: lat.toString(),
@@ -580,20 +521,7 @@ import Foundation
 
 class AnchorAPI {
     private let baseURL = "https://dropanchor.app/api"
-    
-    func getGlobalFeed(limit: Int = 50, cursor: String? = nil) async throws -> GlobalFeedResponse {
-        var components = URLComponents(string: "\(baseURL)/global")!
-        components.queryItems = [
-            URLQueryItem(name: "limit", value: String(limit))
-        ]
-        if let cursor = cursor {
-            components.queryItems?.append(URLQueryItem(name: "cursor", value: cursor))
-        }
-        
-        let (data, _) = try await URLSession.shared.data(from: components.url!)
-        return try JSONDecoder().decode(GlobalFeedResponse.self, from: data)
-    }
-    
+
     func getNearbyCheckins(lat: Double, lng: Double, radius: Double = 5, limit: Int = 50) async throws -> NearbyResponse {
         var components = URLComponents(string: "\(baseURL)/nearby")!
         components.queryItems = [
@@ -627,7 +555,7 @@ class AnchorAPI {
 
 - Check if social graph data is available before using /following
 - Handle empty following lists gracefully
-- Consider falling back to /global when following feed is empty
+- Consider showing nearby checkins when following feed is empty
 
 ### Error Handling
 
@@ -648,7 +576,7 @@ For API support and feature requests, please visit:
 ### v1.0.0 (2025-07-04)
 
 - Initial API release
-- Global, nearby, user, and following feeds
+- Nearby, user, and following feeds
 - Statistics endpoint
 - Spatial queries with Haversine distance
 - AT Protocol integration
