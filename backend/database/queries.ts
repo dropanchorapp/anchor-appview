@@ -2,7 +2,7 @@
 import { db } from "./db.ts";
 import {
   checkinsTable,
-  oauthSessionsTable,
+  ironSessionStorageTable,
   profileCacheTable,
 } from "./schema.ts";
 import { count, desc, eq, sql } from "https://esm.sh/drizzle-orm@0.44.5";
@@ -172,32 +172,24 @@ export async function getDashboardStats() {
 }
 
 // OAuth session queries
-export async function getSessionBySessionId(
-  sessionId: string,
+// OAuth session functions now handled by iron_session_storage and OAuth packages
+// These functions are deprecated after storage consolidation
+
+export function getSessionBySessionId(
+  _sessionId: string,
 ): Promise<OAuthSession | null> {
-  const result = await db.select().from(oauthSessionsTable)
-    .where(eq(oauthSessionsTable.sessionId, sessionId))
-    .limit(1);
-
-  const row = result[0];
-  if (!row) return null;
-
-  // Map database row to OAuthSession type
-  return {
-    did: row.did,
-    handle: row.handle,
-    pdsUrl: row.pdsUrl,
-    accessToken: row.accessToken,
-    refreshToken: row.refreshToken,
-    dpopPrivateKey: row.dpopPrivateKey,
-    dpopPublicKey: row.dpopPublicKey,
-    tokenExpiresAt: row.tokenExpiresAt || 0,
-  };
+  // Sessions are now stored in iron_session_storage with 'session:${did}' keys
+  // This function is deprecated - use OAuth sessions API instead
+  console.warn("getSessionBySessionId is deprecated - use OAuth sessions API");
+  return Promise.resolve(null);
 }
 
 export async function deleteOAuthSession(did: string) {
-  await db.delete(oauthSessionsTable)
-    .where(eq(oauthSessionsTable.did, did));
+  // Sessions are now stored in iron_session_storage with 'session:${did}' keys
+  // This function is deprecated - use OAuth sessions API instead
+  console.warn("deleteOAuthSession is deprecated - use OAuth sessions API");
+  await db.delete(ironSessionStorageTable)
+    .where(eq(ironSessionStorageTable.key, `session:${did}`));
 }
 
 export async function getAllCheckinDids(): Promise<string[]> {

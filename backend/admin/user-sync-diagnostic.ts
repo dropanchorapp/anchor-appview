@@ -1,17 +1,21 @@
-// Diagnostic to compare oauth_sessions vs anchor_users tables
+// Diagnostic to compare OAuth sessions vs anchor_users tables
 // Helps identify sync issues between authentication and crawler tracking
 
 import { db } from "../database/db.ts";
-import { anchorUsersTable, oauthSessionsTable } from "../database/schema.ts";
-import { count } from "https://esm.sh/drizzle-orm@0.44.5";
+import {
+  anchorUsersTable,
+  ironSessionStorageTable,
+} from "../database/schema.ts";
+import { count, like } from "https://esm.sh/drizzle-orm@0.44.5";
 
 export async function userSyncDiagnostic() {
   console.log("🔍 Running user sync diagnostic...");
 
   try {
-    // Count users in both tables
+    // Count users in both storage systems
     const [oauthCount, anchorCount] = await Promise.all([
-      db.select({ count: count() }).from(oauthSessionsTable),
+      db.select({ count: count() }).from(ironSessionStorageTable)
+        .where(like(ironSessionStorageTable.key, "session:%")),
       db.select({ count: count() }).from(anchorUsersTable),
     ]);
 
@@ -21,14 +25,14 @@ export async function userSyncDiagnostic() {
     console.log(`OAuth sessions: ${oauthTotal}`);
     console.log(`Anchor users: ${anchorTotal}`);
 
-    // Get all users from both tables
-    const [oauthUsers, anchorUsers] = await Promise.all([
+    // Get all users from both storage systems
+    const [oauthSessions, anchorUsers] = await Promise.all([
       db.select({
-        did: oauthSessionsTable.did,
-        handle: oauthSessionsTable.handle,
-        pdsUrl: oauthSessionsTable.pdsUrl,
-        createdAt: oauthSessionsTable.createdAt,
-      }).from(oauthSessionsTable),
+        key: ironSessionStorageTable.key,
+        value: ironSessionStorageTable.value,
+        createdAt: ironSessionStorageTable.createdAt,
+      }).from(ironSessionStorageTable)
+        .where(like(ironSessionStorageTable.key, "session:%")),
       db.select({
         did: anchorUsersTable.did,
         handle: anchorUsersTable.handle,
@@ -36,6 +40,21 @@ export async function userSyncDiagnostic() {
         registeredAt: anchorUsersTable.registeredAt,
       }).from(anchorUsersTable),
     ]);
+
+    // Parse OAuth session data
+    const oauthUsers = oauthSessions.map((session) => {
+      try {
+        const sessionData = JSON.parse(session.value);
+        return {
+          did: session.key.replace("session:", ""),
+          handle: sessionData.handle,
+          pdsUrl: sessionData.pdsUrl,
+          createdAt: session.createdAt,
+        };
+      } catch {
+        return null;
+      }
+    }).filter(Boolean);
 
     // Find users in OAuth but not in Anchor
     const anchorDids = new Set(anchorUsers.map((u) => u.did));

@@ -3,7 +3,7 @@ import { db } from "./db.ts";
 import {
   anchorUsersTable,
   checkinsTable,
-  oauthSessionsTable,
+  ironSessionStorageTable,
   profileCacheTable,
   userPdsesTable,
 } from "./schema.ts";
@@ -218,10 +218,8 @@ export async function getMigrationStats(): Promise<{
   const [oauthResult, authorsResult, profilesResult, trackedResult] =
     await Promise.all([
       db.select({ count: count() })
-        .from(oauthSessionsTable)
-        .where(
-          sql`${oauthSessionsTable.did} IS NOT NULL AND ${oauthSessionsTable.handle} IS NOT NULL AND ${oauthSessionsTable.pdsUrl} IS NOT NULL`,
-        ),
+        .from(ironSessionStorageTable)
+        .where(sql`${ironSessionStorageTable.key} LIKE 'session:%'`),
       db.select({ count: sql<number>`count(distinct ${checkinsTable.did})` })
         .from(checkinsTable)
         .where(

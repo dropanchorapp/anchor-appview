@@ -294,7 +294,9 @@ function extractRkey(uri: string): string {
   return parts[parts.length - 1];
 }
 
-// Create address and checkin records via AT Protocol using clean OAuth API
+// OAuth session methods now handle all authentication, DPoP, and token refresh automatically
+
+// Create address and checkin records via AT Protocol using OAuth sessions
 async function createAddressAndCheckin(
   sessions: OAuthSessionsInterface,
   did: string,
@@ -306,7 +308,7 @@ async function createAddressAndCheckin(
   try {
     console.log(`🔰 Getting OAuth session for DID: ${did}`);
 
-    // Use the clean API to get a ready-to-use OAuth session
+    // Use the OAuth sessions API to get a ready-to-use session with automatic token refresh
     const oauthSession = await sessions.getOAuthSession(did);
     if (!oauthSession) {
       console.error("Failed to get OAuth session for DID:", did);
@@ -317,10 +319,8 @@ async function createAddressAndCheckin(
     }
 
     console.log(`✅ Got OAuth session for ${oauthSession.handle || did}`);
-    const sessionData = oauthSession.toJSON();
     console.log(
-      "DPoP private key JWK:",
-      JSON.stringify(sessionData.dpopPrivateKeyJWK, null, 2),
+      "✅ Session includes automatic token refresh and DPoP handling",
     );
 
     // Get enhanced address using existing OverpassService logic
@@ -341,7 +341,7 @@ async function createAddressAndCheckin(
       `🔰 Creating checkin for ${place.name} by ${oauthSession.handle || did}`,
     );
 
-    // Step 1: Create address record using OAuth session's makeRequest method
+    // Step 1: Create address record using OAuth session's built-in request method
     const addressResponse = await oauthSession.makeRequest(
       "POST",
       `${oauthSession.pdsUrl}/xrpc/com.atproto.repo.createRecord`,

@@ -98,22 +98,8 @@ export const processingLogTable = sqliteTable("processing_log", {
   durationMs: integer("duration_ms"),
 });
 
-// OAuth sessions (matching ATProto-OAuth-Guide schema)
-export const oauthSessionsTable = sqliteTable("oauth_sessions", {
-  did: text("did").primaryKey(),
-  handle: text("handle").notNull(),
-  pdsUrl: text("pds_url").notNull(),
-  accessToken: text("access_token").notNull(),
-  refreshToken: text("refresh_token").notNull(),
-  dpopPrivateKey: text("dpop_private_key").notNull(), // JWK format
-  dpopPublicKey: text("dpop_public_key").notNull(), // JWK format
-  sessionId: text("session_id").unique(), // Session cookie ID
-  tokenExpiresAt: integer("token_expires_at").default(0), // Added in migration 009
-  displayName: text("display_name"), // Added in migration 009
-  avatarUrl: text("avatar_url"), // Added in migration 009
-  createdAt: integer("created_at").notNull(),
-  updatedAt: integer("updated_at").notNull(),
-});
+// OAuth sessions are now stored in iron_session_storage table with 'session:${did}' keys
+// This consolidates storage and allows OAuth packages to handle token refresh automatically
 
 // Display names table - REMOVED in migration 007 as it was never used by any active code
 // export const displayNameTable = sqliteTable("display_names", { ... });
@@ -145,8 +131,7 @@ export type UserFollowInsert = typeof userFollowsTable.$inferInsert;
 export type UserFollowSelect = typeof userFollowsTable.$inferSelect;
 export type AnchorUserInsert = typeof anchorUsersTable.$inferInsert;
 export type AnchorUserSelect = typeof anchorUsersTable.$inferSelect;
-export type OAuthSessionInsert = typeof oauthSessionsTable.$inferInsert;
-export type OAuthSessionSelect = typeof oauthSessionsTable.$inferSelect;
+// OAuth session types removed - sessions now stored in iron_session_storage
 export type UserPdsInsert = typeof userPdsesTable.$inferInsert;
 export type UserPdsSelect = typeof userPdsesTable.$inferSelect;
 export type IronSessionInsert = typeof ironSessionStorageTable.$inferInsert;

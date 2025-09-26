@@ -1,26 +1,45 @@
-// Repair mechanism to sync missing users from oauth_sessions to anchor_users
+// Repair mechanism to sync missing users from OAuth sessions to anchor_users
 // Addresses the gap where OAuth succeeds but registerUser() fails
 
 import { db } from "../database/db.ts";
-import { anchorUsersTable, oauthSessionsTable } from "../database/schema.ts";
+import {
+  anchorUsersTable,
+  ironSessionStorageTable,
+} from "../database/schema.ts";
+import { like } from "https://esm.sh/drizzle-orm@0.44.5";
 
 export async function syncMissingUsers(dryRun: boolean = true) {
   console.log("🔧 Starting user sync repair...");
   console.log(`Mode: ${dryRun ? "DRY RUN" : "LIVE SYNC"}`);
 
   try {
-    // Get all users from both tables
-    const [oauthUsers, anchorUsers] = await Promise.all([
+    // Get all users from OAuth sessions (now stored in iron_session_storage) and anchor_users
+    const [oauthSessions, anchorUsers] = await Promise.all([
       db.select({
-        did: oauthSessionsTable.did,
-        handle: oauthSessionsTable.handle,
-        pdsUrl: oauthSessionsTable.pdsUrl,
-        createdAt: oauthSessionsTable.createdAt,
-      }).from(oauthSessionsTable),
+        key: ironSessionStorageTable.key,
+        value: ironSessionStorageTable.value,
+        createdAt: ironSessionStorageTable.createdAt,
+      }).from(ironSessionStorageTable)
+        .where(like(ironSessionStorageTable.key, "session:%")),
       db.select({
         did: anchorUsersTable.did,
       }).from(anchorUsersTable),
     ]);
+
+    // Parse OAuth session data
+    const oauthUsers = oauthSessions.map((session) => {
+      try {
+        const sessionData = JSON.parse(session.value);
+        return {
+          did: session.key.replace("session:", ""),
+          handle: sessionData.handle,
+          pdsUrl: sessionData.pdsUrl,
+          createdAt: session.createdAt,
+        };
+      } catch {
+        return null;
+      }
+    }).filter(Boolean);
 
     // Find users in OAuth but not in Anchor
     const anchorDids = new Set(anchorUsers.map((u) => u.did));

@@ -5,7 +5,7 @@ import { db } from "../database/db.ts";
 import {
   anchorUsersTable,
   checkinsTable,
-  oauthSessionsTable,
+  ironSessionStorageTable,
   profileCacheTable,
   userPdsesTable,
 } from "../database/schema.ts";
@@ -18,17 +18,18 @@ export async function checkExistingUsers() {
     // Skip initializeTables() as tables already exist - this was causing timeouts
     // await initializeTables();
 
-    // Check oauth_sessions table
+    // Check OAuth sessions (now stored in iron_session_storage)
     console.log("\n📋 OAuth Sessions:");
+    const { like } = await import("https://esm.sh/drizzle-orm@0.44.5");
     const oauthSessions = await db
       .select({
-        did: oauthSessionsTable.did,
-        handle: oauthSessionsTable.handle,
-        pdsUrl: oauthSessionsTable.pdsUrl,
-        createdAt: oauthSessionsTable.createdAt,
+        key: ironSessionStorageTable.key,
+        value: ironSessionStorageTable.value,
+        createdAt: ironSessionStorageTable.createdAt,
       })
-      .from(oauthSessionsTable)
-      .orderBy(desc(oauthSessionsTable.createdAt))
+      .from(ironSessionStorageTable)
+      .where(like(ironSessionStorageTable.key, "session:%"))
+      .orderBy(desc(ironSessionStorageTable.createdAt))
       .limit(10);
 
     if (oauthSessions.length > 0) {
@@ -36,12 +37,23 @@ export async function checkExistingUsers() {
         `   Found ${oauthSessions.length} OAuth sessions (showing first 10):`,
       );
       for (const row of oauthSessions) {
-        console.log(`   - ${row.handle} (${row.did}) on ${row.pdsUrl}`);
+        try {
+          const sessionData = JSON.parse(row.value);
+          const did = row.key.replace("session:", "");
+          console.log(
+            `   - ${sessionData.handle || "Unknown"} (${did}) on ${
+              sessionData.pdsUrl || "Unknown PDS"
+            }`,
+          );
+        } catch {
+          console.log(`   - Invalid session data for ${row.key}`);
+        }
       }
 
       const totalOAuth = await db
         .select({ count: count() })
-        .from(oauthSessionsTable);
+        .from(ironSessionStorageTable)
+        .where(like(ironSessionStorageTable.key, "session:%"));
       console.log(`   Total OAuth sessions: ${totalOAuth[0]?.count || 0}`);
     } else {
       console.log("   No OAuth sessions found");
@@ -149,7 +161,9 @@ export async function checkExistingUsers() {
     console.log("\n=== Summary ===");
     const [oauthCount, uniqueAuthors, profileCount, currentTracked] =
       await Promise.all([
-        db.select({ count: count() }).from(oauthSessionsTable),
+        db.select({ count: count() }).from(ironSessionStorageTable).where(
+          like(ironSessionStorageTable.key, "session:%"),
+        ),
         db.select({ count: count(sql`DISTINCT ${checkinsTable.did}`) }).from(
           checkinsTable,
         ),

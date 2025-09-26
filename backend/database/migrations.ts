@@ -372,8 +372,42 @@ const MIGRATIONS = [
       );
 
       -- Create index for efficient cleanup of expired sessions
-      CREATE INDEX IF NOT EXISTS idx_iron_session_expires 
+      CREATE INDEX IF NOT EXISTS idx_iron_session_expires
       ON iron_session_storage(expires_at);
+    `,
+  },
+  {
+    version: "013_consolidate_oauth_storage",
+    description:
+      "Migrate OAuth sessions from oauth_sessions to iron_session_storage and remove duplicate table",
+    sql: `
+      -- Migrate existing OAuth sessions to iron_session_storage format
+      INSERT OR REPLACE INTO iron_session_storage (key, value, expires_at, created_at, updated_at)
+      SELECT
+        'session:' || did as key,
+        json_object(
+          'did', did,
+          'handle', handle,
+          'accessToken', access_token,
+          'refreshToken', refresh_token,
+          'dpopPrivateKeyJWK', json(dpop_private_key),
+          'pdsUrl', pds_url,
+          'displayName', display_name,
+          'avatarUrl', avatar_url,
+          'expiresAt', token_expires_at
+        ) as value,
+        CASE
+          WHEN token_expires_at IS NOT NULL AND token_expires_at > 0
+          THEN token_expires_at
+          ELSE NULL
+        END as expires_at,
+        created_at,
+        updated_at
+      FROM oauth_sessions
+      WHERE access_token IS NOT NULL AND refresh_token IS NOT NULL;
+
+      -- Drop the oauth_sessions table as it's no longer needed
+      DROP TABLE IF EXISTS oauth_sessions;
     `,
   },
 ];
