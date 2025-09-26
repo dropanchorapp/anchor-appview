@@ -50,9 +50,6 @@ export const checkinsTable = sqliteTable("checkins", {
   indexedAt: text("indexed_at").default(sql`CURRENT_TIMESTAMP`),
 });
 
-// Address cache table - REMOVED in migration 007 as it was completely unused by active code
-// If address caching is needed in future, re-implement with actual usage
-// export const addressCacheTable = sqliteTable("address_cache", { ... });
 
 // Profile cache for user data
 export const profileCacheTable = sqliteTable("profile_cache", {
@@ -98,11 +95,7 @@ export const processingLogTable = sqliteTable("processing_log", {
   durationMs: integer("duration_ms"),
 });
 
-// OAuth sessions are now stored in iron_session_storage table with 'session:${did}' keys
-// This consolidates storage and allows OAuth packages to handle token refresh automatically
 
-// Display names table - REMOVED in migration 007 as it was never used by any active code
-// export const displayNameTable = sqliteTable("display_names", { ... });
 
 // PDS tracking for distributed crawler - ACTIVE SYSTEM TABLE
 export const userPdsesTable = sqliteTable("user_pdses", {
@@ -126,12 +119,10 @@ export type CheckinInsert = typeof checkinsTable.$inferInsert;
 export type CheckinSelect = typeof checkinsTable.$inferSelect;
 export type ProfileInsert = typeof profileCacheTable.$inferInsert;
 export type ProfileSelect = typeof profileCacheTable.$inferSelect;
-// AddressCache types removed - table was unused and deleted
 export type UserFollowInsert = typeof userFollowsTable.$inferInsert;
 export type UserFollowSelect = typeof userFollowsTable.$inferSelect;
 export type AnchorUserInsert = typeof anchorUsersTable.$inferInsert;
 export type AnchorUserSelect = typeof anchorUsersTable.$inferSelect;
-// OAuth session types removed - sessions now stored in iron_session_storage
 export type UserPdsInsert = typeof userPdsesTable.$inferInsert;
 export type UserPdsSelect = typeof userPdsesTable.$inferSelect;
 export type IronSessionInsert = typeof ironSessionStorageTable.$inferInsert;

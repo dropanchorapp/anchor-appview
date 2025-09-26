@@ -55,7 +55,6 @@ export async function upsertProfile(profile: {
     });
 }
 
-// Removed getRecentCheckins function - was only used by duplicate /api/feed endpoint
 
 export async function insertCheckin(checkin: {
   id: string;
@@ -171,23 +170,7 @@ export async function getDashboardStats() {
   };
 }
 
-// OAuth session queries
-// OAuth session functions now handled by iron_session_storage and OAuth packages
-// These functions are deprecated after storage consolidation
-
-export function getSessionBySessionId(
-  _sessionId: string,
-): Promise<OAuthSession | null> {
-  // Sessions are now stored in iron_session_storage with 'session:${did}' keys
-  // This function is deprecated - use OAuth sessions API instead
-  console.warn("getSessionBySessionId is deprecated - use OAuth sessions API");
-  return Promise.resolve(null);
-}
-
 export async function deleteOAuthSession(did: string) {
-  // Sessions are now stored in iron_session_storage with 'session:${did}' keys
-  // This function is deprecated - use OAuth sessions API instead
-  console.warn("deleteOAuthSession is deprecated - use OAuth sessions API");
   await db.delete(ironSessionStorageTable)
     .where(eq(ironSessionStorageTable.key, `session:${did}`));
 }

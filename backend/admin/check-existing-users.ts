@@ -15,8 +15,6 @@ export async function checkExistingUsers() {
   console.log("🔍 Checking existing user data in database...");
 
   try {
-    // Skip initializeTables() as tables already exist - this was causing timeouts
-    // await initializeTables();
 
     // Check OAuth sessions (now stored in iron_session_storage)
     console.log("\n📋 OAuth Sessions:");
