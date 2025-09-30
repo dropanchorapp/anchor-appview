@@ -371,15 +371,11 @@ export class OverpassService {
       ? categories
       : this.getDefaultCategories();
 
-    // Build query parts for each category
+    // Build query parts for each category - nodes only for speed
     const queryParts: string[] = [];
     for (const category of actualCategories) {
-      // Query both nodes and ways with names and address tags
       queryParts.push(
         `node[${category}]["name"](around:${radiusMeters},${lat},${lon});`,
-      );
-      queryParts.push(
-        `way[${category}]["name"](around:${radiusMeters},${lat},${lon});`,
       );
     }
 
@@ -389,7 +385,7 @@ export class OverpassService {
 (
   ${queryParts.join("\n  ")}
 );
-out center tags;`;
+out;`;
 
     return query;
   }
@@ -418,19 +414,13 @@ out center tags;`;
       return null;
     }
 
-    // Handle coordinates
-    let latitude: number;
-    let longitude: number;
-
-    if (element.lat !== undefined && element.lon !== undefined) {
-      latitude = element.lat;
-      longitude = element.lon;
-    } else if (element.center) {
-      latitude = element.center.lat;
-      longitude = element.center.lon;
-    } else {
+    // Handle coordinates - nodes only now
+    if (element.lat === undefined || element.lon === undefined) {
       return null;
     }
+
+    const latitude = element.lat;
+    const longitude = element.lon;
 
     const tags = element.tags || {};
 
@@ -556,27 +546,15 @@ out center tags;`;
   private async resolveAdministrativeBoundaries(
     coordinate: { latitude: number; longitude: number },
   ): Promise<{ locality?: string; region?: string; country?: string }> {
-    const query = `[out:json][timeout:10];
-(
-  // District/neighborhood level (admin_level=10) - most precise locality  
-  relation["boundary"="administrative"]["admin_level"="10"](around:2000,${coordinate.latitude},${coordinate.longitude});
-  // Nearby place nodes for cross-reference
-  node["place"~"^(city|town|village)$"](around:5000,${coordinate.latitude},${coordinate.longitude});
-  // Municipality level (admin_level=8) - broader area
-  relation["boundary"="administrative"]["admin_level"="8"](around:5000,${coordinate.latitude},${coordinate.longitude});
-  // County/state level (admin_level=6) - for metro areas
-  relation["boundary"="administrative"]["admin_level"="6"](around:10000,${coordinate.latitude},${coordinate.longitude});
-  // State/Province level (admin_level=4) - for regions
-  relation["boundary"="administrative"]["admin_level"="4"](around:25000,${coordinate.latitude},${coordinate.longitude});
-  // Country level (admin_level=2)
-  relation["boundary"="administrative"]["admin_level"="2"](around:50000,${coordinate.latitude},${coordinate.longitude});
-);
+    const query = `[out:json][timeout:5];
+is_in(${coordinate.latitude},${coordinate.longitude});
+area._[admin_level];
 out tags;`;
 
     try {
       const request = this.buildRequest(query);
       const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 10000);
+      const timeoutId = setTimeout(() => controller.abort(), 5000);
 
       const response = await fetch(request, { signal: controller.signal });
       clearTimeout(timeoutId);
