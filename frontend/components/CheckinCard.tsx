@@ -65,6 +65,7 @@ export function CheckinCard({ checkin, auth, onDelete }: CheckinCardProps) {
         padding: "16px",
         cursor: "pointer",
         transition: "transform 0.1s ease-in-out, box-shadow 0.1s ease-in-out",
+        position: "relative",
       }}
       onMouseEnter={(e) => {
         e.currentTarget.style.transform = "translateY(-1px)";
@@ -175,35 +176,6 @@ export function CheckinCard({ checkin, auth, onDelete }: CheckinCardProps) {
               return date.toLocaleDateString();
             })()}
           </time>
-          {canDelete && (
-            <button
-              type="button"
-              onClick={handleDelete}
-              disabled={isDeleting}
-              style={{
-                background: "none",
-                border: "none",
-                cursor: isDeleting ? "not-allowed" : "pointer",
-                fontSize: "14px",
-                color: isDeleting ? "#c7c7cc" : "#ff3b30",
-                padding: "4px",
-                borderRadius: "4px",
-                transition: "all 0.1s ease-in-out",
-                opacity: isDeleting ? 0.5 : 1,
-              }}
-              onMouseEnter={(e) => {
-                if (!isDeleting) {
-                  e.currentTarget.style.background = "#fee";
-                }
-              }}
-              onMouseLeave={(e) => {
-                e.currentTarget.style.background = "none";
-              }}
-              title={isDeleting ? "Deleting..." : "Delete check-in"}
-            >
-              {isDeleting ? "..." : "🗑️"}
-            </button>
-          )}
           <span
             data-arrow
             style={{
@@ -261,6 +233,71 @@ export function CheckinCard({ checkin, auth, onDelete }: CheckinCardProps) {
           </div>
         )}
       </div>
+
+      {canDelete && (
+        <button
+          type="button"
+          onClick={handleDelete}
+          disabled={isDeleting}
+          style={{
+            position: "absolute",
+            bottom: "12px",
+            right: "12px",
+            background: "rgba(255, 255, 255, 0.95)",
+            border: "1px solid rgba(0, 0, 0, 0.1)",
+            cursor: isDeleting ? "not-allowed" : "pointer",
+            color: isDeleting ? "#c7c7cc" : "#ff3b30",
+            padding: "6px",
+            borderRadius: "6px",
+            transition: "all 0.2s ease-in-out",
+            opacity: isDeleting ? 0.5 : 1,
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            width: "28px",
+            height: "28px",
+            boxShadow: "0 1px 3px rgba(0, 0, 0, 0.1)",
+          }}
+          onMouseEnter={(e) => {
+            if (!isDeleting) {
+              e.currentTarget.style.background = "#ffebee";
+              e.currentTarget.style.transform = "scale(1.05)";
+            }
+          }}
+          onMouseLeave={(e) => {
+            e.currentTarget.style.background = "rgba(255, 255, 255, 0.95)";
+            e.currentTarget.style.transform = "scale(1)";
+          }}
+          title={isDeleting ? "Deleting..." : "Delete check-in"}
+        >
+          <svg
+            width="16"
+            height="16"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          >
+            {isDeleting
+              ? (
+                // Loader icon (rotating circle)
+                <circle cx="12" cy="12" r="10" opacity="0.25" />
+              )
+              : (
+                // Trash icon (lucide-trash-2)
+                <>
+                  <path d="M3 6h18" />
+                  <path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6" />
+                  <path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2" />
+                  <line x1="10" x2="10" y1="11" y2="17" />
+                  <line x1="14" x2="14" y1="11" y2="17" />
+                </>
+              )}
+          </svg>
+        </button>
+      )}
     </div>
   );
 }

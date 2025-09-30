@@ -11,6 +11,7 @@ import { PrivacyPolicy } from "./PrivacyPolicy.tsx";
 import { LoginForm } from "./LoginForm.tsx";
 import { MobileAuth } from "./MobileAuth.tsx";
 import { CheckinDetail } from "./CheckinDetail.tsx";
+import { CheckinComposer } from "./CheckinComposer.tsx";
 import { AuthState, CheckinData } from "../types/index.ts";
 
 export function App() {
@@ -75,6 +76,7 @@ export function App() {
   const [loginLoading, setLoginLoading] = useState(false);
   const [showUserDropdown, setShowUserDropdown] = useState(false);
   const userDropdownRef = useRef<HTMLDivElement>(null);
+  const [showCheckinComposer, setShowCheckinComposer] = useState(false);
 
   // Inject proper CSS styles on mount
   useEffect(() => {
@@ -96,6 +98,13 @@ export function App() {
 
       @keyframes spin {
         to { transform: rotate(360deg); }
+      }
+
+      /* Mobile responsive styles */
+      @media (max-width: 768px) {
+        body {
+          font-size: 16px; /* Prevent iOS zoom on input focus */
+        }
       }
     `;
     document.head.appendChild(style);
@@ -310,6 +319,67 @@ export function App() {
           <strong>Error:</strong> {error}
         </div>
       )}
+
+      {/* Floating Action Button (FAB) - only for authenticated users */}
+      {auth.isAuthenticated && (
+        <button
+          type="button"
+          onClick={() => setShowCheckinComposer(true)}
+          style={{
+            position: "fixed",
+            bottom: globalThis.innerWidth <= 768 ? "16px" : "24px",
+            right: globalThis.innerWidth <= 768 ? "16px" : "24px",
+            width: globalThis.innerWidth <= 768 ? "60px" : "56px",
+            height: globalThis.innerWidth <= 768 ? "60px" : "56px",
+            borderRadius: globalThis.innerWidth <= 768 ? "30px" : "28px",
+            background: "#007aff",
+            border: "none",
+            boxShadow: "0 4px 12px rgba(0, 122, 255, 0.4)",
+            cursor: "pointer",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            transition: "all 0.2s ease",
+            zIndex: "100",
+          }}
+          onMouseEnter={(e) => {
+            e.currentTarget.style.transform = "scale(1.1)";
+            e.currentTarget.style.boxShadow =
+              "0 6px 16px rgba(0, 122, 255, 0.5)";
+          }}
+          onMouseLeave={(e) => {
+            e.currentTarget.style.transform = "scale(1)";
+            e.currentTarget.style.boxShadow =
+              "0 4px 12px rgba(0, 122, 255, 0.4)";
+          }}
+          title="Create check-in"
+        >
+          <svg
+            width={globalThis.innerWidth <= 768 ? "32" : "28"}
+            height={globalThis.innerWidth <= 768 ? "32" : "28"}
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="white"
+            strokeWidth="2"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          >
+            <line x1="12" y1="5" x2="12" y2="19" />
+            <line x1="5" y1="12" x2="19" y2="12" />
+          </svg>
+        </button>
+      )}
+
+      {/* Check-in Composer Modal */}
+      <CheckinComposer
+        isOpen={showCheckinComposer}
+        onClose={() => setShowCheckinComposer(false)}
+        onSuccess={(checkinUrl) => {
+          setShowCheckinComposer(false);
+          // Redirect to checkin detail page
+          globalThis.location.href = checkinUrl;
+        }}
+      />
     </div>
   );
 }
