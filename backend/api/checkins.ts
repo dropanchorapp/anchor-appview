@@ -3,7 +3,7 @@ import type { Context } from "jsr:@hono/hono@4.9.6";
 import { OverpassService } from "../services/overpass-service.ts";
 import type { Place } from "../models/place-models.ts";
 // No database imports needed - all data read from PDS
-import type { OAuthSessionsInterface } from "jsr:@tijs/atproto-oauth-hono@^0.3.0";
+import type { OAuthSessionsInterface } from "jsr:@tijs/atproto-oauth-hono@^0.3.1";
 
 // Global service instance for address enhancement
 const overpassService = new OverpassService();
