@@ -38,6 +38,15 @@ export function CheckinComposer(
     setLoadingLocation(true);
     setLocationError(null);
 
+    // Check if geolocation is available
+    if (!navigator.geolocation) {
+      setLocationError(
+        "Geolocation is not supported by your browser. Please use a modern browser or enter your location manually.",
+      );
+      setLoadingLocation(false);
+      return;
+    }
+
     try {
       const position = await new Promise<GeolocationPosition>(
         (resolve, reject) => {
@@ -61,11 +70,25 @@ export function CheckinComposer(
       await loadNearbyVenues(location.lat, location.lng);
     } catch (error: any) {
       if (error.code === 1) {
-        setLocationError(
-          "Location permission denied. Please enable location access.",
+        // Permission denied
+        const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
+        const isSafari = /^((?!chrome|android).)*safari/i.test(
+          navigator.userAgent,
         );
+
+        if (isIOS || isSafari) {
+          setLocationError(
+            "Location access denied. On iOS/Safari, go to Settings > Safari > Location > Allow, then refresh and try again.",
+          );
+        } else {
+          setLocationError(
+            "Location access denied. Please allow location access in your browser settings and try again.",
+          );
+        }
       } else if (error.code === 2) {
-        setLocationError("Location unavailable. Please try again.");
+        setLocationError(
+          "Location unavailable. Make sure location services are enabled on your device.",
+        );
       } else if (error.code === 3) {
         setLocationError("Location request timed out. Please try again.");
       } else {
