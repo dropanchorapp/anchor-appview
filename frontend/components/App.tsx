@@ -274,7 +274,7 @@ export function App() {
 
       <div
         style={{
-          padding: "0 20px",
+          padding: "20px 20px 0 20px",
           maxWidth: "1200px",
           margin: "0 auto",
         }}
