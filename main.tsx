@@ -3,10 +3,11 @@
 import { Hono } from "jsr:@hono/hono@4.9.6";
 import { initializeTables } from "./backend/database/db.ts";
 import { oauthRoutes } from "./backend/routes/oauth.ts";
-import { createAdminRoutes } from "./backend/routes/admin.ts";
-import { createCronRoutes } from "./backend/routes/cron.ts";
+// No admin routes needed - PDS-only architecture
+// No cron/ingestion routes needed - PDS-only architecture
 import { createFrontendRoutes } from "./backend/routes/frontend.ts";
 import anchorApiHandler from "./backend/api/anchor-api.ts";
+import { createCheckin, deleteCheckin } from "./backend/api/checkins.ts";
 
 const app = new Hono();
 
@@ -16,6 +17,36 @@ await initializeTables();
 // Mount API routes FIRST (before catch-all frontend routes)
 app.get("/api/nearby", async (c) => {
   return await anchorApiHandler(c.req.raw);
+});
+
+// REST-style checkin endpoints
+// GET /api/checkins/:did - Get all checkins for a user
+app.get("/api/checkins/:did", async (c) => {
+  return await anchorApiHandler(c.req.raw);
+});
+
+// GET /api/checkins/:did/:rkey - Get a specific checkin
+app.get("/api/checkins/:did/:rkey", async (c) => {
+  return await anchorApiHandler(c.req.raw);
+});
+
+// POST /api/checkins - Create a new checkin
+app.post("/api/checkins", async (c) => {
+  return await createCheckin(c);
+});
+
+// DELETE /api/checkins/:did/:rkey - Delete a specific checkin
+app.delete("/api/checkins/:did/:rkey", async (c) => {
+  return await deleteCheckin(c);
+});
+
+// Legacy /api/user endpoints for backward compatibility
+app.get("/api/user/:identifier", (c) => {
+  // Redirect to new REST endpoint
+  const identifier = c.req.param("identifier");
+  const newUrl = new URL(c.req.url);
+  newUrl.pathname = `/api/checkins/${identifier}`;
+  return Response.redirect(newUrl.toString(), 301);
 });
 
 app.get("/api/user", async (c) => {
@@ -42,12 +73,8 @@ app.get("/api/places/categories", async (c) => {
   return await anchorApiHandler(c.req.raw);
 });
 
+// Legacy /api/checkin/* endpoint for backward compatibility
 app.get("/api/checkin/*", async (c) => {
-  return await anchorApiHandler(c.req.raw);
-});
-
-// Check-in creation endpoint
-app.post("/api/checkins", async (c) => {
   return await anchorApiHandler(c.req.raw);
 });
 
@@ -134,8 +161,8 @@ app.get("/api/debug/oauth-sessions", async (c) => {
 
 // Mount other route groups
 app.route("/", oauthRoutes);
-app.route("/", createAdminRoutes());
-app.route("/", createCronRoutes());
+// No admin routes mounted - PDS-only architecture
+// No cron/ingestion routes mounted - PDS-only architecture
 
 // Mount frontend routes LAST (contains catch-all route)
 app.route("/", createFrontendRoutes());

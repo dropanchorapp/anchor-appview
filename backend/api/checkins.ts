@@ -2,11 +2,8 @@
 import type { Context } from "jsr:@hono/hono@4.9.6";
 import { OverpassService } from "../services/overpass-service.ts";
 import type { Place } from "../models/place-models.ts";
-import { processCheckinEvent as _processCheckinEvent } from "../ingestion/record-processor.ts";
-import { db } from "../database/db.ts";
-import { checkinsTable } from "../database/schema.ts";
-import { eq } from "https://esm.sh/drizzle-orm@0.44.5";
-import type { OAuthSessionsInterface } from "jsr:@tijs/atproto-oauth-hono@^0.2.6";
+// No database imports needed - all data read from PDS
+import type { OAuthSessionsInterface } from "jsr:@tijs/atproto-oauth-hono@^0.3.0";
 
 // Global service instance for address enhancement
 const overpassService = new OverpassService();
@@ -274,10 +271,16 @@ export async function createCheckin(c: Context): Promise<Response> {
 
     console.log("✅ Checkin created successfully");
 
+    // Create shareable ID using simple rkey format for clean URLs
+    const rkey = createResult.checkinUri.split("/").pop();
+    const shareableId = rkey;
+
     return c.json({
       success: true,
       checkinUri: createResult.checkinUri,
       addressUri: createResult.addressUri,
+      shareableId: shareableId,
+      shareableUrl: `https://dropanchor.app/checkin/${shareableId}`,
     });
   } catch (err) {
     console.error("❌ Checkin creation failed:", err);
@@ -428,29 +431,6 @@ async function createAddressAndCheckin(
     const checkinResult = await checkinResponse.json();
     console.log(`✅ Created checkin record: ${checkinResult.uri}`);
 
-    // IMMEDIATELY save to local database for instant feed updates
-    try {
-      const rkey = extractRkey(checkinResult.uri);
-      await _processCheckinEvent({
-        did: oauthSession.did,
-        time_us: Date.now() * 1000, // Convert to microseconds
-        commit: {
-          rkey: rkey,
-          collection: "app.dropanchor.checkin",
-          operation: "create",
-          record: checkinRecord,
-          cid: checkinResult.cid,
-        },
-      });
-      console.log(`✅ Saved checkin to local database: ${rkey}`);
-    } catch (localSaveError) {
-      console.error(
-        "Failed to save checkin to local database:",
-        localSaveError,
-      );
-      // Don't fail the request - AT Protocol save succeeded, local save can be retried later
-    }
-
     return {
       success: true,
       checkinUri: checkinResult.uri,
@@ -465,16 +445,181 @@ async function createAddressAndCheckin(
   }
 }
 
-// Simple function to get a checkin by ID for frontend routes
-export async function getCheckinById(checkinId: string) {
+// Delete a checkin and its associated address record
+export async function deleteCheckin(c: Context): Promise<Response> {
   try {
-    const results = await db.select().from(checkinsTable)
-      .where(eq(checkinsTable.id, checkinId))
-      .limit(1);
+    // Authenticate user with Iron Session
+    const authResult = await authenticateUser(c);
+    if (!authResult) {
+      return c.json({
+        success: false,
+        error: "Authentication required",
+      }, 401);
+    }
 
-    return results.length > 0 ? results[0] : null;
-  } catch (error) {
-    console.error(`Error getting checkin ${checkinId}:`, error);
-    return null;
+    const { did } = authResult;
+
+    // Get checkin DID and rkey from URL params
+    const targetDid = c.req.param("did");
+    const rkey = c.req.param("rkey");
+
+    if (!targetDid || !rkey) {
+      return c.json({
+        success: false,
+        error: "Missing required parameters: did and rkey",
+      }, 400);
+    }
+
+    // Verify that the authenticated user owns the checkin
+    if (did !== targetDid) {
+      return c.json({
+        success: false,
+        error: "Forbidden: Can only delete your own checkins",
+      }, 403);
+    }
+
+    console.log(`🗑️ Starting checkin deletion: ${targetDid}/${rkey}`);
+
+    // Get sessions instance for clean OAuth API access
+    const { sessions } = await import("../routes/oauth.ts");
+
+    // Delete checkin and address records via AT Protocol
+    const deleteResult = await deleteCheckinAndAddress(
+      sessions,
+      did,
+      rkey,
+    );
+
+    if (!deleteResult.success) {
+      return c.json({
+        success: false,
+        error: deleteResult.error,
+      }, 500);
+    }
+
+    console.log("✅ Checkin deleted successfully");
+
+    return c.json({
+      success: true,
+    });
+  } catch (err) {
+    console.error("❌ Checkin deletion failed:", err);
+    return c.json({
+      success: false,
+      error: "Internal server error",
+    }, 500);
   }
 }
+
+// Delete checkin and address records via AT Protocol using OAuth sessions
+async function deleteCheckinAndAddress(
+  sessions: OAuthSessionsInterface,
+  did: string,
+  checkinRkey: string,
+): Promise<{ success: boolean; error?: string }> {
+  try {
+    console.log(`🔰 Getting OAuth session for DID: ${did}`);
+
+    // Use the OAuth sessions API to get a ready-to-use session with automatic token refresh
+    const oauthSession = await sessions.getOAuthSession(did);
+    if (!oauthSession) {
+      console.error("Failed to get OAuth session for DID:", did);
+      return {
+        success: false,
+        error: "Failed to get OAuth session",
+      };
+    }
+
+    console.log(`✅ Got OAuth session for ${oauthSession.handle || did}`);
+
+    // First, fetch the checkin record to get the address reference
+    console.log(`🔰 Fetching checkin record to find address ref`);
+    const checkinUri = `at://${did}/app.dropanchor.checkin/${checkinRkey}`;
+
+    const getRecordResponse = await oauthSession.makeRequest(
+      "GET",
+      `${oauthSession.pdsUrl}/xrpc/com.atproto.repo.getRecord?repo=${did}&collection=app.dropanchor.checkin&rkey=${checkinRkey}`,
+    );
+
+    if (!getRecordResponse.ok) {
+      const error = await getRecordResponse.text();
+      console.error("Failed to fetch checkin record:", error);
+      return {
+        success: false,
+        error: "Failed to fetch checkin record",
+      };
+    }
+
+    const checkinData = await getRecordResponse.json();
+    const addressRef = checkinData.value?.addressRef;
+
+    // Step 1: Delete the checkin record
+    console.log(`🗑️ Deleting checkin record: ${checkinUri}`);
+    const deleteCheckinResponse = await oauthSession.makeRequest(
+      "POST",
+      `${oauthSession.pdsUrl}/xrpc/com.atproto.repo.deleteRecord`,
+      {
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          repo: did,
+          collection: "app.dropanchor.checkin",
+          rkey: checkinRkey,
+        }),
+      },
+    );
+
+    if (!deleteCheckinResponse.ok) {
+      const error = await deleteCheckinResponse.text();
+      console.error("Failed to delete checkin record:", error);
+      return {
+        success: false,
+        error: "Failed to delete checkin record",
+      };
+    }
+
+    console.log(`✅ Deleted checkin record: ${checkinUri}`);
+
+    // Step 2: Delete the address record if we found a reference
+    if (addressRef?.uri) {
+      const addressRkey = extractRkey(addressRef.uri);
+      console.log(`🗑️ Deleting address record: ${addressRef.uri}`);
+
+      const deleteAddressResponse = await oauthSession.makeRequest(
+        "POST",
+        `${oauthSession.pdsUrl}/xrpc/com.atproto.repo.deleteRecord`,
+        {
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            repo: did,
+            collection: "community.lexicon.location.address",
+            rkey: addressRkey,
+          }),
+        },
+      );
+
+      if (!deleteAddressResponse.ok) {
+        // Log but don't fail - checkin is already deleted
+        const error = await deleteAddressResponse.text();
+        console.warn("Failed to delete address record (non-fatal):", error);
+      } else {
+        console.log(`✅ Deleted address record: ${addressRef.uri}`);
+      }
+    }
+
+    return {
+      success: true,
+    };
+  } catch (err) {
+    console.error("❌ Delete checkin and address failed:", err);
+    return {
+      success: false,
+      error: "Internal server error",
+    };
+  }
+}
+
+// All checkin data now read directly from PDS - no local fallback needed

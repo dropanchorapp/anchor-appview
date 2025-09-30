@@ -119,180 +119,52 @@ export function createFrontendRoutes() {
     );
   });
 
-  // Individual checkin pages - serve React app with noscript fallback
-  app.get("/checkin/:id", async (c) => {
-    try {
-      const checkinId = c.req.param("id");
-      if (!checkinId) {
-        return new Response("Checkin ID required", { status: 400 });
-      }
+  // Individual checkin pages - serve React app (PDS-only, no SSR)
+  app.get("/checkin/:id", (c) => {
+    // PDS-only mode - just serve the React app, it handles data fetching
+    return new Response(
+      `<!DOCTYPE html>
+      <html lang="en">
+      <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>Anchor Check-in</title>
 
-      // Fetch checkin data for meta tags and noscript fallback
-      const { getCheckinById } = await import("../api/checkins.ts");
-      const checkin = await getCheckinById(checkinId);
+        <!-- Basic meta tags -->
+        <meta property="og:title" content="Anchor Check-in">
+        <meta property="og:description" content="View this check-in on Anchor">
+        <meta property="og:type" content="article">
+        <meta property="og:url" content="${c.req.url}">
+        <meta property="og:site_name" content="Anchor">
 
-      if (!checkin) {
-        return new Response("Checkin not found", { status: 404 });
-      }
+        <!-- React app styles -->
+        <link rel="preconnect" href="https://fonts.googleapis.com">
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;700;800&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Epilogue:wght@400;600;700;800;900&display=swap" rel="stylesheet">
+        <script src="https://cdn.twind.style" crossorigin></script>
+        <script src="https://esm.town/v/std/catch"></script>
+      </head>
+      <body>
+        <!-- React app root -->
+        <div id="root" style="background: #ff006b; min-height: 100vh"></div>
 
-      // Format location for display
-      const locationParts = [
-        checkin.venueName,
-        checkin.addressLocality,
-        checkin.addressRegion,
-      ].filter(Boolean);
-      const location = locationParts.join(", ") ||
-        `${checkin.latitude}, ${checkin.longitude}`;
+        <!-- Fallback for users without JavaScript -->
+        <noscript>
+          <div style="font-family: sans-serif; text-align: center; padding: 2rem;">
+            <h1>Anchor Check-in</h1>
+            <p>This check-in requires JavaScript to view. Please enable JavaScript in your browser.</p>
+            <a href="/">← View Feed</a>
+          </div>
+        </noscript>
 
-      return new Response(
-        `<!DOCTYPE html>
-        <html lang="en">
-        <head>
-          <meta charset="UTF-8">
-          <meta name="viewport" content="width=device-width, initial-scale=1.0">
-          <title>Check-in by ${
-          checkin.displayName || checkin.handle
-        } - Anchor</title>
-          
-          <!-- Open Graph meta tags for social sharing -->
-          <meta property="og:title" content="Check-in by ${
-          checkin.displayName || checkin.handle
-        }">
-          <meta property="og:description" content="${
-          checkin.text || `Checked in at ${location}`
-        }">
-          <meta property="og:type" content="article">
-          <meta property="og:url" content="${c.req.url}">
-          <meta property="og:site_name" content="Anchor">
-          ${
-          checkin.avatar
-            ? `<meta property="og:image" content="${checkin.avatar}">`
-            : ""
-        }
-          ${
-          checkin.avatar
-            ? `<meta property="og:image:alt" content="Profile picture of ${
-              checkin.displayName || checkin.handle
-            }">`
-            : ""
-        }
-          <meta property="og:locale" content="en_US">
-          
-          <!-- Twitter Card meta tags -->
-          <meta name="twitter:card" content="summary">
-          <meta name="twitter:title" content="Check-in by ${
-          checkin.displayName || checkin.handle
-        }">
-          <meta name="twitter:description" content="${
-          checkin.text || `Checked in at ${location}`
-        }">
-          ${
-          checkin.avatar
-            ? `<meta name="twitter:image" content="${checkin.avatar}">`
-            : ""
-        }
-          ${
-          checkin.avatar
-            ? `<meta name="twitter:image:alt" content="Profile picture of ${
-              checkin.displayName || checkin.handle
-            }">`
-            : ""
-        }
-          <meta name="twitter:site" content="@anchor_app">
-          <meta name="twitter:creator" content="@${checkin.handle}">
-          
-          <!-- Additional meta tags for better SEO -->
-          <meta name="description" content="${
-          checkin.text ||
-          `Check-in by ${checkin.displayName || checkin.handle} at ${location}`
-        }">
-          <meta name="author" content="${
-          checkin.displayName || checkin.handle
-        }">
-          <meta name="robots" content="index, follow">
-          <link rel="canonical" href="${c.req.url}">
-          
-          <!-- React app styles and scripts -->
-          <link rel="preconnect" href="https://fonts.googleapis.com">
-          <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-          <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;700;800&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Epilogue:wght@400;600;700;800;900&display=swap" rel="stylesheet">
-          <script src="https://cdn.twind.style" crossorigin></script>
-          <script src="https://esm.town/v/std/catch"></script>
-        </head>
-        <body>
-          <!-- React app root -->
-          <div id="root" style="background: #ff006b; min-height: 100vh"></div>
-          
-          <!-- Fallback content for users without JavaScript -->
-          <noscript>
-            <style>
-              body { 
-                font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-                max-width: 600px; margin: 0 auto; padding: 2rem; line-height: 1.6; 
-                background: white;
-              }
-              .checkin-card { 
-                border: 1px solid #e2e8f0; border-radius: 8px; padding: 1.5rem; margin-bottom: 1rem;
-                background: white; box-shadow: 0 1px 3px rgba(0,0,0,0.1);
-              }
-              .user-info { display: flex; align-items: center; margin-bottom: 1rem; }
-              .avatar { width: 40px; height: 40px; border-radius: 20px; margin-right: 0.75rem; }
-              .user-details h3 { margin: 0; color: #1a365d; }
-              .user-details p { margin: 0; color: #666; font-size: 0.9rem; }
-              .checkin-text { margin: 1rem 0; font-size: 1.1rem; }
-              .location { color: #666; margin-top: 0.5rem; }
-              .timestamp { color: #999; font-size: 0.85rem; margin-top: 1rem; }
-              .view-feed { margin-top: 2rem; text-align: center; }
-              .view-feed a { 
-                color: #3182ce; text-decoration: none; font-weight: 500;
-                border: 1px solid #3182ce; padding: 0.5rem 1rem; border-radius: 4px;
-                display: inline-block;
-              }
-              .view-feed a:hover { background: #3182ce; color: white; }
-            </style>
-            <div class="checkin-card">
-              <div class="user-info">
-                ${
-          checkin.avatar
-            ? `<img src="${checkin.avatar}" alt="${
-              checkin.displayName || checkin.handle
-            }" class="avatar">`
-            : ""
-        }
-                <div class="user-details">
-                  <h3>${checkin.displayName || checkin.handle}</h3>
-                  <p>@${checkin.handle}</p>
-                </div>
-              </div>
-              
-              ${
-          checkin.text ? `<div class="checkin-text">${checkin.text}</div>` : ""
-        }
-              
-              <div class="location">📍 ${location}</div>
-              
-              <div class="timestamp">
-                ${new Date(checkin.createdAt).toLocaleString()}
-              </div>
-            </div>
-            
-            <div class="view-feed">
-              <a href="/">← View Full Feed</a>
-            </div>
-          </noscript>
-          
-          <!-- Load React app -->
-          <script type="module" src="/frontend/index.tsx"></script>
-        </body>
-        </html>`,
-        {
-          headers: { "Content-Type": "text/html" },
-        },
-      );
-    } catch (err) {
-      console.error("Error serving checkin page:", err);
-      return new Response("Error loading checkin", { status: 500 });
-    }
+        <!-- Load React app -->
+        <script type="module" src="/frontend/index.tsx"></script>
+      </body>
+      </html>`,
+      {
+        headers: { "Content-Type": "text/html" },
+      },
+    );
   });
 
   // Catch-all route for SPA

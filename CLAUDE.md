@@ -1,543 +1,451 @@
 # CLAUDE.md
 
-This file provides guidance to Claude Code (claude.ai/code) when working with
-code in this repository.
+This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
 ## Project Overview
 
-This is the **Anchor AppView** - a location-based social feed generator and
-OAuth authentication system for the Anchor app, built on the AT Protocol
-(Bluesky) infrastructure. The system ingests check-in data from the
-decentralized AT Protocol network, provides spatial and social feeds, and
-includes a complete OAuth WebView implementation for mobile app integration.
+Anchor AppView is a location-based social feed generator built on AT Protocol. The system uses a **PDS-only architecture** where all checkin data is read directly from users' Personal Data Servers, with minimal local storage used only for OAuth session management.
 
 ## Architecture
 
-### Entry Point and Deployment
+### Core Design Pattern: PDS-Only Architecture
 
-- **Main Entry**: `main.tsx` (Val Town HTTP function with
-  `// @val-town anchordashboard` comment)
-- **Base URL**: `https://dropanchor.app` (configurable via `ANCHOR_BASE_URL` env
-  var)
-- **Platform**: Single Hono-based web server deployed on Val Town using Deno
-  runtime
+**Critical architectural constraint**: This system does NOT store checkin data locally. All checkins are:
+1. Created directly in users' PDS via AT Protocol `com.atproto.repo.createRecord`
+2. Read on-demand from PDS via `com.atproto.repo.getRecord` and `com.atproto.repo.listRecords`
+3. Never cached or persisted in local database
 
-### Core Components
+The only local data storage is `iron_session_storage` table for OAuth sessions.
 
-1. **HTTP Server (main.tsx)** - Unified Hono server handling all routes:
-   - OAuth authentication endpoints
-   - AppView API endpoints (nearby, user, following feeds)
-   - Mobile OAuth WebView pages
-   - React frontend serving
-   - Admin API endpoints
+### Entry Point
 
-2. **OAuth Authentication System (`backend/oauth/`)** - Complete OAuth 2.0 +
-   DPoP implementation:
-   - PKCE flow with automatic handle resolution and PDS discovery
-   - Mobile app detection for WebView integration
-   - Custom URL scheme redirect: `anchor-app://auth-callback`
-   - Session management with SQLite storage
+- **Main file**: `main.tsx` (deployed to Val Town with `// @val-town anchordashboard` comment)
+- **Base URL**: `https://dropanchor.app` (configurable via `ANCHOR_BASE_URL`)
+- **Framework**: Hono web server serving unified API, OAuth, and React frontend
+- **Runtime**: Deno on Val Town platform
 
-3. **AppView Data Layer (`backend/api/anchor-api.ts`)** - AT Protocol compliant
-   feed system:
-   - Immediate database saves when check-ins are created via app
-   - StrongRef address resolution and caching
-   - Spatial queries using Haversine distance calculations
-   - Social graph integration with Bluesky
+### Key Components
 
-4. **React Dashboard (`frontend/`)** - Web interface for authentication and feed
-   management
+**OAuth Authentication** (`backend/routes/oauth.ts`, `backend/oauth/`):
+- Uses custom package `jsr:@tijs/atproto-oauth-hono@^0.3.0`
+- Provides web and mobile (iOS) authentication flows
+- Mobile: Custom URL scheme `anchor-app://auth-callback`
+- Session storage via Drizzle ORM with SQLite
+- Automatic token refresh and DPoP handling built into OAuth sessions
 
-### Key Technologies
+**Checkin API** (`backend/api/checkins.ts`):
+- Creates checkins via AT Protocol `createRecord` with immediate PDS writes
+- Two-record pattern: address record + checkin record with StrongRef
+- Address enhancement via Overpass API (OpenStreetMap)
+- Authentication via Bearer tokens (mobile) or cookies (web)
 
-- **AT Protocol** - Decentralized social networking with OAuth 2.0 + DPoP
-  authentication
-- **Val Town** - Serverless platform deployment with Deno runtime
-- **SQLite** - Database for check-ins, addresses, social graph, and OAuth
-  sessions
-- **Hono** - Lightweight web framework for unified API serving
-- **React 18.2.0** - Frontend dashboard with TypeScript
+**Feed API** (`backend/api/anchor-api.ts`):
+- Reads checkins directly from users' PDS
+- Spatial queries, user feeds, following feeds
+- No local database reads for checkin data
 
-## Database Schema
-
-The system uses five main tables:
-
-- `checkins_v1` - Main check-ins with coordinates and cached address data
-- `address_cache_v1` - Cached venue/address information from StrongRef
-  resolution
-- `profile_cache_v1` - Cached user profile data (display names, avatars)
-- `user_follows_v1` - Social graph data for following-based feeds
-- `oauth_sessions` - OAuth session storage with DPoP keys and user profiles
-- `processing_log_v1` - Monitoring and operational logging
+**Database Layer** (`backend/database/`):
+- Drizzle ORM with `sqlite-proxy` adapter
+- Schema: `backend/database/schema.ts` (only OAuth session storage)
+- Migrations: `backend/database/migrations.ts`
 
 ## Development Commands
 
-### Deno Tasks
-
-The project includes several Deno tasks for common development workflows:
-
-- `deno task quality` - Run formatter, linter, type checking, and all tests in
-  sequence
-- `deno task deploy` - Deploy to Val Town (runs quality checks first)
-- `deno task fmt` - Format code using deno fmt
-- `deno task lint` - Run linter to check code quality
-- `deno task check` - TypeScript type checking for all source files
-- `deno task test` - Run all tests with `--allow-all` permissions
-- `deno task test:unit` - Run unit tests only
-- `deno task test:integration` - Run integration tests only
-- `deno task test:watch` - Run tests in watch mode for development
-
 ### Testing
 
-- `./scripts/test.sh` - Run complete test suite (unit + integration)
-- `deno test --allow-all` - Run all tests directly
-- Test files use comprehensive mocking for Val Town services (sqlite, blob
-  storage)
+```bash
+# Run all tests (unit + integration)
+deno task test
+# or
+./scripts/test.sh
+
+# Run only unit tests
+deno task test:unit
+
+# Run only integration tests
+deno task test:integration
+
+# Watch mode for TDD
+deno task test:watch
+```
+
+### Code Quality
+
+```bash
+# Format, lint, type check, and test
+deno task quality
+
+# Quality check without type checking (faster)
+deno task quality-no-check
+
+# Individual checks
+deno fmt              # Format code
+deno lint             # Lint code
+deno check --allow-import   # Type check
+```
 
 ### Deployment
 
-- `./scripts/deploy.sh` - One-click deployment to Val Town using CLI
-- `vt create cron|http <name> --file <path>` - Deploy individual functions
-- Requires Val Town CLI: `npm install -g @valtown/cli`
+```bash
+# Deploy to Val Town (runs quality checks first)
+deno task deploy
 
-### Debugging
+# Manual deployment
+vt push
+```
 
-- `deno run --allow-net scripts/debug.ts` - Check data availability and API
-  status
-- `deno run --allow-net scripts/debug.ts --check-data` - Check AT Protocol
-  records only
-- `deno run --allow-net scripts/debug.ts --test-api` - Test API endpoints only
+## Val Town Platform Guidelines
 
-## Key Features
+### SQLite Usage
 
-- **Immediate feed updates** - check-ins appear instantly when created via app
-- **Embedded location data** with coordinates and address details included in
-  check-in records
-- **Spatial queries** for nearby check-ins using coordinate-based distance
-  calculations
-- **Social feeds** leveraging Bluesky's social graph for personalized content
-- **Optimized architecture** with direct database saves eliminating ingestion
-  delays
+**CRITICAL**: Always use `sqlite2`, not the deprecated `sqlite` module.
+
+```typescript
+// ✅ CORRECT
+import { sqlite } from "https://esm.town/v/std/sqlite2";
+
+const result = await sqlite.execute({
+  sql: "SELECT * FROM users WHERE id = ?",
+  args: [userId]
+});
+
+// ❌ WRONG - old deprecated module
+import { sqlite } from "https://esm.town/v/std/sqlite";
+await sqlite.execute("SELECT * FROM users", [userId]);
+```
+
+### Drizzle ORM with sqlite-proxy
+
+This project uses Drizzle ORM with the `sqlite-proxy` adapter to wrap Val Town's sqlite2:
+
+```typescript
+// See backend/database/db.ts for the adapter implementation
+export const db = drizzle(
+  async (sql, params) => {
+    const result = await sqlite.execute({ sql, args: params || [] });
+    return { rows: result.rows };
+  },
+  { schema }
+);
+```
+
+When adding new tables:
+1. Define schema in `backend/database/schema.ts` using Drizzle syntax
+2. Create migration SQL in `backend/database/migrations.ts`
+3. Tables auto-create on startup via `initializeTables()` in main.tsx
+
+### Environment Variables
+
+Never hardcode secrets:
+```typescript
+const secret = Deno.env.get("COOKIE_SECRET");
+const baseUrl = Deno.env.get("ANCHOR_BASE_URL") || "https://dropanchor.app";
+```
+
+### External Dependencies
+
+- Use `https://esm.sh` for npm packages
+- Use `jsr:` for JSR packages (Hono, atproto-oauth-hono)
+- Use `https://esm.town/v/std/` for Val Town utilities
+
+## OAuth Authentication Flow
+
+### Package: @tijs/atproto-oauth-hono
+
+The OAuth system uses a custom package that handles:
+- PKCE flow with automatic PDS discovery
+- DPoP (Demonstrating Proof of Possession) tokens
+- Token refresh logic
+- Mobile and web authentication modes
+- Session storage via Drizzle adapter
+
+### Usage Pattern
+
+```typescript
+import { createATProtoOAuth } from "jsr:@tijs/atproto-oauth-hono@^0.3.0";
+
+const oauth = createATProtoOAuth({
+  baseUrl: BASE_URL,
+  cookieSecret: COOKIE_SECRET,
+  mobileScheme: "anchor-app://auth-callback",
+  sessionTtl: 60 * 60 * 24 * 30, // 30 days
+  storage, // DrizzleStorage instance
+});
+
+// Export for use in other modules
+export const oauthRoutes = oauth.routes;  // Hono routes
+export const sessions = oauth.sessions;    // Session management API
+```
+
+### Making Authenticated Requests
+
+OAuth sessions provide automatic token refresh and DPoP handling:
+
+```typescript
+const oauthSession = await sessions.getOAuthSession(did);
+if (!oauthSession) {
+  return { error: "No session" };
+}
+
+// makeRequest handles token refresh and DPoP automatically
+const response = await oauthSession.makeRequest(
+  "POST",
+  `${oauthSession.pdsUrl}/xrpc/com.atproto.repo.createRecord`,
+  {
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ repo: did, collection: "...", record: {...} })
+  }
+);
+```
+
+Never manually construct Authorization headers - always use `oauthSession.makeRequest()`.
+
+## AT Protocol Integration
+
+### Record Types
+
+**Checkin record** (`app.dropanchor.checkin`):
+```typescript
+{
+  $type: "app.dropanchor.checkin",
+  text: string,
+  createdAt: string,  // ISO8601
+  addressRef: StrongRef,  // Reference to address record
+  coordinates: { latitude: number, longitude: number },
+  category?: string,
+  categoryGroup?: string,
+  categoryIcon?: string
+}
+```
+
+**Address record** (`community.lexicon.location.address`):
+```typescript
+{
+  $type: "community.lexicon.location.address",
+  name?: string,
+  street?: string,
+  locality?: string,
+  region?: string,
+  country?: string,
+  postalCode?: string
+}
+```
+
+### StrongRef Pattern
+
+Checkins reference addresses via StrongRefs (CID + URI):
+```typescript
+addressRef: {
+  uri: "at://did:plc:abc123/community.lexicon.location.address/3k2...",
+  cid: "bafyreicv3pecq6fuua22xcoguxep76otivb33nlaofzl76fpagczo5t5jm"
+}
+```
+
+This ensures data integrity via content-addressing.
 
 ## API Endpoints
 
-**Base URL**: `https://dropanchor.app`
-
-### AppView API
-
-- `/api/nearby` - Spatial queries for check-ins within specified radius
-- `/api/user` - User-specific check-ins
-- `/api/following` - Check-ins from followed users (requires social graph sync)
-- `/api/stats` - AppView health and statistics
-- `/api/places/nearby` - OpenStreetMap POI discovery via Overpass API
-- `/api/places/categories` - Complete category system for mobile app consumption
-
-#### Places Categories API Endpoint
-
-The `/api/places/categories` endpoint provides comprehensive category data
-designed for mobile app consumption, enabling apps to cache and use the complete
-category system locally.
-
-**Response Format:**
-
-```json
-{
-  "categories": [
-    {
-      "id": "amenity_restaurant",
-      "name": "Restaurant",
-      "icon": "🍽️",
-      "group": "FOOD_AND_DRINK",
-      "osmTag": "amenity=restaurant"
-    }
-    // ... 56 total categories
-  ],
-  "defaultSearch": [
-    "amenity=restaurant",
-    "amenity=cafe"
-    // ... 37 categories optimized for default search queries
-  ],
-  "sociallyRelevant": [
-    "amenity=restaurant",
-    "tourism=attraction"
-    // ... 37 categories suitable for social check-ins
-  ],
-  "metadata": {
-    "totalCategories": 56,
-    "defaultSearchCount": 37,
-    "sociallyRelevantCount": 37
-  }
-}
-```
-
-**Usage Notes:**
-
-- **Categories**: Complete category objects with UI-ready data (names, icons,
-  groups)
-- **Default Search**: OSM tags for default Overpass API queries when user
-  doesn't specify categories
-- **Socially Relevant**: Categories appropriate for social check-in experiences
-- **Metadata**: Category counts for validation and UI display
-- **Mobile Integration**: Designed for caching in mobile apps to eliminate
-  hardcoded category arrays
-
-### OAuth Authentication API
-
-- `/client-metadata.json` - OAuth client metadata endpoint
-- `/login` - Initiate OAuth flow (GET with handle parameter)
-- `/oauth/callback` - Complete OAuth token exchange
-- `/api/auth/session` - Session validation for web and mobile with automatic
-  token refresh (auto-extends session lifetime)
-- `/api/auth/logout` - Session cleanup
-- `/api/auth/mobile-start` - Mobile OAuth initiation endpoint (POST with handle
-  and code_challenge)
-- `/mobile/refresh-token` - Mobile token refresh endpoint (GET with Bearer
-  token)
-
-### Mobile OAuth WebView
-
-- `/mobile-auth` - Mobile-optimized OAuth login page for WebView integration
-
-### Frontend API (Dashboard)
-
-- `/api/feed` - Dashboard feed data
-- `/api/admin/stats` - Administrative statistics
-- `/api/admin/backfill` - Manual data backfill operations
-- `/api/admin/discover-checkins` - Comprehensive checkin discovery
-- `/api/admin/backfill-profiles` - Profile data backfill
-- `/api/admin/resolve-addresses` - Address resolution operations
-
-## Mobile OAuth WebView Integration
-
-The system includes a complete OAuth authentication flow designed for mobile app
-WebView integration with extended session duration (30+ days):
-
-### Mobile Authentication Flow
-
-1. **iOS app loads WebView**: `https://dropanchor.app/mobile-auth`
-2. **User completes OAuth**: Beautiful mobile-optimized login interface with
-   auto-completion
-3. **Mobile app detection**: Server detects WebView context via User-Agent and
-   Referer headers
-4. **Custom URL scheme redirect**: Success page triggers
-   `anchor-app://auth-callback` with tokens
-5. **iOS app handles callback**: Parse authentication data from URL parameters
-
-### Mobile App Detection Logic
-
-- User-Agent contains "AnchorApp"
-- Referer from `/mobile-auth` endpoint
-- iPhone Mobile user agents
-- Automatically routes mobile vs web authentication flows
-
-### Authentication Data Format
-
-The mobile callback URL includes all necessary authentication data:
+### Checkin Lifecycle (REST-style)
 
 ```
-anchor-app://auth-callback?access_token=...&refresh_token=...&did=...&handle=...&session_id=...&avatar=...&display_name=...
+POST   /api/checkins                    Create checkin
+GET    /api/checkins/:did                Get all checkins for user
+GET    /api/checkins/:did/:rkey          Get specific checkin
+DELETE /api/checkins/:did/:rkey          Delete checkin
 ```
 
-### iOS Integration Requirements
+### Feed Queries
 
-- **URL Scheme Registration**: `anchor-app` in Info.plist
-- **WebView Configuration**: Set User-Agent to "AnchorApp" for detection
-- **Secure Storage**: Store tokens in iOS Keychain for production apps
-- **Session Management**: Use session validation endpoints for token
-  verification with automatic refresh
+```
+GET /api/nearby?lat=52.0&lng=4.3&radius=5&limit=50     Spatial query
+GET /api/user?did=did:plc:abc123&limit=50              User's checkins
+GET /api/following?user=did:plc:abc123&limit=50        Following feed
+```
 
-### Session Duration & Token Management
+### OAuth & Auth
 
-- **Extended Sessions**: Sessions now persist for 30+ days with automatic
-  lifetime extension
-- **Token Refresh**: Automatic token refresh when AT Protocol access tokens
-  expire via `/api/auth/session` endpoint for web clients and
-  `/mobile/refresh-token` for mobile clients
-- **Session Touching**: The `/api/auth/session` endpoint automatically extends
-  session lifetime and refreshes expired tokens
-- **Database Cleanup**: Sessions are only cleaned up after 90 days of inactivity
-  (extended from 30 days)
-- **Mobile Token Refresh**: Dedicated `/mobile/refresh-token` endpoint for
-  mobile clients to explicitly refresh tokens using Bearer token authentication
+```
+GET  /login                         Initiate OAuth (web)
+GET  /oauth/callback                OAuth redirect handler
+POST /api/checkins                  Create checkin (requires auth)
+GET  /api/auth/session              Session validation
+POST /api/auth/logout               Session cleanup
+```
 
-## Implementation Phases
+### System
 
-The project is structured in phases:
+```
+GET /api/stats                      System health metrics
+GET /api/places/nearby              OpenStreetMap POI search via Overpass
+GET /api/places/categories          Category system for mobile apps
+```
 
-1. **Phase 1**: Core infrastructure and basic ingestion
-2. **Phase 2**: Address resolution and caching
-3. **Phase 3**: Feed APIs and spatial queries
-4. **Phase 4**: Social features and following feeds
+## Testing Strategy
 
-## Val Town Deployment
+The project has comprehensive test coverage with two categories:
 
-The system deploys as a single unified HTTP function on Val Town:
+**Unit tests** (`tests/unit/`):
+- Test individual functions in isolation
+- Mock external dependencies (AT Protocol, Overpass API, OAuth)
+- Focus on business logic correctness
 
-- **Main Function**: `anchordashboard` (main.tsx) - Unified Hono server handling
-  all routes
-- **Deployment Command**: `deno task deploy` - Runs quality checks and pushes to
-  Val Town
-- **Platform Integration**: Uses Val Town CLI (`vt push`) for deployment
-- **Database Initialization**: Automatic SQLite table creation on startup
+**Integration tests** (`tests/integration/`):
+- Test full request/response cycles
+- Mock Val Town services (sqlite, blob storage) but test real code paths
+- Validate API contract and error handling
 
-### Key Deployment Notes
+Key testing patterns:
+- Use `assertAlmostEquals` for floating-point coordinate calculations
+- Mock OAuth sessions for authenticated endpoint tests
+- Test both success and error cases
+- Validate TypeScript types with proper inference
 
-- **Single Entry Point**: All functionality consolidated in main.tsx for
-  simplified deployment
-- **Static File Serving**: Frontend files served via Val Town utils with
-  `serveFile`
-- **Environment Variables**: Base URL configurable via `ANCHOR_BASE_URL`
-- **Database Schema**: Version-based table naming for schema evolution
+## Common Development Tasks
 
-## Val Town Development Guidelines
+### Adding a New API Endpoint
 
-### Code Standards
-
-- Use TypeScript for all Val Town functions
-- Never hardcode secrets - always use environment variables with
-  `Deno.env.get('keyname')`
-- **Import SQLite using**
-  `import { sqlite } from "https://esm.town/v/std/sqlite2"`
-  - ⚠️ **CRITICAL**: Use `sqlite2` not `sqlite` (the old path is deprecated)
-  - Val Town updated their sqlite module - always use the `sqlite2` version
-- Import blob storage using `import { blob } from "https://esm.town/v/std/blob"`
-- Use `https://esm.sh` for external dependencies
-- All functions must be properly typed with TypeScript interfaces
-
-### SQLite Best Practices
-
-- When changing table schema, increment table name (e.g., `checkins_v1` →
-  `checkins_v2`)
-- Always create tables before querying with `IF NOT EXISTS`
-- Use proper indexing for coordinate-based spatial queries
-- Initialize tables on every function execution for robustness
-
-#### SQLite API Format (sqlite2)
-
-The new sqlite2 API uses object format for queries:
-
+1. Add route to `main.tsx`:
 ```typescript
-// CORRECT (sqlite2 format)
-await sqlite.execute({
-  sql: "SELECT * FROM users WHERE id = ?",
-  args: [userId],
+app.get("/api/newfeature", async (c) => {
+  return await anchorApiHandler(c.req.raw);
 });
-
-// INCORRECT (old format - will not work)
-await sqlite.execute("SELECT * FROM users WHERE id = ?", [userId]);
 ```
 
-#### Result Format Conversion
+2. Handle in `backend/api/anchor-api.ts` or create new handler file
 
-The sqlite2 API returns `{ columns, rows }` where rows are arrays. Use helper
-function:
+3. Add integration test in `tests/integration/api.test.ts`
+
+### Modifying OAuth Configuration
+
+OAuth is configured in `backend/routes/oauth.ts`:
+```typescript
+const oauth = createATProtoOAuth({
+  baseUrl: BASE_URL,           // Public base URL
+  cookieSecret: COOKIE_SECRET, // Session encryption
+  mobileScheme: "anchor-app://auth-callback",
+  sessionTtl: 60 * 60 * 24 * 30,  // 30 days
+  storage,  // Drizzle storage adapter
+});
+```
+
+Never modify the package's internal logic - all customization via config.
+
+### Working with AT Protocol Records
+
+Always use OAuth sessions for PDS requests:
 
 ```typescript
-// Helper function (already implemented in session.ts and storage-provider.ts)
-function rowsToObjects(
-  columns: string[],
-  rows: any[][],
-): Record<string, any>[] {
-  return rows.map((row) => {
-    const obj: Record<string, any> = {};
-    columns.forEach((column, index) => {
-      obj[column] = row[index];
-    });
-    return obj;
-  });
-}
+// ✅ CORRECT - automatic token refresh and DPoP
+const oauthSession = await sessions.getOAuthSession(did);
+const response = await oauthSession.makeRequest(
+  "POST",
+  `${oauthSession.pdsUrl}/xrpc/com.atproto.repo.createRecord`,
+  { headers: {...}, body: JSON.stringify({...}) }
+);
 
-// Usage
-const result = await sqlite.execute({ sql: "SELECT * FROM users", args: [] });
-const objects = rowsToObjects(result.columns, result.rows);
+// ❌ WRONG - manual token handling breaks DPoP and refresh logic
+const response = await fetch(`${pdsUrl}/xrpc/...`, {
+  headers: { "Authorization": `Bearer ${accessToken}` }
+});
 ```
 
-### Val Town Triggers
+## Mobile Integration (iOS)
 
-- **Cron Functions**: Export default async function with no parameters
-- **HTTP Functions**: Export default async function with `(req: Request)`
-  parameter
+The system supports iOS app integration via WebView OAuth flow:
 
-### Error Handling
+### Authentication Flow
 
-- Let errors bubble up with full context rather than catching and logging
-- Use comprehensive error tracking in processing logs
-- Handle AT Protocol save failures gracefully with fallback strategies
+1. iOS app opens WebView to `https://dropanchor.app/login?handle=user.bsky.social`
+2. User completes OAuth in WebView
+3. Success page triggers `anchor-app://auth-callback` with session data
+4. iOS app extracts session and closes WebView
 
-### Troubleshooting Common Issues
+### Session Data Format
 
-#### SQLite Module Errors
+```
+anchor-app://auth-callback?
+  access_token=...
+  &refresh_token=...
+  &did=...
+  &handle=...
+  &session_id=...
+  &pds_url=...
+  &avatar=...
+  &display_name=...
+```
 
-If you encounter `Module not found` errors with SQLite:
+### iOS Requirements
 
-1. **Check import path**: Must use `https://esm.town/v/std/sqlite2` (not
-   `sqlite`)
-2. **Update API calls**: Use object format `{ sql: "...", args: [...] }`
-3. **Row format**: Results are arrays, use `rowsToObjects()` helper for objects
-4. **Force refresh**: Add comment to trigger redeployment if cached
+- Register `anchor-app` URL scheme in Info.plist
+- Set WebView User-Agent to "AnchorApp" for detection
+- Use Bearer token authentication: `Authorization: Bearer {session_id}`
+- Store tokens securely in iOS Keychain
 
+## Debugging
+
+### OAuth Session Issues
+
+```bash
+# Run debug script to inspect OAuth sessions
+deno run --allow-net scripts/debug-oauth-sessions.ts
+```
+
+Or check via API endpoint:
+```
+GET https://dropanchor.app/api/debug/oauth-sessions
+```
+
+### PDS Communication
+
+All PDS requests go through OAuth session's `makeRequest()`. Enable logging:
 ```typescript
-// Common error patterns and fixes:
-
-// ❌ WRONG - old import path
-import { sqlite } from "https://esm.town/v/std/sqlite";
-
-// ✅ CORRECT - new import path
-import { sqlite } from "https://esm.town/v/std/sqlite2";
-
-// ❌ WRONG - old API format
-await sqlite.execute("SELECT * FROM users WHERE id = ?", [id]);
-
-// ✅ CORRECT - new API format
-await sqlite.execute({ sql: "SELECT * FROM users WHERE id = ?", args: [id] });
+console.log("PDS request:", {
+  method,
+  url,
+  pdsUrl: oauthSession.pdsUrl,
+  did: oauthSession.did
+});
 ```
 
-## Important Implementation Details
+### Val Town Deployment Issues
 
-- **StrongRef Address Resolution**: Check-in records contain `addressRef`
-  StrongRefs that must be resolved to separate address records and cached
+If deployment fails:
+1. Check Val Town CLI is authenticated: `vt whoami`
+2. Verify deno.json tasks work locally: `deno task quality`
+3. Check Val Town dashboard for runtime errors
+4. Verify environment variables are set correctly
 
-### Check-in Record Structure (Current Format)
+## Important Technical Constraints
 
-#### AT Protocol Record Format (when queried directly)
+### Data Storage Philosophy
 
-```json
-{
-  "uri": "at://did:plc:example/app.dropanchor.checkin/abc123",
-  "value": {
-    "text": "Just testing my new check-in records",
-    "$type": "app.dropanchor.checkin",
-    "createdAt": "2025-07-06T15:03:15Z",
-    "coordinates": {
-      "$type": "community.lexicon.location.geo",
-      "latitude": "52.080178",
-      "longitude": "4.3578971"
-    },
-    "addressRef": {
-      "uri": "at://did:plc:example/community.lexicon.location.address/venue123",
-      "cid": "bafyreicv3pecq6fuua22xcoguxep76otivb33nlaofzl76fpagczo5t5jm"
-    }
-  }
-}
-```
+**DO NOT create local database tables for checkin data.** The PDS-only architecture is intentional:
+- Checkins live in users' PDS (decentralized, user-controlled)
+- AppView reads on-demand (no sync lag, no stale data)
+- Only OAuth sessions stored locally (for authentication)
 
-#### Immediate Save Process (app-created check-ins)
+If you need to cache data, use Val Town blob storage with TTL, not SQLite.
 
-When a check-in is created via the mobile app:
+### AT Protocol Compliance
 
-1. **Create address record** in user's PDS via AT Protocol
-2. **Create check-in record** in user's PDS with StrongRef to address
-3. **Immediately save to local database** using the same processing logic
-4. **Check-in appears instantly** in all feeds without any ingestion delay
+Always follow AT Protocol patterns:
+- Use `com.atproto.repo.*` XRPC methods for record operations
+- Respect StrongRef pattern for references between records
+- Include proper `$type` fields in all records
+- Use ISO8601 timestamps with `Z` suffix
 
-This eliminates the need for periodic crawling or real-time ingestion systems,
-providing the best user experience with instant feed updates.
+### Security
 
-### Address Resolution Process
+- No API keys or secrets in code - only `Deno.env.get()`
+- OAuth sessions are encrypted with Iron Session
+- Mobile sessions use sealed tokens (not raw JWTs)
+- CORS headers on all public API endpoints
 
-1. **Ingest check-in** with `coordinates` and `addressRef` StrongRef
-2. **Store StrongRef** in `address_ref_uri` and `address_ref_cid` fields
-3. **Resolve StrongRef** to separate address record using address resolver
-4. **Cache address data** in `cached_address_*` fields for fast API responses
-5. **Return complete objects** in API feeds with resolved address data
+## Project History & Context
 
-- **Social Graph Integration**: Following feeds require syncing follow
-  relationships from Bluesky's public API
-- **Spatial Indexing**: Performance depends on proper SQLite indexing for
-  coordinate-based queries
-- **Rate Limiting**: Social graph sync includes rate limiting to respect API
-  constraints
-- **Error Handling**: Comprehensive error tracking for monitoring ingestion
-  health
-- **Data Processing Pipeline**: Extracts coordinates from `coordinates` field
-  and resolves `addressRef` StrongRefs to cache complete address data
-- **Hybrid Storage**: SQLite for relational data, blob storage for key-value
-  caching
+Originally designed as a traditional AppView with background ingestion and local database caching. Now migrated to **PDS-only architecture** where:
+- No background crawlers or ingestion workers
+- No local checkin tables (`checkins_v1`, `address_cache_v1`, etc. removed)
+- Direct PDS reads provide fresh data with user control
 
-## Testing Architecture
-
-The project includes comprehensive testing:
-
-- **Unit Tests**: Mock Val Town services (sqlite, blob) for isolated testing
-- **Integration Tests**: Full API endpoint testing with realistic data flows
-- **Spatial Tests**: Haversine distance calculations with edge case handling
-- **Database Tests**: Schema validation and query testing with mock SQLite
-- **Test Coverage**: 31 tests across 5 test files ensuring reliability
-
-### Test Patterns
-
-- Use `assertAlmostEquals` for floating-point spatial calculations
-- Mock external services comprehensively but realistically
-- Test error conditions and edge cases (coordinate validation, cache expiry)
-- Validate TypeScript interfaces with proper type casting
-
-## Mobile App Integration
-
-### OAuth WebView Flow
-
-The system provides complete OAuth authentication for the Anchor iOS app:
-
-- **Mobile detection**: Automatically detects iOS WebView requests via
-  User-Agent
-- **PDS URL resolution**: Resolves user's actual PDS from DID document (supports
-  personal PDS servers)
-- **User registration**: Automatically registers authenticated users for session
-  management and immediate check-in processing
-- **Custom URL scheme**: Returns auth data via `anchor-app://auth-callback` with
-  all required parameters
-
-### Critical OAuth Implementation Details
-
-- **PDS URL parameter**: Backend includes resolved `pds_url` in mobile callback
-  (line 486 in `endpoints.ts`)
-- **Handle resolution**: Tries multiple resolution services before falling back
-  to defaults
-- **Session storage**: Stores complete OAuth session data including PDS
-  endpoints in SQLite
-- **Error handling**: Graceful handling of OAuth failures without breaking
-  mobile app flow
-
-### Mobile Callback URL Format
-
-```
-anchor-app://auth-callback?access_token=...&refresh_token=...&did=...&handle=...&session_id=...&pds_url=...&avatar=...&display_name=...
-```
-
-## Development Workflow with iOS App
-
-### Common Development Pattern
-
-1. Make changes to backend OAuth/API logic
-2. Run `deno task quality` to verify all tests pass
-3. Deploy with `deno task deploy`
-4. Test iOS app integration with new backend
-5. Verify OAuth flow works with personal PDS servers
-
-### Troubleshooting OAuth Issues
-
-- **Missing PDS URL**: Check if `pds_url` parameter is included in mobile
-  redirect
-- **Personal PDS failures**: Verify DID document resolution and PDS endpoint
-  extraction
-- **Session issues**: Check `oauth_sessions` table for proper session storage
-
-## Date Format Compatibility
-
-### API Response Format
-
-The system returns ISO8601 timestamps in two formats:
-
-- **With fractional seconds**: `"2025-08-11T18:34:55.966Z"` (real-time data)
-- **Without fractional seconds**: `"2025-08-11T18:34:55Z"` (legacy/processed
-  data)
-
-### iOS App Compatibility
-
-Ensure consistent date formatting for iOS client consumption:
-
-- Backend stores timestamps with full precision when available
-- API responses maintain original timestamp format from AT Protocol records
-- iOS client handles both formats via flexible parsing utility
-
-The system is designed to scale within Val Town's resource limits while
-maintaining full AT Protocol compatibility for decentralized social networking.
+Comments and variable names may reference old architecture - these are safe to update.

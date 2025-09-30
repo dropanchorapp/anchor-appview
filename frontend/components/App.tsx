@@ -11,7 +11,7 @@ import { PrivacyPolicy } from "./PrivacyPolicy.tsx";
 import { LoginForm } from "./LoginForm.tsx";
 import { MobileAuth } from "./MobileAuth.tsx";
 import { CheckinDetail } from "./CheckinDetail.tsx";
-import { AuthState, CheckinData, FeedType } from "../types/index.ts";
+import { AuthState, CheckinData } from "../types/index.ts";
 
 export function App() {
   // Check if we're on the mobile-auth route first, before any hooks
@@ -30,12 +30,24 @@ export function App() {
   let checkinMatch = null;
   let isCheckinDetail = false;
   let checkinId = null;
+  let checkinDid = null;
+  let checkinRkey = null;
 
   try {
     const pathname = globalThis.location?.pathname || "";
-    checkinMatch = pathname.match(/^\/checkin\/(.+)$/);
-    isCheckinDetail = !!checkinMatch;
-    checkinId = checkinMatch?.[1];
+
+    // Try new REST-style URL first: /checkins/:did/:rkey
+    const restMatch = pathname.match(/^\/checkins\/([^\/]+)\/([^\/]+)$/);
+    if (restMatch) {
+      [, checkinDid, checkinRkey] = restMatch;
+      isCheckinDetail = true;
+      checkinId = `${checkinDid}/${checkinRkey}`; // For CheckinDetail component
+    } else {
+      // Fallback to legacy URL: /checkin/:id
+      checkinMatch = pathname.match(/^\/checkin\/(.+)$/);
+      isCheckinDetail = !!checkinMatch;
+      checkinId = checkinMatch?.[1];
+    }
   } catch (error) {
     console.error("Error parsing checkin route:", error);
     isCheckinDetail = false;
@@ -56,7 +68,6 @@ export function App() {
 
   const [checkins, setCheckins] = useState<CheckinData[]>([]);
   const [loading, setLoading] = useState(false);
-  const [feedType, setFeedType] = useState<FeedType>("timeline");
   const [auth, setAuth] = useState<AuthState>({ isAuthenticated: false });
   const [error, setError] = useState<string | null>(null);
   const [showLoginForm, setShowLoginForm] = useState(false);
@@ -146,11 +157,8 @@ export function App() {
       setError(null);
 
       try {
-        // For timeline and following feeds, require authentication
-        if (
-          (feedType === "timeline" || feedType === "following") &&
-          !auth.isAuthenticated
-        ) {
+        // For timeline feed, require authentication
+        if (!auth.isAuthenticated) {
           // Don't fetch data, show login prompt instead
           setCheckins([]);
           setLoading(false);
@@ -158,12 +166,8 @@ export function App() {
         }
 
         let url = "";
-        if (feedType === "following" && auth.isAuthenticated && auth.userDid) {
-          url = `/api/following?user=${encodeURIComponent(auth.userDid)}`;
-        } else if (
-          feedType === "timeline" && auth.isAuthenticated && auth.userDid
-        ) {
-          url = `/api/user?did=${encodeURIComponent(auth.userDid)}`;
+        if (auth.isAuthenticated) {
+          url = `/api/checkins/${auth.userDid}`;
         }
 
         // If no valid URL, don't fetch
@@ -206,7 +210,7 @@ export function App() {
     };
 
     loadFeed();
-  }, [feedType, auth.isAuthenticated, auth.userDid]);
+  }, [auth.isAuthenticated, auth.userDid]);
 
   const handleLogin = () => {
     setShowLoginForm(true);
@@ -269,8 +273,6 @@ export function App() {
         {auth.isAuthenticated
           ? (
             <Feed
-              feedType={feedType}
-              setFeedType={setFeedType}
               checkins={checkins}
               loading={loading}
               auth={auth}

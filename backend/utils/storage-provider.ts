@@ -24,88 +24,26 @@ export interface StorageProvider {
 export class DrizzleStorageProvider implements StorageProvider {
   constructor(private db: any) {} // Drizzle db instance
 
-  async getProfile(did: string): Promise<ProfileData | null> {
-    const { profileCacheTable } = await import("../database/schema.ts");
-    const { eq } = await import("https://esm.sh/drizzle-orm@0.44.5");
-
-    const result = await this.db
-      .select()
-      .from(profileCacheTable)
-      .where(eq(profileCacheTable.did, did))
-      .limit(1);
-
-    if (result.length > 0) {
-      const row = result[0];
-      return {
-        did: row.did,
-        handle: row.handle || "",
-        displayName: row.displayName || undefined,
-        avatar: row.avatarUrl || undefined,
-        description: row.description || undefined,
-        fetchedAt: row.indexedAt || "",
-        updatedAt: row.updatedAt || undefined,
-      };
-    }
-
-    return null;
+  getProfile(_did: string): Promise<ProfileData | null> {
+    // PDS-only mode - no profile caching
+    return Promise.resolve(null);
   }
 
-  async setProfile(profile: ProfileData): Promise<void> {
-    const { profileCacheTable } = await import("../database/schema.ts");
-
-    await this.db
-      .insert(profileCacheTable)
-      .values({
-        did: profile.did,
-        handle: profile.handle,
-        displayName: profile.displayName || null,
-        avatarUrl: profile.avatar || null,
-        description: profile.description || null,
-        indexedAt: profile.fetchedAt,
-        updatedAt: profile.updatedAt || profile.fetchedAt,
-      })
-      .onConflictDoUpdate({
-        target: profileCacheTable.did,
-        set: {
-          handle: profile.handle,
-          displayName: profile.displayName || null,
-          avatarUrl: profile.avatar || null,
-          description: profile.description || null,
-          updatedAt: profile.updatedAt || profile.fetchedAt,
-        },
-      });
+  setProfile(_profile: ProfileData): Promise<void> {
+    // PDS-only mode - no profile caching
+    return Promise.resolve();
   }
 
-  async getStaleProfiles(
-    limit: number,
-    staleThresholdHours: number,
+  getStaleProfiles(
+    _limit: number,
+    _staleThresholdHours: number,
   ): Promise<ProfileData[]> {
-    const { profileCacheTable } = await import("../database/schema.ts");
-    const { lt } = await import("https://esm.sh/drizzle-orm@0.44.5");
-
-    const staleThreshold = new Date();
-    staleThreshold.setHours(staleThreshold.getHours() - staleThresholdHours);
-
-    const result = await this.db
-      .select()
-      .from(profileCacheTable)
-      .where(lt(profileCacheTable.indexedAt, staleThreshold.toISOString()))
-      .orderBy(profileCacheTable.indexedAt)
-      .limit(limit);
-
-    return result.map((row: any) => ({
-      did: row.did,
-      handle: row.handle || "",
-      displayName: row.displayName || undefined,
-      avatar: row.avatarUrl || undefined,
-      description: row.description || undefined,
-      fetchedAt: row.indexedAt || "",
-      updatedAt: row.updatedAt || undefined,
-    }));
+    // PDS-only mode - no profile caching
+    return Promise.resolve([]);
   }
 
   ensureTablesExist(): Promise<void> {
-    // Tables are created by migrations, so this is a no-op for Drizzle
+    // PDS-only mode - no tables needed
     return Promise.resolve();
   }
 }

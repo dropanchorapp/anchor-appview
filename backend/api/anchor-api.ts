@@ -1,30 +1,14 @@
 // @val-town anchorAPI
 // Main HTTP API handler for Anchor AppView
-import { db, initializeTables } from "../database/db.ts";
-import {
-  checkinsTable,
-  processingLogTable,
-  userFollowsTable,
-} from "../database/schema.ts";
-import {
-  and,
-  desc,
-  eq,
-  inArray,
-  lt,
-  sql,
-} from "https://esm.sh/drizzle-orm@0.44.5";
-import { ATProtocolProfileResolver } from "../utils/profile-resolver.ts";
-import {
-  DrizzleStorageProvider,
-  ProfileData,
-} from "../utils/storage-provider.ts";
+import { initializeTables } from "../database/db.ts"; // Still needed for OAuth session storage
+// No drizzle imports needed
+// No profile resolver or storage provider needed
 import { OverpassService } from "../services/overpass-service.ts";
 import { CategoryService } from "../services/category-service.ts";
 import { NominatimService } from "../services/nominatim-service.ts";
 import { PlacesNearbyResponse } from "../models/place-models.ts";
 import { createCheckin } from "./checkins.ts";
-import { getCheckinCounts, getRecentActivity } from "../database/queries.ts";
+// No database queries needed - PDS-only architecture
 
 // Types for better TypeScript support
 interface CorsHeaders {
@@ -33,6 +17,12 @@ interface CorsHeaders {
   "Access-Control-Allow-Headers": string;
   "Content-Type": string;
   [key: string]: string;
+}
+
+interface Profile {
+  handle?: string;
+  displayName?: string;
+  avatar?: string;
 }
 
 interface CheckinRecord {
@@ -80,12 +70,6 @@ export default async function (req: Request): Promise<Response> {
 
   // Route to appropriate handler - let errors bubble up
   switch (url.pathname) {
-    case "/api/nearby":
-      return await getNearbyCheckins(url, corsHeaders);
-    case "/api/user":
-      return await getUserCheckins(url, corsHeaders);
-    case "/api/following":
-      return await getFollowingFeed(url, corsHeaders);
     case "/api/places/nearby":
       return await getNearbyPlaces(url, corsHeaders);
     case "/api/places/search":
@@ -93,267 +77,67 @@ export default async function (req: Request): Promise<Response> {
     case "/api/places/categories":
       return getPlaceCategories(corsHeaders);
     case "/api/stats":
-      return await getStats(corsHeaders);
-    case "/api/checkins":
-      return await handleCreateCheckin(req, corsHeaders);
-    default:
-      // Check for dynamic routes like /api/checkin/:id
+      return getStats(corsHeaders);
+    case "/api/user":
+      return await getUserCheckins(req, corsHeaders);
+    default: {
+      // Handle DELETE /api/checkins/:did/:rkey (authenticated endpoint)
+      if (req.method === "DELETE") {
+        const deleteMatch = url.pathname.match(
+          /^\/api\/checkins\/([^\/]+)\/([^\/]+)$/,
+        );
+        if (deleteMatch) {
+          const [, did, rkey] = deleteMatch;
+          return await deleteCheckin(did, rkey, req, corsHeaders);
+        }
+      }
+      // Handle POST /api/checkins (create checkin)
+      if (url.pathname === "/api/checkins" && req.method === "POST") {
+        return await handleCreateCheckin(req, corsHeaders);
+      }
+
+      // Handle GET /api/checkins/:did/:rkey (get specific checkin)
+      const checkinMatch = url.pathname.match(
+        /^\/api\/checkins\/([^\/]+)\/([^\/]+)$/,
+      );
+      if (checkinMatch) {
+        const [, did, rkey] = checkinMatch;
+        return await getCheckinByDidAndRkey(did, rkey, corsHeaders);
+      }
+
+      // Handle GET /api/checkins/:did (get user checkins)
+      const userCheckinsMatch = url.pathname.match(
+        /^\/api\/checkins\/([^\/]+)$/,
+      );
+      if (userCheckinsMatch) {
+        const [, did] = userCheckinsMatch;
+        return await getUserCheckinsByDid(did, corsHeaders);
+      }
+
+      // Legacy /api/checkin/:id route for backward compatibility
       if (url.pathname.startsWith("/api/checkin/")) {
         const checkinId = url.pathname.split("/api/checkin/")[1];
         return await getCheckinById(checkinId, corsHeaders);
       }
+
+      // Legacy /api/user/:identifier route handled by main.tsx redirect
+
       return new Response(JSON.stringify({ error: "Not Found" }), {
         status: 404,
         headers: corsHeaders,
       });
-  }
-}
-
-async function getNearbyCheckins(
-  url: URL,
-  corsHeaders: CorsHeaders,
-): Promise<Response> {
-  const lat = parseFloat(url.searchParams.get("lat") || "0");
-  const lng = parseFloat(url.searchParams.get("lng") || "0");
-  const radius = Math.min(
-    parseFloat(url.searchParams.get("radius") || "5"),
-    50,
-  ); // max 50km
-  const limit = Math.min(parseInt(url.searchParams.get("limit") || "50"), 100);
-
-  if (!lat || !lng) {
-    return new Response(
-      JSON.stringify({ error: "lat and lng parameters required" }),
-      {
-        status: 400,
-        headers: corsHeaders,
-      },
-    );
-  }
-
-  // Get all checkins with coordinates using type-safe Drizzle query
-  const rows = await db.select({
-    id: checkinsTable.id,
-    uri: checkinsTable.uri,
-    did: checkinsTable.did,
-    handle: checkinsTable.handle,
-    text: checkinsTable.text,
-    createdAt: checkinsTable.createdAt,
-    latitude: checkinsTable.latitude,
-    longitude: checkinsTable.longitude,
-    venueName: checkinsTable.venueName, // UNIFIED venue name field
-    addressStreet: checkinsTable.addressStreet,
-    addressLocality: checkinsTable.addressLocality,
-    addressRegion: checkinsTable.addressRegion,
-    addressCountry: checkinsTable.addressCountry,
-    addressPostalCode: checkinsTable.addressPostalCode,
-  }).from(checkinsTable)
-    .where(and(
-      sql`${checkinsTable.latitude} IS NOT NULL`,
-      sql`${checkinsTable.longitude} IS NOT NULL`,
-    ))
-    .orderBy(desc(checkinsTable.createdAt))
-    .limit(limit * 3); // Get more to filter by distance
-
-  // Calculate distances and filter
-  const nearbyRows = rows
-    .map((row) => {
-      const distance = calculateDistance(
-        lat,
-        lng,
-        row.latitude as number,
-        row.longitude as number,
-      );
-      return { ...row, distance };
-    })
-    .filter((row) => row.distance <= radius)
-    .sort((a, b) => a.distance - b.distance)
-    .slice(0, limit);
-
-  // Resolve profiles for filtered results
-  const dids = [
-    ...new Set(nearbyRows.map((row: any) => row.did as string)),
-  ];
-  const storage = new DrizzleStorageProvider(db);
-  const profileResolver = new ATProtocolProfileResolver(storage);
-  const profiles = await profileResolver.batchResolveProfiles(dids);
-
-  const nearbyCheckins = await Promise.all(
-    nearbyRows.map((row) => formatCheckinWithPlaces(row, profiles)),
-  );
-
-  return new Response(
-    JSON.stringify({
-      checkins: nearbyCheckins,
-      center: { latitude: lat, longitude: lng },
-      radius,
-    }),
-    { headers: corsHeaders },
-  );
-}
-
-async function getUserCheckins(
-  url: URL,
-  corsHeaders: CorsHeaders,
-): Promise<Response> {
-  const did = url.searchParams.get("did");
-  const limit = Math.min(parseInt(url.searchParams.get("limit") || "50"), 100);
-
-  if (!did) {
-    return new Response(JSON.stringify({ error: "did parameter required" }), {
-      status: 400,
-      headers: corsHeaders,
-    });
-  }
-
-  const rows = await db.select({
-    id: checkinsTable.id,
-    uri: checkinsTable.uri,
-    did: checkinsTable.did,
-    handle: checkinsTable.handle,
-    text: checkinsTable.text,
-    createdAt: checkinsTable.createdAt,
-    latitude: checkinsTable.latitude,
-    longitude: checkinsTable.longitude,
-    venueName: checkinsTable.venueName, // UNIFIED venue name field
-    addressStreet: checkinsTable.addressStreet,
-    addressLocality: checkinsTable.addressLocality,
-    addressRegion: checkinsTable.addressRegion,
-    addressCountry: checkinsTable.addressCountry,
-    addressPostalCode: checkinsTable.addressPostalCode,
-  }).from(checkinsTable)
-    .where(eq(checkinsTable.did, did))
-    .orderBy(desc(checkinsTable.createdAt))
-    .limit(limit);
-
-  // Resolve profiles
-  const dids = [...new Set(rows.map((row) => row.did))];
-  const storage = new DrizzleStorageProvider(db);
-  const profileResolver = new ATProtocolProfileResolver(storage);
-  const profiles = await profileResolver.batchResolveProfiles(dids);
-
-  const checkins = await Promise.all(
-    rows.map((row) => formatCheckinWithPlaces(row, profiles)),
-  );
-
-  // Get user info from first checkin (they should all be from the same user)
-  const userInfo = rows.length > 0
-    ? {
-      did: rows[0].did,
-      handle: rows[0].handle,
     }
-    : { did };
-
-  return new Response(
-    JSON.stringify({
-      checkins,
-      user: userInfo,
-    }),
-    { headers: corsHeaders },
-  );
+  }
 }
 
-async function getFollowingFeed(
-  url: URL,
-  corsHeaders: CorsHeaders,
-): Promise<Response> {
-  const userDid = url.searchParams.get("user");
-  const limit = Math.min(parseInt(url.searchParams.get("limit") || "50"), 100);
-  const cursor = url.searchParams.get("cursor");
+// Unused database-dependent functions removed - PDS-only architecture
 
-  if (!userDid) {
-    return new Response(JSON.stringify({ error: "user parameter required" }), {
-      status: 400,
-      headers: corsHeaders,
-    });
-  }
-
-  // Get users this person follows using type-safe Drizzle query
-  const follows = await db.select({
-    followingDid: userFollowsTable.followingDid,
-  }).from(userFollowsTable)
-    .where(eq(userFollowsTable.followerDid, userDid));
-
-  if (follows.length === 0) {
-    return new Response(
-      JSON.stringify({
-        checkins: [],
-        message: "No follows found for user",
-      }),
-      { headers: corsHeaders },
-    );
-  }
-
-  const followingDids = follows.map((row) => row.followingDid);
-
-  // Get checkins from followed users using type-safe Drizzle query
-  const baseFollowingQuery = db.select({
-    id: checkinsTable.id,
-    uri: checkinsTable.uri,
-    did: checkinsTable.did,
-    handle: checkinsTable.handle,
-    text: checkinsTable.text,
-    createdAt: checkinsTable.createdAt,
-    latitude: checkinsTable.latitude,
-    longitude: checkinsTable.longitude,
-    venueName: checkinsTable.venueName, // UNIFIED venue name field
-    addressStreet: checkinsTable.addressStreet,
-    addressLocality: checkinsTable.addressLocality,
-    addressRegion: checkinsTable.addressRegion,
-    addressCountry: checkinsTable.addressCountry,
-    addressPostalCode: checkinsTable.addressPostalCode,
-  }).from(checkinsTable);
-
-  const rows = cursor
-    ? await baseFollowingQuery
-      .where(and(
-        inArray(checkinsTable.did, followingDids),
-        lt(checkinsTable.createdAt, cursor),
-      ))
-      .orderBy(desc(checkinsTable.createdAt))
-      .limit(limit)
-    : await baseFollowingQuery
-      .where(inArray(checkinsTable.did, followingDids))
-      .orderBy(desc(checkinsTable.createdAt))
-      .limit(limit);
-
-  // Resolve profiles
-  const dids = [...new Set(rows.map((row) => row.did))];
-  const storage = new DrizzleStorageProvider(db);
-  const profileResolver = new ATProtocolProfileResolver(storage);
-  const profiles = await profileResolver.batchResolveProfiles(dids);
-
-  const checkins = await Promise.all(
-    rows.map((row) => formatCheckinWithPlaces(row, profiles)),
-  );
-
-  return new Response(
-    JSON.stringify({
-      checkins,
-      cursor: checkins.length > 0
-        ? checkins[checkins.length - 1].createdAt
-        : null,
-      followingCount: followingDids.length,
-    }),
-    { headers: corsHeaders },
-  );
-}
-
-async function getStats(corsHeaders: CorsHeaders): Promise<Response> {
-  // Use shared query functions to eliminate duplication
-  const [counts, recentActivity, processingStats] = await Promise.all([
-    getCheckinCounts(),
-    getRecentActivity(),
-    db.select().from(processingLogTable)
-      .orderBy(desc(processingLogTable.runAt))
-      .limit(1),
-  ]);
-
+function getStats(corsHeaders: CorsHeaders): Response {
+  // PDS-only architecture - no database stats available
   const stats = {
-    totalCheckins: counts.totalCheckins,
-    totalUsers: counts.uniqueUsers,
-    recentActivity,
-    lastProcessingRun: processingStats[0] || null,
+    status: "PDS-only mode",
+    message: "All check-in data read directly from personal data servers",
+    architecture: "decentralized",
     timestamp: new Date().toISOString(),
   };
 
@@ -578,9 +362,9 @@ async function searchPlaces(
   }
 }
 
-async function formatCheckinWithPlaces(
+async function _formatCheckinWithPlaces(
   row: any,
-  profiles: Map<string, ProfileData>,
+  profiles: Map<string, Profile>,
 ): Promise<CheckinRecord> {
   const profile = profiles.get(row.did as string);
 
@@ -653,7 +437,7 @@ async function formatCheckinWithPlaces(
   return checkin;
 }
 
-function calculateDistance(
+function _calculateDistance(
   lat1: number,
   lng1: number,
   lat2: number,
@@ -674,49 +458,103 @@ async function getCheckinById(
   corsHeaders: CorsHeaders,
 ): Promise<Response> {
   try {
-    // Query for the specific checkin by id (rkey)
-    const rows = await db.select({
-      id: checkinsTable.id,
-      uri: checkinsTable.uri,
-      rkey: checkinsTable.rkey,
-      did: checkinsTable.did,
-      handle: checkinsTable.handle,
-      displayName: checkinsTable.displayName,
-      avatar: checkinsTable.avatar,
-      text: checkinsTable.text,
-      createdAt: checkinsTable.createdAt,
-      latitude: checkinsTable.latitude,
-      longitude: checkinsTable.longitude,
-      venueName: checkinsTable.venueName,
-      category: checkinsTable.category,
-      categoryGroup: checkinsTable.categoryGroup,
-      categoryIcon: checkinsTable.categoryIcon,
-      addressStreet: checkinsTable.addressStreet,
-      addressLocality: checkinsTable.addressLocality,
-      addressRegion: checkinsTable.addressRegion,
-      addressCountry: checkinsTable.addressCountry,
-      addressPostalCode: checkinsTable.addressPostalCode,
-    })
-      .from(checkinsTable)
-      .where(eq(checkinsTable.id, checkinId))
-      .limit(1);
+    // Parse the checkin ID to extract AT URI
+    let atUri: string;
+    let did: string;
+    let rkey: string;
 
-    if (rows.length === 0) {
-      return new Response(JSON.stringify({ error: "Checkin not found" }), {
-        status: 404,
-        headers: corsHeaders,
-      });
+    // Try to decode base64 encoded AT URI first
+    try {
+      atUri = atob(checkinId);
+      const match = atUri.match(
+        /at:\/\/(did:[^\/]+)\/app\.dropanchor\.checkin\/(.+)/,
+      );
+      if (match) {
+        [, did, rkey] = match;
+      } else {
+        throw new Error("Invalid AT URI format");
+      }
+    } catch {
+      // Fallback: try to parse as did_rkey format
+      const parts = checkinId.split("_");
+      if (parts.length === 2 && parts[0].startsWith("did:")) {
+        did = parts[0];
+        rkey = parts[1];
+        atUri = `at://${did}/app.dropanchor.checkin/${rkey}`;
+      } else {
+        return new Response(
+          JSON.stringify({ error: "Invalid checkin ID format" }),
+          {
+            status: 400,
+            headers: corsHeaders,
+          },
+        );
+      }
     }
 
-    const row = rows[0];
+    // Resolve the PDS URL for this DID
+    const pdsUrl = await resolvePdsUrl(did);
+    if (!pdsUrl) {
+      return new Response(
+        JSON.stringify({ error: "Could not resolve PDS for user" }),
+        {
+          status: 404,
+          headers: corsHeaders,
+        },
+      );
+    }
 
-    // Get profile data for the author
-    const storage = new DrizzleStorageProvider(db);
-    const profileResolver = new ATProtocolProfileResolver(storage);
-    const profiles = await profileResolver.batchResolveProfiles([row.did]);
+    // Fetch the check-in record from PDS (public endpoint, no auth needed)
+    const checkinResponse = await fetch(
+      `${pdsUrl}/xrpc/com.atproto.repo.getRecord?repo=${did}&collection=app.dropanchor.checkin&rkey=${rkey}`,
+    );
 
-    // Convert to CheckinRecord format
-    const checkin = await formatCheckinWithPlaces(row, profiles);
+    if (!checkinResponse.ok) {
+      if (checkinResponse.status === 404) {
+        return new Response(JSON.stringify({ error: "Checkin not found" }), {
+          status: 404,
+          headers: corsHeaders,
+        });
+      }
+      throw new Error(`Failed to fetch checkin: ${checkinResponse.status}`);
+    }
+
+    const checkinData = await checkinResponse.json();
+
+    // Resolve profile data for the checkin author
+    const profileData = await resolveProfileFromPds(did);
+
+    // Build the response object
+    const checkin: any = {
+      id: rkey,
+      uri: atUri,
+      author: {
+        did: did,
+        handle: profileData?.handle || did,
+        displayName: profileData?.displayName,
+        avatar: profileData?.avatar,
+      },
+      text: checkinData.value.text,
+      createdAt: checkinData.value.createdAt,
+      coordinates: checkinData.value.coordinates,
+    };
+
+    // Resolve address if addressRef exists
+    if (checkinData.value.addressRef) {
+      try {
+        const addressRkey = checkinData.value.addressRef.uri.split("/").pop();
+        const addressResponse = await fetch(
+          `${pdsUrl}/xrpc/com.atproto.repo.getRecord?repo=${did}&collection=community.lexicon.location.address&rkey=${addressRkey}`,
+        );
+
+        if (addressResponse.ok) {
+          const addressData = await addressResponse.json();
+          checkin.address = addressData.value;
+        }
+      } catch (err) {
+        console.warn("Failed to resolve address for checkin:", atUri, err);
+      }
+    }
 
     return new Response(JSON.stringify(checkin), {
       status: 200,
@@ -728,6 +566,124 @@ async function getCheckinById(
       status: 500,
       headers: corsHeaders,
     });
+  }
+}
+
+// Helper function to resolve PDS URL from DID
+async function resolvePdsUrl(did: string): Promise<string | null> {
+  try {
+    // For bsky.social DIDs, use the main PDS
+    if (did.includes("bsky.social")) {
+      return "https://bsky.social";
+    }
+
+    // For other DIDs, resolve from DID document
+    const didResponse = await fetch(`https://plc.directory/${did}`);
+    if (!didResponse.ok) {
+      throw new Error(`Failed to resolve DID: ${didResponse.status}`);
+    }
+
+    const didDoc = await didResponse.json();
+    const pdsEndpoint = didDoc.service?.find((s: any) =>
+      s.id === "#atproto_pds" && s.type === "AtprotoPersonalDataServer"
+    );
+
+    return pdsEndpoint?.serviceEndpoint || null;
+  } catch (error) {
+    console.error(`Failed to resolve PDS for DID ${did}:`, error);
+    return null;
+  }
+}
+
+async function resolveHandleToDid(handle: string): Promise<string | null> {
+  try {
+    // Normalize handle (remove @ if present)
+    const normalizedHandle = handle.startsWith("@") ? handle.slice(1) : handle;
+
+    // Try resolving via AT Protocol API
+    const response = await fetch(
+      `https://bsky.social/xrpc/com.atproto.identity.resolveHandle?handle=${normalizedHandle}`,
+    );
+    if (response.ok) {
+      const data = await response.json();
+      return data.did || null;
+    }
+
+    return null;
+  } catch (error) {
+    console.error("Failed to resolve handle to DID:", error);
+    return null;
+  }
+}
+
+async function resolveProfileFromPds(did: string): Promise<
+  {
+    handle?: string;
+    displayName?: string;
+    avatar?: string;
+    description?: string;
+  } | null
+> {
+  try {
+    const pdsUrl = await resolvePdsUrl(did);
+    if (!pdsUrl) {
+      return null;
+    }
+
+    // Fetch profile record from PDS
+    const response = await fetch(
+      `${pdsUrl}/xrpc/com.atproto.repo.getRecord?repo=${did}&collection=app.bsky.actor.profile&rkey=self`,
+    );
+
+    if (!response.ok) {
+      return null;
+    }
+
+    const profileData = await response.json();
+    const profile = profileData.value;
+
+    // Also try to get the handle from the DID document
+    let handle = did; // fallback to DID
+    try {
+      const didResponse = await fetch(`https://plc.directory/${did}`);
+      if (didResponse.ok) {
+        const didDoc = await didResponse.json();
+        const handleAlias = didDoc.alsoKnownAs?.find((alias: string) =>
+          alias.startsWith("at://")
+        );
+        if (handleAlias) {
+          handle = handleAlias.replace("at://", "");
+        }
+      }
+    } catch (error) {
+      console.warn("Failed to resolve handle from DID:", error);
+    }
+
+    // Handle avatar blob reference
+    let avatarUrl: string | undefined;
+    if (profile?.avatar) {
+      if (typeof profile.avatar === "string") {
+        // Already a URL
+        avatarUrl = profile.avatar;
+      } else if (profile.avatar.ref && typeof profile.avatar.ref === "object") {
+        // It's a blob reference - construct the URL
+        const blobRef = profile.avatar.ref.$link || profile.avatar.ref;
+        if (blobRef) {
+          avatarUrl =
+            `${pdsUrl}/xrpc/com.atproto.sync.getBlob?did=${did}&cid=${blobRef}`;
+        }
+      }
+    }
+
+    return {
+      handle,
+      displayName: profile?.displayName,
+      avatar: avatarUrl,
+      description: profile?.description,
+    };
+  } catch (error) {
+    console.error("Failed to resolve profile:", error);
+    return null;
   }
 }
 
@@ -757,4 +713,1118 @@ async function handleCreateCheckin(
   };
 
   return await createCheckin(context as any);
+}
+
+// New PDS-based endpoint to get user's own check-ins
+async function getUserCheckins(
+  req: Request,
+  corsHeaders: CorsHeaders,
+): Promise<Response> {
+  try {
+    const url = new URL(req.url);
+    let userDid = url.searchParams.get("did");
+    const identifier = url.searchParams.get("identifier");
+
+    // If we have an identifier, determine if it's a DID or handle
+    if (identifier && !userDid) {
+      if (identifier.startsWith("did:")) {
+        userDid = identifier;
+      } else {
+        // It's a handle, resolve to DID
+        userDid = await resolveHandleToDid(identifier);
+        if (!userDid) {
+          return new Response(
+            JSON.stringify({ error: "Could not resolve handle to DID" }),
+            {
+              status: 404,
+              headers: corsHeaders,
+            },
+          );
+        }
+      }
+    }
+
+    // If no DID provided, get from authenticated session
+    if (!userDid) {
+      const { unsealData } = await import("npm:iron-session@8.0.4");
+
+      const COOKIE_SECRET = Deno.env.get("COOKIE_SECRET") ||
+        "anchor-default-secret-for-development-only";
+
+      // Extract cookie value and unseal it to get session data
+      const cookieHeader = req.headers.get("cookie");
+      if (!cookieHeader || !cookieHeader.includes("sid=")) {
+        return new Response(
+          JSON.stringify({ error: "Authentication required" }),
+          {
+            status: 401,
+            headers: corsHeaders,
+          },
+        );
+      }
+
+      const sessionCookie = cookieHeader
+        .split(";")
+        .find((c) => c.trim().startsWith("sid="))
+        ?.split("=")[1];
+
+      if (!sessionCookie) {
+        return new Response(
+          JSON.stringify({ error: "Authentication required" }),
+          {
+            status: 401,
+            headers: corsHeaders,
+          },
+        );
+      }
+
+      let sessionData: any;
+      try {
+        sessionData = await unsealData(decodeURIComponent(sessionCookie), {
+          password: COOKIE_SECRET,
+        });
+      } catch (_err) {
+        return new Response(JSON.stringify({ error: "Invalid session" }), {
+          status: 401,
+          headers: corsHeaders,
+        });
+      }
+
+      if (!sessionData.userId) {
+        return new Response(
+          JSON.stringify({ error: "Authentication required" }),
+          {
+            status: 401,
+            headers: corsHeaders,
+          },
+        );
+      }
+
+      userDid = sessionData.userId;
+    }
+
+    // Always use public PDS access since check-ins are public data
+    const targetDid = url.searchParams.get("did") || userDid;
+    if (!targetDid) {
+      return new Response(
+        JSON.stringify({ error: "No DID provided and user not authenticated" }),
+        {
+          status: 400,
+          headers: corsHeaders,
+        },
+      );
+    }
+
+    const pdsUrl = await resolvePdsUrl(targetDid);
+    if (!pdsUrl) {
+      return new Response(
+        JSON.stringify({ error: "Could not resolve PDS for user" }),
+        {
+          status: 404,
+          headers: corsHeaders,
+        },
+      );
+    }
+
+    // Parse query parameters
+    const limit = Math.min(
+      parseInt(url.searchParams.get("limit") || "50"),
+      100,
+    );
+    const cursor = url.searchParams.get("cursor");
+
+    // Fetch check-ins directly from user's PDS (always public access)
+    let listRecordsUrl =
+      `${pdsUrl}/xrpc/com.atproto.repo.listRecords?repo=${targetDid}&collection=app.dropanchor.checkin&limit=${limit}`;
+    if (cursor) {
+      listRecordsUrl += `&cursor=${cursor}`;
+    }
+
+    const response = await fetch(listRecordsUrl);
+
+    if (!response.ok) {
+      console.error(
+        "Failed to fetch check-ins from PDS:",
+        response.status,
+        await response.text(),
+      );
+      return new Response(
+        JSON.stringify({ error: "Failed to fetch check-ins" }),
+        {
+          status: 500,
+          headers: corsHeaders,
+        },
+      );
+    }
+
+    const data = await response.json();
+
+    // Resolve profile data once for the user
+    const profileData = await resolveProfileFromPds(targetDid);
+
+    // Format the check-ins for API response
+    const checkins = await Promise.all(
+      data.records.map(async (record: any) => {
+        // Extract basic info from the record
+        const rkey = record.uri.split("/").pop(); // Extract rkey from AT URI
+        const checkin: any = {
+          id: rkey, // Use simple rkey for cleaner URLs
+          uri: record.uri,
+          author: {
+            did: targetDid,
+            handle: profileData?.handle || targetDid,
+            displayName: profileData?.displayName,
+            avatar: profileData?.avatar,
+          },
+          text: record.value.text,
+          createdAt: record.value.createdAt,
+          coordinates: record.value.coordinates,
+        };
+
+        // Resolve address if addressRef exists
+        if (record.value.addressRef) {
+          try {
+            const addressResponse = await fetch(
+              `${pdsUrl}/xrpc/com.atproto.repo.getRecord?repo=${targetDid}&collection=community.lexicon.location.address&rkey=${
+                record.value.addressRef.uri.split("/").pop()
+              }`,
+            );
+
+            if (addressResponse.ok) {
+              const addressData = await addressResponse.json();
+              checkin.address = addressData.value;
+            }
+          } catch (err) {
+            console.warn(
+              "Failed to resolve address for checkin:",
+              record.uri,
+              err,
+            );
+          }
+        }
+
+        return checkin;
+      }),
+    );
+
+    return new Response(
+      JSON.stringify({
+        checkins,
+        cursor: data.cursor,
+      }),
+      {
+        headers: corsHeaders,
+      },
+    );
+  } catch (error) {
+    console.error("Get my checkins error:", error);
+    return new Response(JSON.stringify({ error: "Internal server error" }), {
+      status: 500,
+      headers: corsHeaders,
+    });
+  }
+}
+
+// New REST-style handlers
+
+// GET /api/checkins/:did - Get all checkins for a specific user
+async function getUserCheckinsByDid(
+  did: string,
+  corsHeaders: CorsHeaders,
+): Promise<Response> {
+  try {
+    // Validate DID format
+    if (!did.startsWith("did:")) {
+      // Maybe it's a handle, try to resolve it
+      const resolvedDid = await resolveHandleToDid(did);
+      if (resolvedDid) {
+        did = resolvedDid;
+      } else {
+        return new Response(
+          JSON.stringify({ error: "Invalid DID or handle" }),
+          {
+            status: 400,
+            headers: corsHeaders,
+          },
+        );
+      }
+    }
+
+    const pdsUrl = await resolvePdsUrl(did);
+    if (!pdsUrl) {
+      return new Response(
+        JSON.stringify({ error: "Could not resolve PDS for user" }),
+        {
+          status: 404,
+          headers: corsHeaders,
+        },
+      );
+    }
+
+    // Fetch check-ins directly from user's PDS
+    const listRecordsUrl =
+      `${pdsUrl}/xrpc/com.atproto.repo.listRecords?repo=${did}&collection=app.dropanchor.checkin&limit=50`;
+
+    const response = await fetch(listRecordsUrl);
+    if (!response.ok) {
+      console.error(
+        "Failed to fetch check-ins from PDS:",
+        response.status,
+        await response.text(),
+      );
+      return new Response(
+        JSON.stringify({ error: "Failed to fetch check-ins" }),
+        {
+          status: 500,
+          headers: corsHeaders,
+        },
+      );
+    }
+
+    const data = await response.json();
+
+    // Resolve profile data once for the user
+    const profileData = await resolveProfileFromPds(did);
+
+    // Format the check-ins for API response
+    const checkins = await Promise.all(
+      data.records.map(async (record: any) => {
+        const rkey = record.uri.split("/").pop(); // Extract rkey from AT URI
+        const checkin: any = {
+          id: rkey, // Use simple rkey for cleaner URLs
+          uri: record.uri,
+          author: {
+            did: did,
+            handle: profileData?.handle || did,
+            displayName: profileData?.displayName,
+            avatar: profileData?.avatar,
+          },
+          text: record.value.text,
+          createdAt: record.value.createdAt,
+          coordinates: record.value.coordinates,
+        };
+
+        // Resolve address if addressRef exists
+        if (record.value.addressRef) {
+          try {
+            const addressResponse = await fetch(
+              `${pdsUrl}/xrpc/com.atproto.repo.getRecord?repo=${did}&collection=community.lexicon.location.address&rkey=${
+                record.value.addressRef.uri.split("/").pop()
+              }`,
+            );
+
+            if (addressResponse.ok) {
+              const addressData = await addressResponse.json();
+              checkin.address = addressData.value;
+            }
+          } catch (err) {
+            console.warn(
+              "Failed to resolve address for checkin:",
+              record.uri,
+              err,
+            );
+          }
+        }
+
+        return checkin;
+      }),
+    );
+
+    return new Response(
+      JSON.stringify({
+        checkins,
+        cursor: data.cursor,
+      }),
+      {
+        headers: corsHeaders,
+      },
+    );
+  } catch (error) {
+    console.error("Get user checkins error:", error);
+    return new Response(JSON.stringify({ error: "Internal server error" }), {
+      status: 500,
+      headers: corsHeaders,
+    });
+  }
+}
+
+// GET /api/checkins/:did/:rkey - Get a specific checkin
+async function getCheckinByDidAndRkey(
+  did: string,
+  rkey: string,
+  corsHeaders: CorsHeaders,
+): Promise<Response> {
+  try {
+    // Validate DID format
+    if (!did.startsWith("did:")) {
+      return new Response(
+        JSON.stringify({ error: "Invalid DID format" }),
+        {
+          status: 400,
+          headers: corsHeaders,
+        },
+      );
+    }
+
+    const pdsUrl = await resolvePdsUrl(did);
+    if (!pdsUrl) {
+      return new Response(
+        JSON.stringify({ error: "Could not resolve PDS for user" }),
+        {
+          status: 404,
+          headers: corsHeaders,
+        },
+      );
+    }
+
+    // Fetch the check-in record from PDS
+    const checkinResponse = await fetch(
+      `${pdsUrl}/xrpc/com.atproto.repo.getRecord?repo=${did}&collection=app.dropanchor.checkin&rkey=${rkey}`,
+    );
+
+    if (!checkinResponse.ok) {
+      if (checkinResponse.status === 404) {
+        return new Response(JSON.stringify({ error: "Checkin not found" }), {
+          status: 404,
+          headers: corsHeaders,
+        });
+      }
+      throw new Error(`Failed to fetch checkin: ${checkinResponse.status}`);
+    }
+
+    const checkinData = await checkinResponse.json();
+
+    // Resolve profile data for the checkin author
+    const profileData = await resolveProfileFromPds(did);
+
+    // Build the response object
+    const checkin: any = {
+      id: rkey,
+      uri: `at://${did}/app.dropanchor.checkin/${rkey}`,
+      author: {
+        did: did,
+        handle: profileData?.handle || did,
+        displayName: profileData?.displayName,
+        avatar: profileData?.avatar,
+      },
+      text: checkinData.value.text,
+      createdAt: checkinData.value.createdAt,
+      coordinates: checkinData.value.coordinates,
+    };
+
+    // Resolve address if addressRef exists
+    if (checkinData.value.addressRef) {
+      try {
+        const addressRkey = checkinData.value.addressRef.uri.split("/").pop();
+        const addressResponse = await fetch(
+          `${pdsUrl}/xrpc/com.atproto.repo.getRecord?repo=${did}&collection=community.lexicon.location.address&rkey=${addressRkey}`,
+        );
+
+        if (addressResponse.ok) {
+          const addressData = await addressResponse.json();
+          checkin.address = addressData.value;
+        }
+      } catch (err) {
+        console.warn(
+          "Failed to resolve address for checkin:",
+          checkin.uri,
+          err,
+        );
+      }
+    }
+
+    return new Response(JSON.stringify(checkin), {
+      status: 200,
+      headers: corsHeaders,
+    });
+  } catch (error) {
+    console.error("Get checkin by DID and rkey error:", error);
+    return new Response(JSON.stringify({ error: "Internal server error" }), {
+      status: 500,
+      headers: corsHeaders,
+    });
+  }
+}
+
+async function deleteCheckin(
+  did: string,
+  rkey: string,
+  req: Request,
+  corsHeaders: Record<string, string>,
+): Promise<Response> {
+  try {
+    // Check authentication - only the owner can delete their checkin
+    const cookieHeader = req.headers.get("cookie");
+    console.log("DELETE request - Cookie header:", cookieHeader);
+
+    if (!cookieHeader || !cookieHeader.includes("sid=")) {
+      console.log("DELETE request - No valid session cookie found");
+      return new Response(
+        JSON.stringify({ error: "Authentication required" }),
+        {
+          status: 401,
+          headers: corsHeaders,
+        },
+      );
+    }
+
+    const sessionCookie = cookieHeader
+      .split(";")
+      .find((c) => c.trim().startsWith("sid="))
+      ?.split("=")[1];
+
+    console.log(
+      "DELETE request - Session cookie extracted:",
+      sessionCookie ? "Found" : "Not found",
+    );
+
+    if (!sessionCookie) {
+      return new Response(
+        JSON.stringify({ error: "Authentication required" }),
+        {
+          status: 401,
+          headers: corsHeaders,
+        },
+      );
+    }
+
+    // Get session data using iron-session
+    const { unsealData } = await import("npm:iron-session@8.0.4");
+    const COOKIE_SECRET = Deno.env.get("COOKIE_SECRET") ||
+      "anchor-default-secret-for-development-only";
+
+    console.log("DELETE request - About to unseal session data");
+    let sessionData: any;
+    try {
+      sessionData = await unsealData(decodeURIComponent(sessionCookie), {
+        password: COOKIE_SECRET,
+      });
+      console.log("DELETE request - Session unsealed successfully");
+      console.log(
+        "DELETE request - Session data keys:",
+        Object.keys(sessionData || {}),
+      );
+      console.log(
+        "DELETE request - Full session data:",
+        JSON.stringify(sessionData, null, 2),
+      );
+      console.log("DELETE request - userId field:", sessionData?.userId);
+      console.log("DELETE request - did field:", sessionData?.did);
+      console.log("DELETE request - sub field:", sessionData?.sub);
+    } catch (err) {
+      console.log("DELETE request - Session unseal failed:", err.message);
+      return new Response(JSON.stringify({ error: "Invalid session" }), {
+        status: 401,
+        headers: corsHeaders,
+      });
+    }
+
+    // The session might have different structure - let's check for common user identifier fields
+    const userDid = sessionData?.did || sessionData?.userId || sessionData?.sub;
+
+    if (!userDid) {
+      console.log("DELETE request - No user identifier found in session data");
+      return new Response(
+        JSON.stringify({ error: "Authentication required" }),
+        {
+          status: 401,
+          headers: corsHeaders,
+        },
+      );
+    }
+
+    console.log(
+      "DELETE request - Session validation passed, checking DID ownership",
+    );
+
+    // Verify that the authenticated user owns the checkin
+    console.log("DELETE request - Comparing DID ownership:", {
+      sessionUserDid: userDid,
+      targetDid: did,
+    });
+    if (userDid !== did) {
+      console.log("DELETE request - DID ownership check failed");
+      return new Response(
+        JSON.stringify({
+          error: "Forbidden: Can only delete your own checkins",
+        }),
+        {
+          status: 403,
+          headers: corsHeaders,
+        },
+      );
+    }
+
+    console.log(
+      "DELETE request - DID ownership confirmed, proceeding with deletion",
+    );
+
+    // Get user's PDS URL
+    const pdsUrl = await resolvePdsUrl(did);
+    if (!pdsUrl) {
+      return new Response(
+        JSON.stringify({ error: "Could not resolve PDS for user" }),
+        {
+          status: 404,
+          headers: corsHeaders,
+        },
+      );
+    }
+
+    // Get the stored OAuth session data for API access
+    const { sessions } = await import("../routes/oauth.ts");
+    let oauthSession = await sessions.getOAuthSession(did);
+    if (!oauthSession) {
+      console.log(`DELETE request - No OAuth session found for ${did}`);
+      return new Response(
+        JSON.stringify({ error: "OAuth session not found" }),
+        {
+          status: 401,
+          headers: corsHeaders,
+        },
+      );
+    }
+
+    console.log(
+      `DELETE request - OAuth session found, attempting to delete from PDS: ${pdsUrl}`,
+    );
+    console.log(
+      `DELETE request - OAuth session structure:`,
+      JSON.stringify(oauthSession, null, 2),
+    );
+
+    // Check if this is a DPoP token (has DPoP keys)
+    const sessionAny = oauthSession as any;
+
+    // Extract the access token from the correct location (data property)
+    let accessToken = oauthSession.accessToken ||
+      sessionAny.data?.accessToken;
+
+    console.log(
+      `DELETE request - AccessToken found:`,
+      !!accessToken,
+    );
+    console.log(
+      `DELETE request - AccessToken length:`,
+      accessToken?.length,
+    );
+    console.log(
+      `DELETE request - AccessToken prefix:`,
+      accessToken?.substring(0, 20) + "...",
+    );
+
+    // Try different ways to access the DPoP keys
+    console.log(
+      `DELETE request - Direct access to dpopPrivateKeyJWK:`,
+      !!sessionAny.dpopPrivateKeyJWK,
+    );
+    console.log(`DELETE request - All session keys:`, Object.keys(sessionAny));
+    console.log(
+      `DELETE request - Session own properties:`,
+      Object.getOwnPropertyNames(sessionAny),
+    );
+
+    // Access DPoP keys through the data property
+    const oauthSessionData = sessionAny.data;
+    console.log(`DELETE request - Session data exists:`, !!oauthSessionData);
+    console.log(
+      `DELETE request - Session data keys:`,
+      oauthSessionData ? Object.keys(oauthSessionData) : "none",
+    );
+
+    let dpopPrivateKey = oauthSessionData?.dpopPrivateKeyJWK;
+    let dpopPublicKey = oauthSessionData?.dpopPublicKeyJWK;
+
+    console.log(`DELETE request - DPoP private key found:`, !!dpopPrivateKey);
+    console.log(`DELETE request - DPoP public key found:`, !!dpopPublicKey);
+
+    const hasDpopKeys = !!(dpopPrivateKey && dpopPublicKey);
+    console.log(`DELETE request - Token uses DPoP:`, hasDpopKeys);
+
+    // Create headers for the request
+    const headers: Record<string, string> = {
+      "Content-Type": "application/json",
+      "Authorization": `Bearer ${accessToken}`,
+    };
+
+    // If this is a DPoP token, we need to create a DPoP proof header
+    if (hasDpopKeys) {
+      try {
+        console.log("DELETE request - Creating DPoP proof header...");
+
+        // Import necessary modules for DPoP
+        const { SignJWT } = await import("https://esm.sh/jose@5.4.0");
+
+        // Use the keys we found through iteration
+        if (!dpopPrivateKey || !dpopPublicKey) {
+          throw new Error("DPoP keys not found despite hasDpopKeys being true");
+        }
+
+        // Calculate JWK thumbprint for DPoP proof
+        const { calculateJwkThumbprint } = await import(
+          "https://esm.sh/jose@5.4.0"
+        );
+        let jkt = await calculateJwkThumbprint(dpopPublicKey, "sha256");
+
+        console.log("DELETE request - Calculated JWK thumbprint:", jkt);
+
+        // Check if JWK thumbprint matches the token's expected value
+        // Decode the access token to get the expected jkt
+        let expectedJkt = null;
+        try {
+          const tokenParts = accessToken.split(".");
+          const payload = JSON.parse(atob(tokenParts[1]));
+          expectedJkt = payload.cnf?.jkt;
+        } catch (e) {
+          console.log(
+            "DELETE request - Could not decode token to check jkt:",
+            e.message,
+          );
+        }
+
+        console.log(
+          "DELETE request - Expected JWK thumbprint from token:",
+          expectedJkt,
+        );
+
+        // If thumbprints don't match, we need to refresh the token first
+        if (expectedJkt && jkt !== expectedJkt) {
+          console.log(
+            "DELETE request - JWK thumbprint mismatch, forcing token refresh...",
+          );
+
+          // Force a token refresh by getting a fresh session
+          oauthSession = await sessions.getOAuthSession(did);
+          if (!oauthSession) {
+            return new Response(
+              JSON.stringify({ error: "Failed to refresh OAuth session" }),
+              { status: 401, headers: corsHeaders },
+            );
+          }
+
+          // Update session data with refreshed session
+          const refreshedSessionAny = oauthSession as any;
+          const refreshedSessionData = refreshedSessionAny.data;
+          accessToken = refreshedSessionData?.accessToken;
+          dpopPrivateKey = refreshedSessionData?.dpopPrivateKeyJWK;
+          dpopPublicKey = refreshedSessionData?.dpopPublicKeyJWK;
+
+          // Recalculate JWK thumbprint with refreshed keys
+          const refreshedJkt = await calculateJwkThumbprint(
+            dpopPublicKey,
+            "sha256",
+          );
+          console.log(
+            "DELETE request - Refreshed JWK thumbprint:",
+            refreshedJkt,
+          );
+
+          // Update jkt for the DPoP proof
+          jkt = refreshedJkt;
+        }
+
+        // Calculate access token hash for DPoP proof
+        const encoder = new TextEncoder();
+        const accessTokenBytes = encoder.encode(accessToken);
+        const hashBuffer = await crypto.subtle.digest(
+          "SHA-256",
+          accessTokenBytes,
+        );
+        const hashArray = new Uint8Array(hashBuffer);
+        const ath = btoa(String.fromCharCode(...hashArray))
+          .replace(/\+/g, "-")
+          .replace(/\//g, "_")
+          .replace(/=/g, "");
+
+        console.log("DELETE request - Access token hash (ath):", ath);
+
+        // Extract aud from access token to match its format (needed for DPoP proof)
+        let tokenAud = pdsUrl;
+        try {
+          const tokenParts = accessToken.split(".");
+          const payload = JSON.parse(atob(tokenParts[1]));
+          if (payload.aud) {
+            tokenAud = payload.aud;
+            console.log("DELETE request - Using token aud for DPoP:", tokenAud);
+          }
+        } catch (_e) {
+          console.log(
+            "DELETE request - Could not extract aud from token, using PDS URL",
+          );
+        }
+
+        // Try getting DPoP nonce by making a failed authenticated request first
+        console.log(
+          "DELETE request - Getting DPoP nonce with failed request strategy...",
+        );
+        let dpopNonce = null;
+        try {
+          // Make a DPoP request without nonce to get a nonce in the error response
+          const tempNow = Math.floor(Date.now() / 1000);
+          const tempDpopProof = await new SignJWT({
+            htm: "POST",
+            htu: `${pdsUrl}/xrpc/com.atproto.repo.deleteRecord`,
+            jkt: jkt,
+            ath: ath,
+            iat: tempNow,
+            jti: crypto.randomUUID(),
+            aud: tokenAud,
+          })
+            .setProtectedHeader({
+              alg: "ES256",
+              typ: "dpop+jwt",
+              jwk: dpopPublicKey,
+            })
+            .sign(
+              await crypto.subtle.importKey(
+                "jwk",
+                dpopPrivateKey,
+                { name: "ECDSA", namedCurve: "P-256" },
+                false,
+                ["sign"],
+              ),
+            );
+
+          const nonceResponse = await fetch(
+            `${pdsUrl}/xrpc/com.atproto.repo.deleteRecord`,
+            {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+                "Authorization": `Bearer ${accessToken}`,
+                "DPoP": tempDpopProof,
+              },
+              body: JSON.stringify({
+                repo: did,
+                collection: "app.dropanchor.checkin",
+                rkey: rkey,
+              }),
+            },
+          );
+
+          // Check for DPoP-Nonce in response headers - this should be the standard two-step process
+          dpopNonce = nonceResponse.headers.get("DPoP-Nonce");
+
+          // Also check response body for specific DPoP nonce error
+          if (!dpopNonce && !nonceResponse.ok) {
+            try {
+              const errorBody = await nonceResponse.json();
+              console.log("DELETE request - Error response body:", errorBody);
+              if (errorBody.error === "use_dpop_nonce") {
+                // This is the expected first response - server requires nonce
+                console.log(
+                  "DELETE request - Server requires nonce (use_dpop_nonce error)",
+                );
+                dpopNonce = nonceResponse.headers.get("DPoP-Nonce");
+              }
+            } catch (_e) {
+              // Ignore JSON parsing errors
+              console.log("DELETE request - Could not parse error response");
+            }
+          }
+
+          console.log(
+            "DELETE request - Received DPoP nonce from failed request:",
+            dpopNonce || "none",
+          );
+          if (dpopNonce) {
+            console.log(
+              "DELETE request - Successfully obtained nonce via two-step process",
+            );
+          }
+        } catch (e) {
+          console.log(
+            "DELETE request - Failed to get nonce with failed request:",
+            e.message,
+          );
+        }
+
+        // Create DPoP proof using the tokenAud extracted earlier
+        const now = Math.floor(Date.now() / 1000);
+        const dpopPayload: any = {
+          htm: "POST",
+          htu: `${pdsUrl}/xrpc/com.atproto.repo.deleteRecord`,
+          jkt: jkt,
+          ath: ath,
+          iat: now,
+          jti: crypto.randomUUID(),
+          aud: tokenAud,
+        };
+
+        // Add nonce if we received one, or try empty string as fallback
+        if (dpopNonce) {
+          dpopPayload.nonce = dpopNonce;
+          console.log(
+            "DELETE request - Including nonce in DPoP proof:",
+            dpopNonce,
+          );
+        } else {
+          // Try including empty nonce since server returned InvalidToken instead of use_dpop_nonce
+          dpopPayload.nonce = "";
+          console.log(
+            "DELETE request - No server nonce, trying empty nonce fallback",
+          );
+        }
+
+        const dpopProof = await new SignJWT(dpopPayload)
+          .setProtectedHeader({
+            alg: "ES256",
+            typ: "dpop+jwt",
+            jwk: dpopPublicKey,
+          })
+          .sign(
+            await crypto.subtle.importKey(
+              "jwk",
+              dpopPrivateKey,
+              { name: "ECDSA", namedCurve: "P-256" },
+              false,
+              ["sign"],
+            ),
+          );
+
+        headers["DPoP"] = dpopProof;
+        console.log("DELETE request - DPoP proof created successfully");
+        console.log(
+          "DELETE request - DPoP proof headers:",
+          JSON.stringify(headers),
+        );
+      } catch (dpopError) {
+        console.error(
+          "DELETE request - DPoP proof creation failed:",
+          dpopError,
+        );
+        // Continue without DPoP and see what happens
+      }
+    }
+
+    // Delete the checkin record via AT Protocol
+    const deleteUrl = `${pdsUrl}/xrpc/com.atproto.repo.deleteRecord`;
+    const deleteBody = {
+      repo: did,
+      collection: "app.dropanchor.checkin",
+      rkey: rkey,
+    };
+
+    console.log("DELETE request - Request URL:", deleteUrl);
+    console.log("DELETE request - Request body:", JSON.stringify(deleteBody));
+
+    let deleteResponse = await fetch(deleteUrl, {
+      method: "POST",
+      headers,
+      body: JSON.stringify(deleteBody),
+    });
+
+    console.log(
+      `DELETE request - Delete response status: ${deleteResponse.status}`,
+    );
+    console.log(`DELETE request - Delete response ok: ${deleteResponse.ok}`);
+
+    // If we get a 401 or 400 token error, try to refresh the token and retry
+    if (
+      !deleteResponse.ok &&
+      (deleteResponse.status === 401 || deleteResponse.status === 400)
+    ) {
+      console.log(
+        "DELETE request - Token might be expired, attempting to refresh...",
+      );
+
+      try {
+        // Try to refresh the token by getting a fresh session
+        oauthSession = await sessions.getOAuthSession(did);
+
+        if (oauthSession) {
+          console.log("DELETE request - Got fresh session, retrying delete...");
+
+          // Extract the refreshed access token and DPoP keys
+          const refreshSessionAny = oauthSession as any;
+          const refreshedAccessToken = oauthSession.accessToken ||
+            refreshSessionAny.data?.accessToken;
+
+          // Create headers for retry request
+          const retryHeaders: Record<string, string> = {
+            "Content-Type": "application/json",
+            "Authorization": `Bearer ${refreshedAccessToken}`,
+          };
+
+          // If this is a DPoP token, create a new DPoP proof for the retry
+          const retryDpopPrivateKey = refreshSessionAny.data?.dpopPrivateKeyJWK;
+          const retryDpopPublicKey = refreshSessionAny.data?.dpopPublicKeyJWK;
+          const hasRefreshDpopKeys =
+            !!(retryDpopPrivateKey && retryDpopPublicKey);
+
+          if (hasRefreshDpopKeys) {
+            try {
+              console.log("DELETE request - Creating DPoP proof for retry...");
+
+              const { SignJWT, calculateJwkThumbprint } = await import(
+                "https://esm.sh/jose@5.4.0"
+              );
+
+              // Calculate JWK thumbprint for retry DPoP proof
+              const retryJkt = await calculateJwkThumbprint(
+                retryDpopPublicKey,
+                "sha256",
+              );
+
+              // Calculate access token hash for retry DPoP proof
+              const retryEncoder = new TextEncoder();
+              const retryAccessTokenBytes = retryEncoder.encode(
+                refreshedAccessToken,
+              );
+              const retryHashBuffer = await crypto.subtle.digest(
+                "SHA-256",
+                retryAccessTokenBytes,
+              );
+              const retryHashArray = new Uint8Array(retryHashBuffer);
+              const retryAth = btoa(String.fromCharCode(...retryHashArray))
+                .replace(/\+/g, "-")
+                .replace(/\//g, "_")
+                .replace(/=/g, "");
+
+              // Get fresh DPoP nonce for retry
+              console.log(
+                "DELETE request - Getting fresh DPoP nonce for retry with HEAD request...",
+              );
+              let retryDpopNonce = null;
+              try {
+                // Try HEAD request to base XRPC endpoint for retry
+                const retryNonceResponse = await fetch(`${pdsUrl}/xrpc/`, {
+                  method: "HEAD",
+                });
+                retryDpopNonce = retryNonceResponse.headers.get("DPoP-Nonce");
+
+                if (!retryDpopNonce) {
+                  // Try token endpoint for retry nonce
+                  const retryTokenNonceResponse = await fetch(
+                    `${pdsUrl}/oauth/token`,
+                    {
+                      method: "HEAD",
+                    },
+                  );
+                  retryDpopNonce = retryTokenNonceResponse.headers.get(
+                    "DPoP-Nonce",
+                  );
+                }
+
+                console.log(
+                  "DELETE request - Received retry DPoP nonce:",
+                  retryDpopNonce || "none",
+                );
+              } catch (e) {
+                console.log(
+                  "DELETE request - Failed to get retry nonce:",
+                  e.message,
+                );
+              }
+
+              const retryNow = Math.floor(Date.now() / 1000);
+
+              // Extract aud from refreshed access token for retry
+              let retryTokenAud = pdsUrl;
+              try {
+                const retryTokenParts = refreshedAccessToken.split(".");
+                const retryPayload = JSON.parse(atob(retryTokenParts[1]));
+                if (retryPayload.aud) {
+                  retryTokenAud = retryPayload.aud;
+                  console.log(
+                    "DELETE request - Using retry token aud for DPoP:",
+                    retryTokenAud,
+                  );
+                }
+              } catch (_e) {
+                console.log(
+                  "DELETE request - Could not extract aud from retry token, using PDS URL",
+                );
+              }
+
+              const retryDpopPayload: any = {
+                htm: "POST",
+                htu: `${pdsUrl}/xrpc/com.atproto.repo.deleteRecord`,
+                jkt: retryJkt,
+                ath: retryAth,
+                iat: retryNow,
+                jti: crypto.randomUUID(),
+                aud: retryTokenAud,
+              };
+
+              // Add nonce if we received one for retry
+              if (retryDpopNonce) {
+                retryDpopPayload.nonce = retryDpopNonce;
+              }
+
+              const dpopProof = await new SignJWT(retryDpopPayload)
+                .setProtectedHeader({
+                  alg: "ES256",
+                  typ: "dpop+jwt",
+                  jwk: retryDpopPublicKey,
+                })
+                .sign(
+                  await crypto.subtle.importKey(
+                    "jwk",
+                    retryDpopPrivateKey,
+                    { name: "ECDSA", namedCurve: "P-256" },
+                    false,
+                    ["sign"],
+                  ),
+                );
+
+              retryHeaders["DPoP"] = dpopProof;
+              console.log(
+                "DELETE request - DPoP proof for retry created successfully",
+              );
+            } catch (dpopError) {
+              console.error(
+                "DELETE request - DPoP proof creation for retry failed:",
+                dpopError,
+              );
+            }
+          }
+
+          // Retry the delete with the potentially refreshed token
+          deleteResponse = await fetch(
+            `${pdsUrl}/xrpc/com.atproto.repo.deleteRecord`,
+            {
+              method: "POST",
+              headers: retryHeaders,
+              body: JSON.stringify({
+                repo: did,
+                collection: "app.dropanchor.checkin",
+                rkey: rkey,
+              }),
+            },
+          );
+        }
+      } catch (refreshError) {
+        console.error("DELETE request - Token refresh failed:", refreshError);
+      }
+    }
+
+    if (!deleteResponse.ok) {
+      console.error("Failed to delete checkin:", await deleteResponse.text());
+      return new Response(
+        JSON.stringify({ error: "Failed to delete checkin" }),
+        {
+          status: deleteResponse.status,
+          headers: corsHeaders,
+        },
+      );
+    }
+
+    return new Response(
+      JSON.stringify({
+        success: true,
+        message: "Checkin deleted successfully",
+      }),
+      {
+        status: 200,
+        headers: corsHeaders,
+      },
+    );
+  } catch (error) {
+    console.error("Delete checkin error:", error);
+    return new Response(JSON.stringify({ error: "Internal server error" }), {
+      status: 500,
+      headers: corsHeaders,
+    });
+  }
 }

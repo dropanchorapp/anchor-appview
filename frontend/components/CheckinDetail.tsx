@@ -123,7 +123,17 @@ export function CheckinDetail({ checkinId }: CheckinDetailProps) {
         setLoading(true);
         setError(null);
 
-        const response = await fetch(`/api/checkin/${checkinId}`);
+        // Check if checkinId is in new format (did/rkey) or legacy format
+        let apiUrl = "";
+        if (checkinId.includes("/") && checkinId.startsWith("did:")) {
+          // New format: did/rkey
+          apiUrl = `/api/checkins/${checkinId}`;
+        } else {
+          // Legacy format: use old API endpoint
+          apiUrl = `/api/checkin/${checkinId}`;
+        }
+
+        const response = await fetch(apiUrl);
 
         if (!response.ok) {
           if (response.status === 404) {
@@ -199,12 +209,8 @@ export function CheckinDetail({ checkinId }: CheckinDetailProps) {
       <button
         type="button"
         onClick={() => {
-          // If there's history, go back, otherwise go to feed
-          if (globalThis.history.length > 1) {
-            globalThis.history.back();
-          } else {
-            globalThis.location.href = "/";
-          }
+          // Always go to main feed for consistency
+          globalThis.location.href = "/";
         }}
         style={{
           background: "#f8f9fa",

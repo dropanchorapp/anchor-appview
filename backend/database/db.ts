@@ -21,9 +21,7 @@ export async function initializeTables() {
   const { runMigrations } = await import("./migrations.ts");
   await runMigrations();
 
-  // Initialize user tracking tables for PDS crawler
-  const { initializeUserTables } = await import("./user-tracking.ts");
-  initializeUserTables();
+  // No user tracking needed - PDS-only architecture
 }
 
 // Test the database connection

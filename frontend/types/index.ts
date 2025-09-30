@@ -33,5 +33,3 @@ export interface AuthState {
   userAvatar?: string;
   userDisplayName?: string;
 }
-
-export type FeedType = "timeline" | "following";

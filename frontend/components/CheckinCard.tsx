@@ -1,14 +1,59 @@
 /** @jsxImportSource https://esm.sh/react@19.1.0 */
-import { CheckinData } from "../types/index.ts";
+import { useState } from "https://esm.sh/react@19.1.0";
+import { AuthState, CheckinData } from "../types/index.ts";
 
 interface CheckinCardProps {
   checkin: CheckinData;
+  auth: AuthState;
+  onDelete?: (checkinId: string) => void;
 }
 
-export function CheckinCard({ checkin }: CheckinCardProps) {
+export function CheckinCard({ checkin, auth, onDelete }: CheckinCardProps) {
+  const [isDeleting, setIsDeleting] = useState(false);
+
   const handleClick = () => {
-    globalThis.location.href = `/checkin/${checkin.id}`;
+    // Use REST-style URL: /checkins/:did/:rkey
+    globalThis.location.href = `/checkins/${checkin.author.did}/${checkin.id}`;
   };
+
+  const handleDelete = async (e: React.MouseEvent) => {
+    e.stopPropagation(); // Prevent card click
+
+    if (!confirm("Are you sure you want to delete this check-in?")) {
+      return;
+    }
+
+    setIsDeleting(true);
+    try {
+      const response = await fetch(
+        `/api/checkins/${checkin.author.did}/${checkin.id}`,
+        {
+          method: "DELETE",
+          credentials: "include",
+        },
+      );
+
+      if (response.ok) {
+        if (onDelete) {
+          onDelete(checkin.id);
+        } else {
+          // Refresh the page if no callback provided
+          globalThis.location.reload();
+        }
+      } else {
+        const error = await response.json();
+        alert(`Failed to delete check-in: ${error.error || "Unknown error"}`);
+      }
+    } catch (error) {
+      console.error("Delete error:", error);
+      alert("Failed to delete check-in. Please try again.");
+    } finally {
+      setIsDeleting(false);
+    }
+  };
+
+  // Check if current user can delete this checkin
+  const canDelete = auth.isAuthenticated && auth.userDid === checkin.author.did;
 
   return (
     <div
@@ -130,6 +175,35 @@ export function CheckinCard({ checkin }: CheckinCardProps) {
               return date.toLocaleDateString();
             })()}
           </time>
+          {canDelete && (
+            <button
+              type="button"
+              onClick={handleDelete}
+              disabled={isDeleting}
+              style={{
+                background: "none",
+                border: "none",
+                cursor: isDeleting ? "not-allowed" : "pointer",
+                fontSize: "14px",
+                color: isDeleting ? "#c7c7cc" : "#ff3b30",
+                padding: "4px",
+                borderRadius: "4px",
+                transition: "all 0.1s ease-in-out",
+                opacity: isDeleting ? 0.5 : 1,
+              }}
+              onMouseEnter={(e) => {
+                if (!isDeleting) {
+                  e.currentTarget.style.background = "#fee";
+                }
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.background = "none";
+              }}
+              title={isDeleting ? "Deleting..." : "Delete check-in"}
+            >
+              {isDeleting ? "..." : "🗑️"}
+            </button>
+          )}
           <span
             data-arrow
             style={{

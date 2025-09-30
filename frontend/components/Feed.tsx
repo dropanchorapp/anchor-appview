@@ -1,95 +1,37 @@
 /** @jsxImportSource https://esm.sh/react@19.1.0 */
-import { AuthState, CheckinData, FeedType } from "../types/index.ts";
+import { useEffect, useState } from "https://esm.sh/react@19.1.0";
+import { AuthState, CheckinData } from "../types/index.ts";
 import { CheckinCard } from "./CheckinCard.tsx";
 
 interface FeedProps {
-  feedType: FeedType;
-  setFeedType: (type: FeedType) => void;
   checkins: CheckinData[];
   loading: boolean;
   auth: AuthState;
   onLogin: () => void;
+  onCheckinsChange?: (checkins: CheckinData[]) => void;
 }
 
 export function Feed(
-  { feedType, setFeedType, checkins, loading, auth, onLogin }: FeedProps,
+  { checkins, loading, auth, onLogin, onCheckinsChange }: FeedProps,
 ) {
+  const [localCheckins, setLocalCheckins] = useState(checkins);
+
+  // Update local checkins when props change
+  useEffect(() => {
+    setLocalCheckins(checkins);
+  }, [checkins]);
+
+  const handleDelete = (deletedCheckinId: string) => {
+    const updatedCheckins = localCheckins.filter((c) =>
+      c.id !== deletedCheckinId
+    );
+    setLocalCheckins(updatedCheckins);
+    if (onCheckinsChange) {
+      onCheckinsChange(updatedCheckins);
+    }
+  };
   return (
     <>
-      <div
-        style={{
-          background: "white",
-          borderRadius: "12px",
-          margin: "16px 0",
-          padding: "16px",
-          boxShadow: "0 1px 3px rgba(0,0,0,0.1)",
-        }}
-      >
-        <div
-          style={{
-            display: "flex",
-            background: "#f2f2f7",
-            borderRadius: "8px",
-            padding: "2px",
-          }}
-        >
-          <button
-            type="button"
-            onClick={() => setFeedType("timeline")}
-            style={{
-              flex: "1",
-              padding: "8px 16px",
-              textAlign: "center",
-              borderRadius: "6px",
-              fontSize: "14px",
-              fontWeight: "500",
-              border: "none",
-              background: feedType === "timeline" ? "white" : "none",
-              cursor: "pointer",
-              color: feedType === "timeline" ? "#007aff" : "#3c3c43",
-              transition: "all 0.2s",
-              boxShadow: feedType === "timeline"
-                ? "0 1px 2px rgba(0,0,0,0.1)"
-                : "none",
-            }}
-            onMouseEnter={(e) => {
-              if (feedType !== "timeline") {
-                e.currentTarget.style.background = "#e5e5ea";
-              }
-            }}
-            onMouseLeave={(e) => {
-              if (feedType !== "timeline") {
-                e.currentTarget.style.background = "none";
-              }
-            }}
-          >
-            Timeline
-          </button>
-          <button
-            type="button"
-            onClick={() => setFeedType("following")}
-            style={{
-              flex: "1",
-              padding: "8px 16px",
-              textAlign: "center",
-              borderRadius: "6px",
-              fontSize: "14px",
-              fontWeight: "500",
-              border: "none",
-              background: feedType === "following" ? "white" : "none",
-              cursor: "pointer",
-              color: feedType === "following" ? "#007aff" : "#3c3c43",
-              transition: "all 0.2s",
-              boxShadow: feedType === "following"
-                ? "0 1px 2px rgba(0,0,0,0.1)"
-                : "none",
-            }}
-          >
-            Following
-          </button>
-        </div>
-      </div>
-
       {loading && (
         <div
           style={{
@@ -128,7 +70,7 @@ export function Feed(
         </div>
       )}
 
-      {checkins.length === 0 && !loading && (
+      {localCheckins.length === 0 && !loading && (
         <div
           style={{
             textAlign: "center",
@@ -139,9 +81,8 @@ export function Feed(
             justifyContent: "center",
           }}
         >
-          {/* Show login illustration for timeline and following when not authenticated */}
-          {(feedType === "timeline" || feedType === "following") &&
-              !auth.isAuthenticated
+          {/* Show login illustration when not authenticated */}
+          {!auth.isAuthenticated
             ? (
               <div
                 style={{
@@ -169,7 +110,7 @@ export function Feed(
                     margin: "0 0 8px 0",
                   }}
                 >
-                  Sign in to see your {feedType}
+                  Sign in to see your check-ins
                 </h3>
                 <p
                   style={{
@@ -180,9 +121,7 @@ export function Feed(
                     lineHeight: "1.4",
                   }}
                 >
-                  {feedType === "following"
-                    ? "Connect with your Bluesky account to see check-ins from people you follow."
-                    : "Connect with your Bluesky account to see your personalized timeline."}
+                  Connect with your Bluesky account to see your check-ins.
                 </p>
                 <button
                   type="button"
@@ -231,9 +170,7 @@ export function Feed(
                     margin: "0 0 8px 0",
                   }}
                 >
-                  {feedType === "following"
-                    ? "No check-ins from people you follow"
-                    : "Your timeline is empty"}
+                  Your check-ins will appear here
                 </h3>
                 <p
                   style={{
@@ -244,19 +181,23 @@ export function Feed(
                     lineHeight: "1.4",
                   }}
                 >
-                  {feedType === "following"
-                    ? "Check-ins from people you follow will appear here."
-                    : "Your personalized timeline is empty. Check back later!"}
+                  When you create check-ins with the Anchor app, they'll appear
+                  here.
                 </p>
               </>
             )}
         </div>
       )}
 
-      {checkins.length > 0 && (
+      {localCheckins.length > 0 && (
         <div style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
-          {checkins.map((checkin) => (
-            <CheckinCard key={checkin.id} checkin={checkin} />
+          {localCheckins.map((checkin) => (
+            <CheckinCard
+              key={checkin.id}
+              checkin={checkin}
+              auth={auth}
+              onDelete={handleDelete}
+            />
           ))}
         </div>
       )}
