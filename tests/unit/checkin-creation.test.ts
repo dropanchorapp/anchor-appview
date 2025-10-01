@@ -320,8 +320,7 @@ Deno.test("Checkin Creation - Extract rkey from AT URI", () => {
 });
 
 Deno.test("Checkin Creation - Extract rkey from address URI", () => {
-  const uri =
-    "at://did:plc:test123/community.lexicon.location.address/3k2abc";
+  const uri = "at://did:plc:test123/community.lexicon.location.address/3k2abc";
   const rkey = extractRkey(uri);
 
   assertEquals(rkey, "3k2abc");

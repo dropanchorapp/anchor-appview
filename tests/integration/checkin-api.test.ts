@@ -20,13 +20,13 @@ interface MockOAuthSession {
 }
 
 // Create a mock OAuth session for testing
-function createMockOAuthSession(did: string): MockOAuthSession {
+function _createMockOAuthSession(did: string): MockOAuthSession {
   return {
     did,
     handle: "test.bsky.social",
     pdsUrl: "https://bsky.social",
     accessToken: "mock-access-token-12345",
-    makeRequest: async (method: string, url: string, options?: any) => {
+    makeRequest: (_method: string, url: string, options?: any) => {
       // Mock successful PDS responses
       if (url.includes("createRecord")) {
         const body = JSON.parse(options?.body || "{}");
@@ -35,78 +35,59 @@ function createMockOAuthSession(did: string): MockOAuthSession {
         const collection = body.collection;
         const rkey = "3k2" + Math.random().toString(36).substring(7);
         const uri = `at://${did}/${collection}/${rkey}`;
-        const cid = "bafyreicv3pecq6fuua22xcoguxep76otivb33nlaofzl76fpagczo5t5jm";
+        const cid =
+          "bafyreicv3pecq6fuua22xcoguxep76otivb33nlaofzl76fpagczo5t5jm";
 
-        return new Response(JSON.stringify({ uri, cid }), {
-          status: 200,
-          headers: { "Content-Type": "application/json" },
-        });
+        return Promise.resolve(
+          new Response(JSON.stringify({ uri, cid }), {
+            status: 200,
+            headers: { "Content-Type": "application/json" },
+          }),
+        );
       }
 
       if (url.includes("getRecord")) {
         // Mock checkin record with address ref
-        return new Response(
-          JSON.stringify({
-            uri: `at://${did}/app.dropanchor.checkin/3k2test`,
-            cid: "bafyreicv3pecq6fuua22xcoguxep76otivb33nlaofzl76fpagczo5t5jm",
-            value: {
-              $type: "app.dropanchor.checkin",
-              text: "Great coffee!",
-              createdAt: new Date().toISOString(),
-              coordinates: { latitude: 40.7128, longitude: -74.0060 },
-              addressRef: {
-                uri: `at://${did}/community.lexicon.location.address/3k2addr`,
-                cid: "bafyreicv3pecq6fuua22xcoguxep76otivb33nlaofzl76fpagczo5t5jm",
+        return Promise.resolve(
+          new Response(
+            JSON.stringify({
+              uri: `at://${did}/app.dropanchor.checkin/3k2test`,
+              cid:
+                "bafyreicv3pecq6fuua22xcoguxep76otivb33nlaofzl76fpagczo5t5jm",
+              value: {
+                $type: "app.dropanchor.checkin",
+                text: "Great coffee!",
+                createdAt: new Date().toISOString(),
+                coordinates: { latitude: 40.7128, longitude: -74.0060 },
+                addressRef: {
+                  uri: `at://${did}/community.lexicon.location.address/3k2addr`,
+                  cid:
+                    "bafyreicv3pecq6fuua22xcoguxep76otivb33nlaofzl76fpagczo5t5jm",
+                },
               },
+            }),
+            {
+              status: 200,
+              headers: { "Content-Type": "application/json" },
             },
-          }),
-          {
-            status: 200,
-            headers: { "Content-Type": "application/json" },
-          },
+          ),
         );
       }
 
       if (url.includes("deleteRecord")) {
         // Mock successful deletion
-        return new Response(null, { status: 200 });
+        return Promise.resolve(new Response(null, { status: 200 }));
       }
 
       // Default mock response
-      return new Response(JSON.stringify({ error: "Not implemented" }), {
-        status: 500,
-      });
+      return Promise.resolve(
+        new Response(JSON.stringify({ error: "Not implemented" }), {
+          status: 500,
+        }),
+      );
     },
   };
 }
-
-// Mock sessions interface
-const mockSessions = {
-  getOAuthSession: async (did: string): Promise<MockOAuthSession | null> => {
-    // Return mock session for known test DIDs
-    if (did.startsWith("did:plc:test")) {
-      return createMockOAuthSession(did);
-    }
-    return null;
-  },
-};
-
-// Mock iron-session for authentication
-const mockIronSession = {
-  getIronSession: async (_req: any, _res: any, _options: any) => {
-    return {
-      did: "did:plc:testuser123",
-      save: async () => {},
-    };
-  },
-  unsealData: async (sealed: string, _options: any) => {
-    // Parse mock bearer tokens
-    if (sealed === "mock-bearer-token-valid") {
-      return { did: "did:plc:testuser123" };
-    }
-    throw new Error("Invalid token");
-  },
-};
 
 // Test helper: Create a mock request with authentication
 function createAuthenticatedRequest(
@@ -126,31 +107,6 @@ function createAuthenticatedRequest(
     ...options,
     headers,
   });
-}
-
-// Test helper: Create a mock context for Hono
-function createMockContext(req: Request): any {
-  return {
-    req: {
-      raw: req,
-      header: (name: string) => req.headers.get(name),
-      json: () => req.json(),
-      param: (name: string) => {
-        // Extract params from URL pattern
-        const url = new URL(req.url);
-        const pathParts = url.pathname.split("/");
-        if (name === "did" && pathParts[3]) return pathParts[3];
-        if (name === "rkey" && pathParts[4]) return pathParts[4];
-        return undefined;
-      },
-    },
-    res: {},
-    json: (data: any, status?: number) =>
-      new Response(JSON.stringify(data), {
-        status: status || 200,
-        headers: { "Content-Type": "application/json" },
-      }),
-  };
 }
 
 Deno.test("Checkin API - POST /api/checkins with valid data returns success", async () => {
@@ -213,7 +169,7 @@ Deno.test("Checkin API - POST /api/checkins with string coordinates converts to 
   assertEquals(lng, -74.0060);
 });
 
-Deno.test("Checkin API - POST /api/checkins without authentication returns 401", async () => {
+Deno.test("Checkin API - POST /api/checkins without authentication returns 401", () => {
   const requestBody = {
     place: {
       name: "Test Cafe",
@@ -363,7 +319,7 @@ Deno.test("Checkin API - POST /api/checkins with optional message", async () => 
   assertEquals(body.message, undefined);
 });
 
-Deno.test("Checkin API - DELETE /api/checkins/:did/:rkey with valid auth succeeds", async () => {
+Deno.test("Checkin API - DELETE /api/checkins/:did/:rkey with valid auth succeeds", () => {
   const did = "did:plc:testuser123";
   const rkey = "3k2xyz123";
 
@@ -380,7 +336,7 @@ Deno.test("Checkin API - DELETE /api/checkins/:did/:rkey with valid auth succeed
   assertEquals(pathParts[4], rkey);
 });
 
-Deno.test("Checkin API - DELETE /api/checkins/:did/:rkey without auth returns 401", async () => {
+Deno.test("Checkin API - DELETE /api/checkins/:did/:rkey without auth returns 401", () => {
   const did = "did:plc:testuser123";
   const rkey = "3k2xyz123";
 
@@ -394,11 +350,11 @@ Deno.test("Checkin API - DELETE /api/checkins/:did/:rkey without auth returns 40
   assertEquals(req.headers.get("Cookie"), null);
 });
 
-Deno.test("Checkin API - DELETE /api/checkins/:did/:rkey with wrong user returns 403", async () => {
+Deno.test("Checkin API - DELETE /api/checkins/:did/:rkey with wrong user returns 403", () => {
   const targetDid = "did:plc:otheruser456"; // Different from authenticated user
   const rkey = "3k2xyz123";
 
-  const req = createAuthenticatedRequest(
+  const _req = createAuthenticatedRequest(
     `http://localhost/api/checkins/${targetDid}/${rkey}`,
     { method: "DELETE" },
   );
@@ -411,7 +367,7 @@ Deno.test("Checkin API - DELETE /api/checkins/:did/:rkey with wrong user returns
   assertEquals((authenticatedDid as any) === (targetDidFromUrl as any), false);
 });
 
-Deno.test("Checkin API - DELETE /api/checkins/:did/:rkey with invalid DID format returns 400", async () => {
+Deno.test("Checkin API - DELETE /api/checkins/:did/:rkey with invalid DID format returns 400", () => {
   const invalidDid = "not-a-valid-did";
   const rkey = "3k2xyz123";
 
@@ -428,7 +384,7 @@ Deno.test("Checkin API - DELETE /api/checkins/:did/:rkey with invalid DID format
   assertEquals(did.startsWith("did:"), false);
 });
 
-Deno.test("Checkin API - DELETE /api/checkins/:did/:rkey with missing rkey returns 400", async () => {
+Deno.test("Checkin API - DELETE /api/checkins/:did/:rkey with missing rkey returns 400", () => {
   const did = "did:plc:testuser123";
 
   const req = createAuthenticatedRequest(
@@ -444,7 +400,7 @@ Deno.test("Checkin API - DELETE /api/checkins/:did/:rkey with missing rkey retur
   assertEquals(!rkey || rkey === "", true);
 });
 
-Deno.test("Checkin API - DELETE /api/checkins/:did/:rkey with missing DID returns 400", async () => {
+Deno.test("Checkin API - DELETE /api/checkins/:did/:rkey with missing DID returns 400", () => {
   const rkey = "3k2xyz123";
 
   const req = createAuthenticatedRequest(
@@ -460,7 +416,7 @@ Deno.test("Checkin API - DELETE /api/checkins/:did/:rkey with missing DID return
   assertEquals(!did || did === "", true);
 });
 
-Deno.test("Checkin API - Authentication via Bearer token (mobile)", async () => {
+Deno.test("Checkin API - Authentication via Bearer token (mobile)", () => {
   const req = new Request("http://localhost/api/checkins", {
     method: "POST",
     headers: {
@@ -482,7 +438,7 @@ Deno.test("Checkin API - Authentication via Bearer token (mobile)", async () => 
   assertEquals(authHeader.startsWith("Bearer "), true);
 });
 
-Deno.test("Checkin API - Authentication via Cookie (web)", async () => {
+Deno.test("Checkin API - Authentication via Cookie (web)", () => {
   const req = new Request("http://localhost/api/checkins", {
     method: "POST",
     headers: {
@@ -504,7 +460,7 @@ Deno.test("Checkin API - Authentication via Cookie (web)", async () => {
   assertEquals(cookieHeader.includes("sid="), true);
 });
 
-Deno.test("Checkin API - Bearer token takes precedence over cookie", async () => {
+Deno.test("Checkin API - Bearer token takes precedence over cookie", () => {
   const req = new Request("http://localhost/api/checkins", {
     method: "POST",
     headers: {
@@ -527,7 +483,7 @@ Deno.test("Checkin API - Bearer token takes precedence over cookie", async () =>
   assertEquals(req.headers.has("Cookie"), true);
 });
 
-Deno.test("Checkin API - Response includes shareableId and shareableUrl", async () => {
+Deno.test("Checkin API - Response includes shareableId and shareableUrl", () => {
   // Mock successful creation response structure
   const mockResponse = {
     success: true,
@@ -539,11 +495,17 @@ Deno.test("Checkin API - Response includes shareableId and shareableUrl", async 
 
   assertExists(mockResponse.shareableId);
   assertExists(mockResponse.shareableUrl);
-  assertEquals(mockResponse.shareableUrl.includes(mockResponse.shareableId), true);
-  assertEquals(mockResponse.shareableUrl.startsWith("https://dropanchor.app/checkin/"), true);
+  assertEquals(
+    mockResponse.shareableUrl.includes(mockResponse.shareableId),
+    true,
+  );
+  assertEquals(
+    mockResponse.shareableUrl.startsWith("https://dropanchor.app/checkin/"),
+    true,
+  );
 });
 
-Deno.test("Checkin API - DELETE success response structure", async () => {
+Deno.test("Checkin API - DELETE success response structure", () => {
   // Mock successful deletion response structure
   const mockResponse = {
     success: true,
@@ -552,7 +514,7 @@ Deno.test("Checkin API - DELETE success response structure", async () => {
   assertEquals(mockResponse.success, true);
 });
 
-Deno.test("Checkin API - CORS headers present on responses", async () => {
+Deno.test("Checkin API - CORS headers present on responses", () => {
   const corsHeaders = {
     "Access-Control-Allow-Origin": "*",
     "Access-Control-Allow-Methods": "GET, POST, DELETE, OPTIONS",

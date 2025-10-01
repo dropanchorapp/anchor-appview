@@ -181,11 +181,21 @@ Deno.test("Checkin Deletion - Verify different DID methods", () => {
 });
 
 // Test deletion flow state machine
-type DeletionState = "pending" | "fetching_checkin" | "deleting" | "success" | "error";
+type DeletionState =
+  | "pending"
+  | "fetching_checkin"
+  | "deleting"
+  | "success"
+  | "error";
 
 function deletionFlowTransition(
   currentState: DeletionState,
-  event: "start" | "fetch_success" | "fetch_error" | "delete_success" | "delete_error",
+  event:
+    | "start"
+    | "fetch_success"
+    | "fetch_error"
+    | "delete_success"
+    | "delete_error",
 ): DeletionState {
   switch (currentState) {
     case "pending":
