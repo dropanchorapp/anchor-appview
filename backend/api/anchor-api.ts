@@ -492,7 +492,7 @@ async function getCheckinById(
 }
 
 // Helper function to resolve PDS URL from DID
-async function resolvePdsUrl(did: string): Promise<string | null> {
+export async function resolvePdsUrl(did: string): Promise<string | null> {
   try {
     // For bsky.social DIDs, use the main PDS
     if (did.includes("bsky.social")) {
@@ -517,7 +517,9 @@ async function resolvePdsUrl(did: string): Promise<string | null> {
   }
 }
 
-async function resolveHandleToDid(handle: string): Promise<string | null> {
+export async function resolveHandleToDid(
+  handle: string,
+): Promise<string | null> {
   try {
     // Normalize handle (remove @ if present)
     const normalizedHandle = handle.startsWith("@") ? handle.slice(1) : handle;
@@ -558,7 +560,7 @@ async function resolveHandleToDid(handle: string): Promise<string | null> {
   }
 }
 
-async function resolveProfileFromPds(did: string): Promise<
+export async function resolveProfileFromPds(did: string): Promise<
   {
     handle?: string;
     displayName?: string;
