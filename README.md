@@ -225,16 +225,6 @@ management (encrypted with Iron Session).
 
 ## 🔧 Development
 
-### Known Technical Debt
-
-- **Share URL Collisions**: Currently using AT Protocol rkeys as unique
-  identifiers in share URLs (`/checkin/{rkey}`). While collision risk is
-  negligible at current scale (~32 simultaneous checkins per microsecond for 50%
-  collision probability), rkeys only provide 10 bits of entropy and are not
-  cryptographically guaranteed to be globally unique. Consider migrating to
-  composite identifiers (DID+rkey) or backend-generated UUIDs if collision
-  issues emerge at scale.
-
 ### Testing
 
 The project includes comprehensive tests for all components (142 tests):
