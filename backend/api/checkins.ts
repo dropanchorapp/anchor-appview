@@ -107,6 +107,20 @@ interface CheckinRecord {
   category?: string;
   categoryGroup?: string;
   categoryIcon?: string;
+  image?: CheckinImage;
+}
+
+interface CheckinImage {
+  thumb: BlobRef;
+  fullsize: BlobRef;
+  alt?: string;
+}
+
+interface BlobRef {
+  $type: "blob";
+  ref: { $link: string }; // CID
+  mimeType: string;
+  size: number;
 }
 
 interface StrongRef {
@@ -216,8 +230,48 @@ export async function createCheckin(c: Context): Promise<Response> {
 
     const { did } = authResult;
 
-    // Parse request body
-    const body = await c.req.json();
+    // Detect content type and parse accordingly
+    const contentType = c.req.header("content-type") || "";
+    let body: any;
+    let imageFile: File | null = null;
+    let imageAlt: string | undefined;
+
+    if (contentType.includes("multipart/form-data")) {
+      // Parse multipart form data
+      const formData = await c.req.formData();
+
+      // Get place data (sent as JSON string in multipart)
+      const placeData = formData.get("place");
+      if (typeof placeData === "string") {
+        body = { place: JSON.parse(placeData) };
+      } else {
+        return c.json({
+          success: false,
+          error: "Invalid place data in form",
+        }, 400);
+      }
+
+      // Get message
+      const messageData = formData.get("message");
+      if (messageData && typeof messageData === "string") {
+        body.message = messageData;
+      }
+
+      // Get image if present
+      const imageData = formData.get("image");
+      if (imageData && imageData instanceof File) {
+        imageFile = imageData;
+      }
+
+      // Get image alt text
+      const altData = formData.get("imageAlt");
+      if (altData && typeof altData === "string") {
+        imageAlt = altData;
+      }
+    } else {
+      // Parse JSON body (backward compatible)
+      body = await c.req.json();
+    }
 
     // Validate required fields
     if (
@@ -251,6 +305,33 @@ export async function createCheckin(c: Context): Promise<Response> {
 
     console.log("🚀 Starting checkin creation process...");
 
+    // Process image if present
+    let processedImage: {
+      thumb: Uint8Array;
+      thumbMimeType: string;
+      fullsize: Uint8Array;
+      fullsizeMimeType: string;
+    } | null = null;
+
+    if (imageFile) {
+      try {
+        const { validateAndProcessImage } = await import(
+          "../services/image-service.ts"
+        );
+
+        const imageBytes = new Uint8Array(await imageFile.arrayBuffer());
+        processedImage = validateAndProcessImage(imageBytes);
+        console.log(
+          `✅ Image processed: thumb ${processedImage.thumb.length} bytes, fullsize ${processedImage.fullsize.length} bytes`,
+        );
+      } catch (imageError) {
+        return c.json({
+          success: false,
+          error: `Image processing failed: ${imageError.message}`,
+        }, 400);
+      }
+    }
+
     // Get sessions instance for clean OAuth API access
     const { sessions } = await import("../routes/oauth.ts");
 
@@ -260,6 +341,8 @@ export async function createCheckin(c: Context): Promise<Response> {
       did,
       place,
       message || "",
+      processedImage,
+      imageAlt,
     );
 
     if (!createResult.success) {
@@ -281,6 +364,7 @@ export async function createCheckin(c: Context): Promise<Response> {
       addressUri: createResult.addressUri,
       shareableId: shareableId,
       shareableUrl: `https://dropanchor.app/checkin/${shareableId}`,
+      imageUploaded: !!processedImage,
     });
   } catch (err) {
     console.error("❌ Checkin creation failed:", err);
@@ -305,6 +389,13 @@ async function createAddressAndCheckin(
   did: string,
   place: Place,
   message: string,
+  processedImage?: {
+    thumb: Uint8Array;
+    thumbMimeType: string;
+    fullsize: Uint8Array;
+    fullsizeMimeType: string;
+  } | null,
+  imageAlt?: string,
 ): Promise<
   { success: boolean; checkinUri?: string; addressUri?: string; error?: string }
 > {
@@ -372,7 +463,92 @@ async function createAddressAndCheckin(
     const addressResult = await addressResponse.json();
     console.log(`✅ Created address record: ${addressResult.uri}`);
 
-    // Step 2: Create checkin record with StrongRef to address
+    // Step 2: Upload image blobs if present
+    let imageData: CheckinImage | undefined;
+
+    if (processedImage) {
+      try {
+        console.log("📸 Uploading image blobs to PDS...");
+
+        // Upload thumbnail - copy to new ArrayBuffer for type safety
+        const thumbBuffer = new ArrayBuffer(processedImage.thumb.byteLength);
+        const thumbView = new Uint8Array(thumbBuffer);
+        thumbView.set(processedImage.thumb);
+        const thumbBlob = new Blob([thumbBuffer], {
+          type: processedImage.thumbMimeType,
+        });
+        const thumbResponse = await oauthSession.makeRequest(
+          "POST",
+          `${oauthSession.pdsUrl}/xrpc/com.atproto.repo.uploadBlob`,
+          {
+            headers: {
+              "Content-Type": processedImage.thumbMimeType,
+            },
+            body: thumbBlob,
+          },
+        );
+
+        if (!thumbResponse.ok) {
+          throw new Error("Failed to upload thumbnail");
+        }
+
+        const thumbResult = await thumbResponse.json();
+
+        // Upload fullsize - copy to new ArrayBuffer for type safety
+        const fullsizeBuffer = new ArrayBuffer(
+          processedImage.fullsize.byteLength,
+        );
+        const fullsizeView = new Uint8Array(fullsizeBuffer);
+        fullsizeView.set(processedImage.fullsize);
+        const fullsizeBlob = new Blob([fullsizeBuffer], {
+          type: processedImage.fullsizeMimeType,
+        });
+        const fullsizeResponse = await oauthSession.makeRequest(
+          "POST",
+          `${oauthSession.pdsUrl}/xrpc/com.atproto.repo.uploadBlob`,
+          {
+            headers: {
+              "Content-Type": processedImage.fullsizeMimeType,
+            },
+            body: fullsizeBlob,
+          },
+        );
+
+        if (!fullsizeResponse.ok) {
+          throw new Error("Failed to upload fullsize image");
+        }
+
+        const fullsizeResult = await fullsizeResponse.json();
+
+        // Create image data structure
+        imageData = {
+          thumb: {
+            $type: "blob",
+            ref: { $link: thumbResult.blob.ref.$link },
+            mimeType: thumbResult.blob.mimeType,
+            size: thumbResult.blob.size,
+          },
+          fullsize: {
+            $type: "blob",
+            ref: { $link: fullsizeResult.blob.ref.$link },
+            mimeType: fullsizeResult.blob.mimeType,
+            size: fullsizeResult.blob.size,
+          },
+        };
+
+        if (imageAlt) {
+          imageData.alt = imageAlt;
+        }
+
+        console.log(`✅ Image blobs uploaded successfully`);
+      } catch (imageError) {
+        console.error("❌ Failed to upload image blobs:", imageError);
+        // Don't fail the checkin, just skip the image
+        imageData = undefined;
+      }
+    }
+
+    // Step 3: Create checkin record with StrongRef to address
     const checkinRecord: CheckinRecord = {
       $type: "app.dropanchor.checkin",
       text: message,
@@ -386,6 +562,11 @@ async function createAddressAndCheckin(
       categoryGroup,
       categoryIcon,
     };
+
+    // Add image if successfully uploaded
+    if (imageData) {
+      checkinRecord.image = imageData;
+    }
 
     const checkinResponse = await oauthSession.makeRequest(
       "POST",

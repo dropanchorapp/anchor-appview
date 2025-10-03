@@ -258,7 +258,6 @@ function getPlaceCategories(corsHeaders: CorsHeaders): Response {
 }
 
 // Create service instances to reuse
-const overpassService = new OverpassService();
 const nominatimService = new NominatimService();
 
 async function searchPlaces(
@@ -362,97 +361,6 @@ async function searchPlaces(
   }
 }
 
-async function _formatCheckinWithPlaces(
-  row: any,
-  profiles: Map<string, Profile>,
-): Promise<CheckinRecord> {
-  const profile = profiles.get(row.did as string);
-
-  const checkin: any = {
-    id: row.id,
-    uri: row.uri,
-    author: {
-      did: row.did,
-      handle: profile?.handle || row.handle || row.did,
-      displayName: profile?.displayName,
-      avatar: profile?.avatar,
-    },
-    text: row.text,
-    createdAt: row.createdAt, // Fixed field name - Drizzle returns createdAt not created_at
-  };
-
-  // Add coordinates if available
-  if (row.latitude && row.longitude) {
-    checkin.coordinates = {
-      latitude: row.latitude,
-      longitude: row.longitude,
-    };
-  }
-
-  // Add address if available - using unified venueName field (no more confusion!)
-  if (
-    row.venueName || row.addressStreet || row.addressLocality ||
-    row.addressRegion || row.addressCountry || row.addressPostalCode
-  ) {
-    checkin.address = {
-      name: row.venueName, // UNIFIED venue name field - always consistent
-      street: row.addressStreet,
-      locality: row.addressLocality,
-      region: row.addressRegion,
-      country: row.addressCountry,
-      postalCode: row.addressPostalCode,
-    };
-  } else if (row.latitude && row.longitude) {
-    // If no cached address data, try to find the nearest place via Overpass
-    try {
-      const nearbyPlaces = await overpassService.findNearbyPlaces(
-        { latitude: row.latitude, longitude: row.longitude },
-        100, // 100 meter radius
-        [], // All categories
-      );
-
-      if (nearbyPlaces.length > 0) {
-        // Use the first (closest) place found
-        const nearestPlace = nearbyPlaces[0];
-        checkin.address = {
-          name: nearestPlace.name, // Use the actual venue name from OSM
-          street: nearestPlace.address?.street,
-          locality: nearestPlace.address?.locality,
-          region: nearestPlace.address?.region,
-          country: nearestPlace.address?.country,
-          postalCode: nearestPlace.address?.postalCode,
-        };
-      }
-    } catch (error) {
-      console.warn("Failed to lookup nearby place:", error);
-      // Continue without address data - this is non-critical
-    }
-  }
-
-  // Add distance if calculated
-  if (row.distance !== undefined) {
-    checkin.distance = Math.round(row.distance * 100) / 100; // 2 decimal places
-  }
-
-  return checkin;
-}
-
-function _calculateDistance(
-  lat1: number,
-  lng1: number,
-  lat2: number,
-  lng2: number,
-): number {
-  const R = 6371; // Earth's radius in km
-  const dLat = (lat2 - lat1) * Math.PI / 180;
-  const dLng = (lng2 - lng1) * Math.PI / 180;
-  const a = Math.sin(dLat / 2) * Math.sin(dLat / 2) +
-    Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
-      Math.sin(dLng / 2) * Math.sin(dLng / 2);
-  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-  return R * c;
-}
-
 async function getCheckinById(
   checkinId: string,
   corsHeaders: CorsHeaders,
@@ -554,6 +462,20 @@ async function getCheckinById(
       } catch (err) {
         console.warn("Failed to resolve address for checkin:", atUri, err);
       }
+    }
+
+    // Add image URLs if image exists
+    if (checkinData.value.image) {
+      const thumbCid = checkinData.value.image.thumb.ref.$link;
+      const fullsizeCid = checkinData.value.image.fullsize.ref.$link;
+
+      checkin.image = {
+        thumbUrl:
+          `${pdsUrl}/xrpc/com.atproto.sync.getBlob?did=${did}&cid=${thumbCid}`,
+        fullsizeUrl:
+          `${pdsUrl}/xrpc/com.atproto.sync.getBlob?did=${did}&cid=${fullsizeCid}`,
+        alt: checkinData.value.image.alt,
+      };
     }
 
     return new Response(JSON.stringify(checkin), {
@@ -923,6 +845,20 @@ async function getUserCheckins(
           }
         }
 
+        // Add image URLs if image exists
+        if (record.value.image) {
+          const thumbCid = record.value.image.thumb.ref.$link;
+          const fullsizeCid = record.value.image.fullsize.ref.$link;
+
+          checkin.image = {
+            thumbUrl:
+              `${pdsUrl}/xrpc/com.atproto.sync.getBlob?did=${targetDid}&cid=${thumbCid}`,
+            fullsizeUrl:
+              `${pdsUrl}/xrpc/com.atproto.sync.getBlob?did=${targetDid}&cid=${fullsizeCid}`,
+            alt: record.value.image.alt,
+          };
+        }
+
         return checkin;
       }),
     );
@@ -1046,6 +982,20 @@ async function getUserCheckinsByDid(
           }
         }
 
+        // Add image URLs if image exists
+        if (record.value.image) {
+          const thumbCid = record.value.image.thumb.ref.$link;
+          const fullsizeCid = record.value.image.fullsize.ref.$link;
+
+          checkin.image = {
+            thumbUrl:
+              `${pdsUrl}/xrpc/com.atproto.sync.getBlob?did=${did}&cid=${thumbCid}`,
+            fullsizeUrl:
+              `${pdsUrl}/xrpc/com.atproto.sync.getBlob?did=${did}&cid=${fullsizeCid}`,
+            alt: record.value.image.alt,
+          };
+        }
+
         return checkin;
       }),
     );
@@ -1159,6 +1109,20 @@ async function getCheckinByDidAndRkey(
           err,
         );
       }
+    }
+
+    // Add image URLs if image exists
+    if (checkinData.value.image) {
+      const thumbCid = checkinData.value.image.thumb.ref.$link;
+      const fullsizeCid = checkinData.value.image.fullsize.ref.$link;
+
+      checkin.image = {
+        thumbUrl:
+          `${pdsUrl}/xrpc/com.atproto.sync.getBlob?did=${did}&cid=${thumbCid}`,
+        fullsizeUrl:
+          `${pdsUrl}/xrpc/com.atproto.sync.getBlob?did=${did}&cid=${fullsizeCid}`,
+        alt: checkinData.value.image.alt,
+      };
     }
 
     return new Response(JSON.stringify(checkin), {

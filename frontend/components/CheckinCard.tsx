@@ -197,10 +197,34 @@ export function CheckinCard({ checkin, auth, onDelete }: CheckinCardProps) {
               fontSize: "15px",
               lineHeight: "1.4",
               color: "#1c1c1e",
-              marginBottom: "8px",
+              marginBottom: "12px",
             }}
           >
             {checkin.text}
+          </div>
+        )}
+
+        {checkin.image && (
+          <div
+            style={{
+              marginBottom: "12px",
+              width: "120px",
+              height: "120px",
+              borderRadius: "8px",
+              overflow: "hidden",
+              border: "1px solid #e5e5ea",
+            }}
+          >
+            <img
+              src={checkin.image.thumbUrl}
+              alt={checkin.image.alt || "Check-in photo"}
+              style={{
+                width: "100%",
+                height: "100%",
+                objectFit: "cover",
+                display: "block",
+              }}
+            />
           </div>
         )}
 

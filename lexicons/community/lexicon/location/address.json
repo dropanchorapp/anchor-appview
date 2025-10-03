@@ -1,0 +1,50 @@
+{
+  "lexicon": 1,
+  "id": "community.lexicon.location.address",
+  "defs": {
+    "main": {
+      "type": "record",
+      "description": "A structured postal address for a location",
+      "key": "tid",
+      "record": {
+        "type": "object",
+        "properties": {
+          "$type": {
+            "type": "string",
+            "const": "community.lexicon.location.address"
+          },
+          "name": {
+            "type": "string",
+            "maxLength": 500,
+            "description": "Name of the place or venue"
+          },
+          "street": {
+            "type": "string",
+            "maxLength": 500,
+            "description": "Street address"
+          },
+          "locality": {
+            "type": "string",
+            "maxLength": 200,
+            "description": "City or locality"
+          },
+          "region": {
+            "type": "string",
+            "maxLength": 200,
+            "description": "State, province, or region"
+          },
+          "country": {
+            "type": "string",
+            "maxLength": 100,
+            "description": "Country name or code"
+          },
+          "postalCode": {
+            "type": "string",
+            "maxLength": 20,
+            "description": "Postal or ZIP code"
+          }
+        }
+      }
+    }
+  }
+}

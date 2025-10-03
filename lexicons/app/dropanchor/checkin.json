@@ -1,0 +1,117 @@
+{
+  "lexicon": 1,
+  "id": "app.dropanchor.checkin",
+  "defs": {
+    "main": {
+      "type": "record",
+      "description": "A location check-in record for the Anchor app",
+      "key": "tid",
+      "record": {
+        "type": "object",
+        "required": ["text", "createdAt", "addressRef", "coordinates"],
+        "properties": {
+          "text": {
+            "type": "string",
+            "maxLength": 3000,
+            "description": "The check-in message or note"
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "datetime",
+            "description": "When the check-in was created"
+          },
+          "addressRef": {
+            "type": "ref",
+            "ref": "#strongRef",
+            "description": "Reference to the address record"
+          },
+          "coordinates": {
+            "type": "ref",
+            "ref": "#geoCoordinates",
+            "description": "Geographic coordinates of the check-in"
+          },
+          "category": {
+            "type": "string",
+            "maxLength": 100,
+            "description": "Place category (e.g., cafe, restaurant)"
+          },
+          "categoryGroup": {
+            "type": "string",
+            "maxLength": 100,
+            "description": "Category group for organization"
+          },
+          "categoryIcon": {
+            "type": "string",
+            "maxLength": 10,
+            "description": "Emoji icon for the category"
+          },
+          "image": {
+            "type": "ref",
+            "ref": "#checkinImage",
+            "description": "Optional image attachment for the check-in"
+          }
+        }
+      }
+    },
+    "checkinImage": {
+      "type": "object",
+      "description": "Image attachment with thumbnail and full-size versions",
+      "required": ["thumb", "fullsize"],
+      "properties": {
+        "thumb": {
+          "type": "blob",
+          "accept": ["image/jpeg", "image/png", "image/webp"],
+          "maxSize": 300000,
+          "description": "Thumbnail version (max 800px width, ~150-300KB)"
+        },
+        "fullsize": {
+          "type": "blob",
+          "accept": ["image/jpeg", "image/png", "image/webp"],
+          "maxSize": 2000000,
+          "description": "Full-size version (max 2000px width, ~1-2MB)"
+        },
+        "alt": {
+          "type": "string",
+          "maxLength": 1000,
+          "description": "Alt text for accessibility"
+        }
+      }
+    },
+    "strongRef": {
+      "type": "object",
+      "description": "A strong reference to another record",
+      "required": ["uri", "cid"],
+      "properties": {
+        "uri": {
+          "type": "string",
+          "format": "at-uri",
+          "description": "AT Protocol URI of the referenced record"
+        },
+        "cid": {
+          "type": "string",
+          "format": "cid",
+          "description": "Content identifier (CID) of the referenced record"
+        }
+      }
+    },
+    "geoCoordinates": {
+      "type": "object",
+      "description": "Geographic coordinates (WGS84)",
+      "required": ["latitude", "longitude"],
+      "properties": {
+        "latitude": {
+          "type": "number",
+          "minimum": -90,
+          "maximum": 90,
+          "description": "Latitude in decimal degrees"
+        },
+        "longitude": {
+          "type": "number",
+          "minimum": -180,
+          "maximum": 180,
+          "description": "Longitude in decimal degrees"
+        }
+      }
+    }
+  }
+}

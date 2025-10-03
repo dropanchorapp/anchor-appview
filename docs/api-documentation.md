@@ -14,7 +14,14 @@ from frontend routes.
 
 ## Authentication
 
-No authentication required. All endpoints are public.
+**Read Endpoints**: No authentication required (public feeds)
+
+**Write Endpoints**: Require OAuth authentication via:
+
+- **Web**: Secure cookies (Iron Session)
+- **Mobile**: Bearer token in `Authorization` header
+
+See [Creating Check-ins](#7-create-check-in) for authenticated endpoint details.
 
 ## Response Format
 
@@ -31,7 +38,8 @@ All responses are JSON with proper CORS headers enabled.
 
 ### Check-in Object
 
-Each check-in in the response includes full profile information:
+Each check-in in the response includes full profile information and optional
+image:
 
 ```json
 {
@@ -56,9 +64,17 @@ Each check-in in the response includes full profile information:
     "region": "CA",
     "country": "US",
     "postalCode": "94111"
+  },
+  "image": {
+    "thumbUrl": "https://pds.example.com/xrpc/com.atproto.sync.getBlob?did=...&cid=bafyrei...",
+    "fullsizeUrl": "https://pds.example.com/xrpc/com.atproto.sync.getBlob?did=...&cid=bafyrei...",
+    "alt": "Latte art at Blue Bottle"
   }
 }
 ```
+
+**Note**: The `image` field is optional and only present when a check-in has an
+attached photo.
 
 ### Error Response
 
@@ -350,7 +366,7 @@ Common category filters include:
 
 ### 6. Statistics
 
-Get AppView health metrics and processing statistics.
+Get AppView health metrics.
 
 **Endpoint:** `GET /api/stats`
 
@@ -366,21 +382,185 @@ curl "https://dropanchor.app/api/stats"
 
 ```json
 {
-  "totalCheckins": 1247,
-  "totalUsers": 89,
-  "recentActivity": 23,
-  "lastProcessingRun": "2025-07-04T10:00:00Z",
+  "activeUsers": 89,
   "timestamp": "2025-07-04T10:45:00Z"
 }
 ```
 
 **Fields:**
 
-- `totalCheckins`: Total number of check-ins in the database
-- `totalUsers`: Number of unique users who have checked in
-- `recentActivity`: Check-ins in the last 24 hours
-- `lastProcessingRun`: Timestamp of last successful data ingestion
+- `activeUsers`: Number of users with active OAuth sessions
 - `timestamp`: Current server timestamp
+
+**Note**: Statistics reflect active OAuth sessions, not total check-ins (which
+are stored in users' PDS servers).
+
+### 7. Create Check-in
+
+Create a new check-in with optional image attachment.
+
+**Endpoint:** `POST /api/checkins`
+
+**Authentication Required**: Yes (OAuth via cookie or Bearer token)
+
+**Content-Type**:
+
+- `application/json` (without image)
+- `multipart/form-data` (with image)
+
+**Request Body (JSON)**:
+
+```json
+{
+  "place": {
+    "latitude": 37.7749,
+    "longitude": -122.4194,
+    "name": "Blue Bottle Coffee",
+    "address": {
+      "$type": "community.lexicon.location.address",
+      "name": "Blue Bottle Coffee",
+      "street": "1 Ferry Building",
+      "locality": "San Francisco",
+      "region": "CA",
+      "country": "US",
+      "postalCode": "94111"
+    }
+  },
+  "message": "Great coffee here!"
+}
+```
+
+**Request Body (FormData with image)**:
+
+```typescript
+const formData = new FormData();
+formData.append(
+  "place",
+  JSON.stringify({
+    latitude: 37.7749,
+    longitude: -122.4194,
+    name: "Blue Bottle Coffee",
+    address: {/* ... */},
+  }),
+);
+formData.append("message", "Great coffee here!");
+formData.append("image", imageFile); // File object (JPEG, PNG, WebP, GIF)
+formData.append("imageAlt", "Latte art at Blue Bottle");
+```
+
+**Image Requirements**:
+
+- **Formats**: JPEG, PNG, WebP, GIF
+- **Max Size**: 10MB (hard limit), <5MB recommended
+- **Validation**: Magic number detection (security)
+- **Privacy**: EXIF data stripped (including GPS)
+- **Processing**: Creates thumbnail (300KB max) and fullsize (2MB max) versions
+
+**Example Request (cURL with image)**:
+
+```bash
+curl -X POST "https://dropanchor.app/api/checkins" \
+  -H "Authorization: Bearer YOUR_SESSION_ID" \
+  -F "place={\"latitude\":37.7749,\"longitude\":-122.4194,\"name\":\"Blue Bottle Coffee\"}" \
+  -F "message=Great coffee here!" \
+  -F "image=@photo.jpg" \
+  -F "imageAlt=Latte art at Blue Bottle"
+```
+
+**Example Request (Swift/iOS)**:
+
+```swift
+var request = URLRequest(url: URL(string: "https://dropanchor.app/api/checkins")!)
+request.httpMethod = "POST"
+request.setValue("Bearer \(sessionId)", forHTTPHeaderField: "Authorization")
+
+let boundary = UUID().uuidString
+request.setValue("multipart/form-data; boundary=\(boundary)", forHTTPHeaderField: "Content-Type")
+
+var body = Data()
+// Add place JSON
+body.append("--\(boundary)\r\n".data(using: .utf8)!)
+body.append("Content-Disposition: form-data; name=\"place\"\r\n\r\n".data(using: .utf8)!)
+body.append(placeJSON.data(using: .utf8)!)
+
+// Add image
+body.append("\r\n--\(boundary)\r\n".data(using: .utf8)!)
+body.append("Content-Disposition: form-data; name=\"image\"; filename=\"photo.jpg\"\r\n".data(using: .utf8)!)
+body.append("Content-Type: image/jpeg\r\n\r\n".data(using: .utf8)!)
+body.append(imageData)
+
+body.append("\r\n--\(boundary)--\r\n".data(using: .utf8)!)
+request.httpBody = body
+
+let (data, _) = try await URLSession.shared.data(for: request)
+```
+
+**Success Response** (201 Created):
+
+```json
+{
+  "success": true,
+  "checkin": {
+    "id": "3lbmo5gsjgv2f",
+    "uri": "at://did:plc:wxex3wx5k4ctciupsv5m5stb/app.dropanchor.checkin/3lbmo5gsjgv2f",
+    "author": {
+      "did": "did:plc:wxex3wx5k4ctciupsv5m5stb",
+      "handle": "tijs.social"
+    },
+    "text": "Great coffee here!",
+    "createdAt": "2025-07-04T10:00:00Z",
+    "image": {
+      "thumbUrl": "https://pds.example.com/xrpc/com.atproto.sync.getBlob?did=...&cid=...",
+      "fullsizeUrl": "https://pds.example.com/xrpc/com.atproto.sync.getBlob?did=...&cid=...",
+      "alt": "Latte art at Blue Bottle"
+    }
+  }
+}
+```
+
+**Error Response** (400 Bad Request):
+
+```json
+{
+  "error": "Image too large (max 10MB)"
+}
+```
+
+**Possible Errors**:
+
+- `401 Unauthorized`: Missing or invalid authentication
+- `400 Bad Request`: Invalid image format, size exceeded, or missing required
+  fields
+- `500 Internal Server Error`: Failed to upload to PDS or create record
+
+### 8. Delete Check-in
+
+Delete a check-in (only the author can delete their own check-ins).
+
+**Endpoint:** `DELETE /api/checkins/:did/:rkey`
+
+**Authentication Required**: Yes (must be the check-in author)
+
+**Example Request**:
+
+```bash
+curl -X DELETE "https://dropanchor.app/api/checkins/did:plc:wxex3wx5k4ctciupsv5m5stb/3lbmo5gsjgv2f" \
+  -H "Authorization: Bearer YOUR_SESSION_ID"
+```
+
+**Success Response** (200 OK):
+
+```json
+{
+  "success": true
+}
+```
+
+**Error Responses**:
+
+- `401 Unauthorized`: Not authenticated or not the author
+- `404 Not Found`: Check-in doesn't exist
+- `500 Internal Server Error`: Failed to delete from PDS
 
 ## Data Model
 
@@ -388,11 +568,13 @@ curl "https://dropanchor.app/api/stats"
 
 ```typescript
 interface Checkin {
-  id: string; // Unique record identifier
+  id: string; // Unique record identifier (rkey)
   uri: string; // Full AT Protocol URI
   author: {
     did: string; // User's decentralized identifier
     handle: string; // User's Bluesky handle
+    displayName?: string; // User's display name
+    avatar?: string; // User's avatar URL
   };
   text: string; // Check-in message/review
   createdAt: string; // ISO timestamp
@@ -408,6 +590,11 @@ interface Checkin {
     country?: string; // Country
     postalCode?: string; // Postal/ZIP code
   };
+  image?: { // Optional image attachment
+    thumbUrl: string; // Thumbnail URL (300KB max)
+    fullsizeUrl: string; // Full-size URL (2MB max)
+    alt?: string; // Alt text description
+  };
   distance?: number; // Distance in km (only in nearby results)
 }
 ```
@@ -417,8 +604,10 @@ interface Checkin {
 | Status Code | Description                                 |
 | ----------- | ------------------------------------------- |
 | 200         | Success                                     |
+| 201         | Created - Check-in successfully created     |
 | 400         | Bad Request - Missing or invalid parameters |
-| 404         | Not Found - Invalid endpoint                |
+| 401         | Unauthorized - Authentication required      |
+| 404         | Not Found - Resource doesn't exist          |
 | 429         | Too Many Requests - Rate limit exceeded     |
 | 500         | Internal Server Error                       |
 
@@ -572,6 +761,17 @@ For API support and feature requests, please visit:
 - AT Protocol Documentation: [atproto.com](https://atproto.com)
 
 ## Changelog
+
+### v1.1.0 (2025-10-03)
+
+- **Image Support**: Optional image attachments for check-ins
+  - Thumbnail and fullsize versions
+  - Privacy-first: EXIF data stripped including GPS
+  - Magic number validation for security
+  - Support for JPEG, PNG, WebP, GIF
+- **Delete Endpoint**: Users can delete their own check-ins
+- **OAuth Authentication**: Secure authentication for write operations
+- **PDS-Only Architecture**: All check-in data stored in users' PDS
 
 ### v1.0.0 (2025-07-04)
 

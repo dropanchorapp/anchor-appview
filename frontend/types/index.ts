@@ -23,6 +23,11 @@ export interface CheckinData {
     country?: string;
     postalCode?: string;
   };
+  image?: {
+    thumbUrl: string;
+    fullsizeUrl: string;
+    alt?: string;
+  };
   distance?: number;
 }
 

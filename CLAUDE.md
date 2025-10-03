@@ -47,8 +47,11 @@ The only local data storage is `iron_session_storage` table for OAuth sessions.
 
 - Creates checkins via AT Protocol `createRecord` with immediate PDS writes
 - Two-record pattern: address record + checkin record with StrongRef
+- Optional image attachments uploaded as blobs to user's PDS
+- Image validation via magic numbers, EXIF stripping for privacy
 - Address enhancement via Overpass API (OpenStreetMap)
 - Authentication via Bearer tokens (mobile) or cookies (web)
+- Supports both JSON and multipart/form-data (for images)
 
 **Feed API** (`backend/api/anchor-api.ts`):
 

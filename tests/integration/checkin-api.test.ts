@@ -79,6 +79,28 @@ function _createMockOAuthSession(did: string): MockOAuthSession {
         return Promise.resolve(new Response(null, { status: 200 }));
       }
 
+      if (url.includes("uploadBlob")) {
+        // Mock successful blob upload
+        const cid = "bafkreiabcd1234567890abcdef" +
+          Math.random().toString(36).substring(7);
+        return Promise.resolve(
+          new Response(
+            JSON.stringify({
+              blob: {
+                $type: "blob",
+                ref: { $link: cid },
+                mimeType: "image/jpeg",
+                size: 12345,
+              },
+            }),
+            {
+              status: 200,
+              headers: { "Content-Type": "application/json" },
+            },
+          ),
+        );
+      }
+
       // Default mock response
       return Promise.resolve(
         new Response(JSON.stringify({ error: "Not implemented" }), {
@@ -533,4 +555,56 @@ Deno.test("Checkin API - CORS headers present on responses", () => {
     corsHeaders["Access-Control-Allow-Methods"].includes("DELETE"),
     true,
   );
+});
+
+Deno.test("Checkin API - POST /api/checkins with image attachment via multipart/form-data", () => {
+  // Create a minimal JPEG image for testing
+  const jpegData = new Uint8Array([
+    0xFF,
+    0xD8, // SOI
+    0xFF,
+    0xC0, // SOF0
+    0x00,
+    0x0B, // Length
+    0x08, // Precision
+    0x00,
+    0x10, // Height
+    0x00,
+    0x10, // Width
+    0x01, // Components
+    0x01, // Component ID
+    0x11, // Sampling
+    0x00, // Quantization
+    0xFF,
+    0xD9, // EOI
+  ]);
+
+  // Create FormData with place, message, and image
+  const formData = new FormData();
+  formData.append(
+    "place",
+    JSON.stringify({
+      name: "Test Cafe with Photo",
+      latitude: 40.7128,
+      longitude: -74.0060,
+      tags: { amenity: "cafe" },
+    }),
+  );
+  formData.append("message", "Great coffee with a photo!");
+  formData.append(
+    "image",
+    new Blob([jpegData], { type: "image/jpeg" }),
+    "test.jpg",
+  );
+  formData.append("imageAlt", "A nice cup of coffee");
+
+  const req = createAuthenticatedRequest("http://localhost/api/checkins", {
+    method: "POST",
+    body: formData,
+  });
+
+  // Verify request has multipart form data content type
+  const contentType = req.headers.get("Content-Type");
+  assertExists(contentType);
+  assertEquals(contentType?.includes("multipart/form-data"), true);
 });

@@ -1,6 +1,7 @@
 /** @jsxImportSource https://esm.sh/react@19.1.0 */
 import { useEffect, useRef, useState } from "https://esm.sh/react@19.1.0";
 import { CheckinData } from "../types/index.ts";
+import { ImageLightbox } from "./ImageLightbox.tsx";
 
 interface CheckinDetailProps {
   checkinId: string;
@@ -90,6 +91,7 @@ export function CheckinDetail({ checkinId }: CheckinDetailProps) {
   const [checkin, setCheckin] = useState<CheckinData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [lightboxOpen, setLightboxOpen] = useState(false);
 
   // Inject proper CSS styles on mount
   useEffect(() => {
@@ -350,6 +352,37 @@ export function CheckinDetail({ checkinId }: CheckinDetailProps) {
           </div>
         )}
 
+        {/* Image */}
+        {checkin.image && (
+          <div
+            style={{
+              marginBottom: "20px",
+              borderRadius: "12px",
+              overflow: "hidden",
+              border: "1px solid #e5e5ea",
+              cursor: "pointer",
+            }}
+            onClick={() => setLightboxOpen(true)}
+            role="button"
+            tabIndex={0}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" || e.key === " ") {
+                setLightboxOpen(true);
+              }
+            }}
+          >
+            <img
+              src={checkin.image.fullsizeUrl}
+              alt={checkin.image.alt || "Check-in photo"}
+              style={{
+                width: "100%",
+                height: "auto",
+                display: "block",
+              }}
+            />
+          </div>
+        )}
+
         {/* Location info */}
         {(checkin.address || checkin.coordinates) && (
           <div
@@ -543,6 +576,16 @@ export function CheckinDetail({ checkinId }: CheckinDetailProps) {
           )}
         </div>
       </div>
+
+      {/* Image Lightbox */}
+      {checkin.image && (
+        <ImageLightbox
+          isOpen={lightboxOpen}
+          imageUrl={checkin.image.fullsizeUrl}
+          alt={checkin.image.alt || "Check-in photo"}
+          onClose={() => setLightboxOpen(false)}
+        />
+      )}
     </div>
   );
 }

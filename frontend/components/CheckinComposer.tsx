@@ -31,6 +31,12 @@ export function CheckinComposer(
   const [checkinMessage, setCheckinMessage] = useState("");
   const [submitting, setSubmitting] = useState(false);
 
+  // Image state
+  const [selectedImage, setSelectedImage] = useState<File | null>(null);
+  const [imagePreview, setImagePreview] = useState<string | null>(null);
+  const [imageAlt, setImageAlt] = useState("");
+  const [compressingImage, setCompressingImage] = useState(false);
+
   if (!isOpen) return null;
 
   // Get user's browser location
@@ -164,6 +170,200 @@ export function CheckinComposer(
     }
   };
 
+  // Handle image selection with client-side compression
+  const handleImageSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    // Check file type
+    if (!file.type.startsWith("image/")) {
+      alert("Please select an image file");
+      return;
+    }
+
+    // Check file size (30MB max before compression)
+    if (file.size > 30 * 1024 * 1024) {
+      alert("Image too large. Please select an image under 30MB");
+      return;
+    }
+
+    setCompressingImage(true);
+
+    try {
+      // Create preview
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        setImagePreview(e.target?.result as string);
+      };
+      reader.readAsDataURL(file);
+
+      // Compress image using Canvas if it's large
+      if (file.size > 5 * 1024 * 1024) {
+        const compressed = await compressImage(file);
+        setSelectedImage(compressed);
+      } else {
+        setSelectedImage(file);
+      }
+    } catch (error) {
+      console.error("Image processing error:", error);
+      alert("Failed to process image");
+    } finally {
+      setCompressingImage(false);
+    }
+  };
+
+  // Read EXIF orientation from image file
+  const getOrientation = (file: File): Promise<number> => {
+    return new Promise((resolve) => {
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        const view = new DataView(e.target?.result as ArrayBuffer);
+        if (view.getUint16(0, false) !== 0xFFD8) {
+          resolve(1); // Not a JPEG, default orientation
+          return;
+        }
+        const length = view.byteLength;
+        let offset = 2;
+        while (offset < length) {
+          if (view.getUint16(offset + 2, false) <= 8) {
+            offset += view.getUint16(offset, false);
+            continue;
+          }
+          const marker = view.getUint16(offset, false);
+          offset += 2;
+          if (marker === 0xFFE1) {
+            // EXIF marker
+            if (view.getUint32(offset += 2, false) !== 0x45786966) {
+              resolve(1);
+              return;
+            }
+            const little = view.getUint16(offset += 6, false) === 0x4949;
+            offset += view.getUint32(offset + 4, little);
+            const tags = view.getUint16(offset, little);
+            offset += 2;
+            for (let i = 0; i < tags; i++) {
+              if (view.getUint16(offset + (i * 12), little) === 0x0112) {
+                resolve(view.getUint16(offset + (i * 12) + 8, little));
+                return;
+              }
+            }
+          } else if ((marker & 0xFF00) !== 0xFF00) {
+            break;
+          } else {
+            offset += view.getUint16(offset, false);
+          }
+        }
+        resolve(1); // Default orientation
+      };
+      reader.readAsArrayBuffer(file);
+    });
+  };
+
+  // Client-side image compression with EXIF orientation handling
+  const compressImage = async (file: File): Promise<File> => {
+    // Read orientation before processing (then we strip all EXIF for privacy)
+    const orientation = await getOrientation(file);
+
+    return new Promise((resolve, reject) => {
+      const img = new Image();
+      const reader = new FileReader();
+
+      reader.onload = (e) => {
+        img.src = e.target?.result as string;
+      };
+
+      img.onload = () => {
+        const canvas = document.createElement("canvas");
+        let width = img.width;
+        let height = img.height;
+
+        // Resize if too large
+        const maxDimension = 2000;
+        if (width > maxDimension || height > maxDimension) {
+          if (width > height) {
+            height = (height / width) * maxDimension;
+            width = maxDimension;
+          } else {
+            width = (width / height) * maxDimension;
+            height = maxDimension;
+          }
+        }
+
+        // Apply orientation transformations
+        // Orientations 5-8 require swapping width/height
+        if (orientation > 4 && orientation < 9) {
+          canvas.width = height;
+          canvas.height = width;
+        } else {
+          canvas.width = width;
+          canvas.height = height;
+        }
+
+        const ctx = canvas.getContext("2d");
+        if (!ctx) {
+          reject(new Error("Failed to get canvas context"));
+          return;
+        }
+
+        // Transform canvas based on EXIF orientation
+        switch (orientation) {
+          case 2:
+            ctx.transform(-1, 0, 0, 1, width, 0);
+            break;
+          case 3:
+            ctx.transform(-1, 0, 0, -1, width, height);
+            break;
+          case 4:
+            ctx.transform(1, 0, 0, -1, 0, height);
+            break;
+          case 5:
+            ctx.transform(0, 1, 1, 0, 0, 0);
+            break;
+          case 6:
+            ctx.transform(0, 1, -1, 0, height, 0);
+            break;
+          case 7:
+            ctx.transform(0, -1, -1, 0, height, width);
+            break;
+          case 8:
+            ctx.transform(0, -1, 1, 0, 0, width);
+            break;
+          default:
+            break;
+        }
+
+        ctx.drawImage(img, 0, 0, width, height);
+
+        // toBlob() strips ALL EXIF data including GPS location (privacy feature!)
+        canvas.toBlob(
+          (blob) => {
+            if (!blob) {
+              reject(new Error("Failed to compress image"));
+              return;
+            }
+            const compressed = new File([blob], file.name, {
+              type: "image/jpeg",
+            });
+            resolve(compressed);
+          },
+          "image/jpeg",
+          0.85,
+        );
+      };
+
+      img.onerror = () => reject(new Error("Failed to load image"));
+      reader.onerror = () => reject(new Error("Failed to read file"));
+      reader.readAsDataURL(file);
+    });
+  };
+
+  // Remove selected image
+  const removeImage = () => {
+    setSelectedImage(null);
+    setImagePreview(null);
+    setImageAlt("");
+  };
+
   // Submit check-in
   const submitCheckin = async () => {
     if (!selectedVenue) return;
@@ -171,16 +371,22 @@ export function CheckinComposer(
     setSubmitting(true);
 
     try {
+      // Use FormData if image is present
+      const formData = new FormData();
+      formData.append("place", JSON.stringify(selectedVenue));
+      formData.append("message", checkinMessage.trim());
+
+      if (selectedImage) {
+        formData.append("image", selectedImage);
+        if (imageAlt) {
+          formData.append("imageAlt", imageAlt);
+        }
+      }
+
       const response = await fetch("/api/checkins", {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
         credentials: "include",
-        body: JSON.stringify({
-          place: selectedVenue,
-          message: checkinMessage.trim(),
-        }),
+        body: formData,
       });
 
       if (!response.ok) {
@@ -816,6 +1022,144 @@ export function CheckinComposer(
                 >
                   {checkinMessage.length}/280
                 </div>
+              </div>
+
+              {/* Image Attachment */}
+              <div>
+                <label
+                  style={{
+                    display: "block",
+                    fontSize: "15px",
+                    fontWeight: "600",
+                    color: "#1c1c1e",
+                    marginBottom: "8px",
+                  }}
+                >
+                  Add a photo (optional)
+                </label>
+
+                {!selectedImage && (
+                  <div>
+                    <input
+                      type="file"
+                      accept="image/jpeg,image/png,image/webp,image/gif"
+                      onChange={handleImageSelect}
+                      disabled={compressingImage}
+                      style={{ display: "none" }}
+                      id="image-upload"
+                    />
+                    <label
+                      htmlFor="image-upload"
+                      style={{
+                        display: "inline-flex",
+                        alignItems: "center",
+                        gap: "8px",
+                        padding: "12px 16px",
+                        background: "#f2f2f7",
+                        border: "1px solid #e5e5ea",
+                        borderRadius: "10px",
+                        fontSize: "15px",
+                        fontWeight: "500",
+                        color: "#007aff",
+                        cursor: compressingImage ? "not-allowed" : "pointer",
+                        opacity: compressingImage ? 0.5 : 1,
+                      }}
+                    >
+                      <span style={{ fontSize: "20px" }}>📷</span>
+                      {compressingImage ? "Compressing..." : "Choose Photo"}
+                    </label>
+                    <div
+                      style={{
+                        fontSize: "13px",
+                        color: "#8e8e93",
+                        marginTop: "6px",
+                      }}
+                    >
+                      Max 30MB • JPEG, PNG, WebP, or GIF
+                    </div>
+                  </div>
+                )}
+
+                {selectedImage && imagePreview && (
+                  <div
+                    style={{
+                      border: "1px solid #e5e5ea",
+                      borderRadius: "10px",
+                      overflow: "hidden",
+                    }}
+                  >
+                    <div style={{ position: "relative" }}>
+                      <img
+                        src={imagePreview}
+                        alt="Preview"
+                        style={{
+                          width: "100%",
+                          height: "auto",
+                          maxHeight: "400px",
+                          objectFit: "contain",
+                          display: "block",
+                        }}
+                      />
+                      <button
+                        type="button"
+                        onClick={removeImage}
+                        style={{
+                          position: "absolute",
+                          top: "12px",
+                          right: "12px",
+                          width: "32px",
+                          height: "32px",
+                          background: "rgba(0, 0, 0, 0.6)",
+                          border: "none",
+                          borderRadius: "50%",
+                          color: "white",
+                          fontSize: "18px",
+                          cursor: "pointer",
+                          display: "flex",
+                          alignItems: "center",
+                          justifyContent: "center",
+                        }}
+                        aria-label="Remove image"
+                      >
+                        ×
+                      </button>
+                    </div>
+                    <div style={{ padding: "12px" }}>
+                      <input
+                        type="text"
+                        value={imageAlt}
+                        onChange={(e) => setImageAlt(e.target.value)}
+                        placeholder="Describe this image (for accessibility)"
+                        maxLength={200}
+                        style={{
+                          width: "100%",
+                          padding: "8px 12px",
+                          border: "1px solid #e5e5ea",
+                          borderRadius: "8px",
+                          fontSize: "14px",
+                          color: "#1c1c1e",
+                          fontFamily: "inherit",
+                          outline: "none",
+                        }}
+                        onFocus={(e) => {
+                          e.currentTarget.style.borderColor = "#007aff";
+                        }}
+                        onBlur={(e) => {
+                          e.currentTarget.style.borderColor = "#e5e5ea";
+                        }}
+                      />
+                      <div
+                        style={{
+                          fontSize: "12px",
+                          color: "#8e8e93",
+                          marginTop: "4px",
+                        }}
+                      >
+                        {imageAlt.length}/200
+                      </div>
+                    </div>
+                  </div>
+                )}
               </div>
             </div>
           )}
