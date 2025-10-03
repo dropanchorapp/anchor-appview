@@ -600,7 +600,27 @@ async function resolveHandleToDid(handle: string): Promise<string | null> {
     // Normalize handle (remove @ if present)
     const normalizedHandle = handle.startsWith("@") ? handle.slice(1) : handle;
 
-    // Try resolving via AT Protocol API
+    // Try resolving via Slingshot resolver first
+    try {
+      const slingshotResponse = await fetch(
+        `https://slingshot.microcosm.blue/api/v1/resolve-handle/${
+          encodeURIComponent(normalizedHandle)
+        }`,
+      );
+      if (slingshotResponse.ok) {
+        const data = await slingshotResponse.json();
+        if (data.did) {
+          return data.did;
+        }
+      }
+    } catch (slingshotError) {
+      console.warn(
+        "Slingshot resolver failed, falling back to bsky.social:",
+        slingshotError,
+      );
+    }
+
+    // Fallback to bsky.social resolver
     const response = await fetch(
       `https://bsky.social/xrpc/com.atproto.identity.resolveHandle?handle=${normalizedHandle}`,
     );
@@ -1048,22 +1068,30 @@ async function getUserCheckinsByDid(
   }
 }
 
-// GET /api/checkins/:did/:rkey - Get a specific checkin
+// GET /api/checkins/:identifier/:rkey - Get a specific checkin (identifier can be DID or handle)
 async function getCheckinByDidAndRkey(
-  did: string,
+  identifier: string,
   rkey: string,
   corsHeaders: CorsHeaders,
 ): Promise<Response> {
   try {
-    // Validate DID format
-    if (!did.startsWith("did:")) {
-      return new Response(
-        JSON.stringify({ error: "Invalid DID format" }),
-        {
-          status: 400,
-          headers: corsHeaders,
-        },
-      );
+    // Resolve identifier to DID (handle if it doesn't start with "did:", otherwise use as-is)
+    let did: string;
+    if (identifier.startsWith("did:")) {
+      did = identifier;
+    } else {
+      // Treat as handle and resolve to DID
+      const resolvedDid = await resolveHandleToDid(identifier);
+      if (!resolvedDid) {
+        return new Response(
+          JSON.stringify({ error: "Could not resolve handle to DID" }),
+          {
+            status: 404,
+            headers: corsHeaders,
+          },
+        );
+      }
+      did = resolvedDid;
     }
 
     const pdsUrl = await resolvePdsUrl(did);

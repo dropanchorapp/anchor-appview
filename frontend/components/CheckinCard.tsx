@@ -12,8 +12,9 @@ export function CheckinCard({ checkin, auth, onDelete }: CheckinCardProps) {
   const [isDeleting, setIsDeleting] = useState(false);
 
   const handleClick = () => {
-    // Use REST-style URL: /checkins/:did/:rkey
-    globalThis.location.href = `/checkins/${checkin.author.did}/${checkin.id}`;
+    // Use handle-based URL for better readability, fallback to DID if handle not available
+    const identifier = checkin.author.handle || checkin.author.did;
+    globalThis.location.href = `/checkins/${identifier}/${checkin.id}`;
   };
 
   const handleDelete = async (e: React.MouseEvent) => {

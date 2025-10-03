@@ -123,10 +123,10 @@ export function CheckinDetail({ checkinId }: CheckinDetailProps) {
         setLoading(true);
         setError(null);
 
-        // Check if checkinId is in new format (did/rkey) or legacy format
+        // Check if checkinId is in new format (identifier/rkey) or legacy format
         let apiUrl = "";
-        if (checkinId.includes("/") && checkinId.startsWith("did:")) {
-          // New format: did/rkey
+        if (checkinId.includes("/")) {
+          // New format: identifier/rkey (identifier can be DID or handle)
           apiUrl = `/api/checkins/${checkinId}`;
         } else {
           // Legacy format: use old API endpoint
@@ -191,7 +191,10 @@ export function CheckinDetail({ checkinId }: CheckinDetailProps) {
     );
   }
 
-  const shareUrl = `${globalThis.location.origin}/checkin/${checkinId}`;
+  // Use handle-based URL for sharing (more readable), fallback to DID if handle not available
+  const identifier = checkin.author.handle || checkin.author.did;
+  const shareUrl =
+    `${globalThis.location.origin}/checkins/${identifier}/${checkin.id}`;
 
   return (
     <div
