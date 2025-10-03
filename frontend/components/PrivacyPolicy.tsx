@@ -333,7 +333,7 @@ export function PrivacyPolicy() {
             <li style={{ marginBottom: "8px" }}>
               Open an issue on our{" "}
               <a
-                href="https://github.com/dropanchorapp/location-feed-generator"
+                href="https://github.com/dropanchorapp/anchor-appview"
                 target="_blank"
                 rel="noopener noreferrer"
                 style={{ color: "#007aff", textDecoration: "none" }}

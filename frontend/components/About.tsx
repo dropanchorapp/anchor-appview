@@ -272,7 +272,7 @@ export function About({ onLogin }: AboutProps) {
             Explore the web interface and API source code:
           </p>
           <a
-            href="https://github.com/dropanchorapp/location-feed-generator"
+            href="https://github.com/dropanchorapp/anchor-appview"
             target="_blank"
             rel="noopener noreferrer"
             style={{
