@@ -241,27 +241,28 @@ export function createFrontendRoutes() {
     if (checkinData) {
       const checkin = checkinData;
 
-      // Build title from author and location
       const authorName = checkin.author?.displayName ||
         checkin.author?.handle || "Someone";
       const locationName = checkin.address?.name ||
         checkin.address?.locality || "a location";
-      metaTitle = `${authorName} dropped anchor at ${locationName}`;
 
-      // Build description from checkin text and location
+      // Build title from checkin text if available, otherwise use "dropped anchor" format
       if (checkin.text) {
-        metaDescription = checkin.text;
+        metaTitle = checkin.text;
       } else {
-        const locationParts = [
-          checkin.address?.name,
-          checkin.address?.locality,
-          checkin.address?.region,
-          checkin.address?.country,
-        ].filter(Boolean);
-        metaDescription = locationParts.length > 0
-          ? `Check-in at ${locationParts.join(", ")}`
-          : "View this check-in on Anchor";
+        metaTitle = `${authorName} dropped anchor at ${locationName}`;
       }
+
+      // Build description from location info
+      const locationParts = [
+        checkin.address?.name,
+        checkin.address?.locality,
+        checkin.address?.region,
+        checkin.address?.country,
+      ].filter(Boolean);
+      metaDescription = locationParts.length > 0
+        ? `${authorName} at ${locationParts.join(", ")}`
+        : `Check-in by ${authorName}`;
 
       // Use checkin image if available
       if (checkin.image?.fullsizeUrl) {

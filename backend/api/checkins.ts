@@ -405,10 +405,17 @@ async function createAddressAndCheckin(
     // Use the OAuth sessions API to get a ready-to-use session with automatic token refresh
     const oauthSession = await sessions.getOAuthSession(did);
     if (!oauthSession) {
-      console.error("Failed to get OAuth session for DID:", did);
+      console.error(`❌ Failed to get OAuth session for DID: ${did}`);
+      console.error("This usually means:");
+      console.error(
+        "1. User needs to re-authenticate (sign out and sign back in)",
+      );
+      console.error("2. OAuth session expired and needs refresh");
+      console.error("3. Mobile OAuth flow didn't complete properly");
       return {
         success: false,
-        error: "Failed to get OAuth session",
+        error:
+          "OAuth session not found. Please sign out and sign back in to refresh your authentication.",
       };
     }
 

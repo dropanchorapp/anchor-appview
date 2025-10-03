@@ -372,6 +372,7 @@ export class OverpassService {
       : this.getDefaultCategories();
 
     // Build query parts for each category - nodes only for speed
+    // Use compact union syntax without newlines
     const queryParts: string[] = [];
     for (const category of actualCategories) {
       queryParts.push(
@@ -379,13 +380,10 @@ export class OverpassService {
       );
     }
 
+    // Ultra-compact query format
     const query = `[out:json][timeout:${
       Math.floor(this.config.timeout / 1000)
-    }];
-(
-  ${queryParts.join("\n  ")}
-);
-out;`;
+    }];(${queryParts.join("")});out qt;`;
 
     return query;
   }
@@ -542,19 +540,21 @@ out;`;
   /**
    * Resolve administrative boundaries for places lacking direct address tags
    * This helps get locality/country for parks, monuments, and other POIs
+   * Ultra-simplified version to avoid timeouts
    */
   private async resolveAdministrativeBoundaries(
     coordinate: { latitude: number; longitude: number },
   ): Promise<{ locality?: string; region?: string; country?: string }> {
-    const query = `[out:json][timeout:5];
-is_in(${coordinate.latitude},${coordinate.longitude});
-area._[admin_level];
-out tags;`;
+    // Ultra-minimal query: only request essential admin levels (8, 4, 2)
+    // Skip level 10 and 6 which add processing time
+    // Use regex to filter admin levels server-side before returning data
+    const query =
+      `[out:json][timeout:10];is_in(${coordinate.latitude},${coordinate.longitude});area._[admin_level~"^(2|4|8)$"];out tags qt;`;
 
     try {
       const request = this.buildRequest(query);
       const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 5000);
+      const timeoutId = setTimeout(() => controller.abort(), 10000);
 
       const response = await fetch(request, { signal: controller.signal });
       clearTimeout(timeoutId);
@@ -570,61 +570,26 @@ out tags;`;
       let region: string | undefined;
       let country: string | undefined;
 
-      // Collect admin boundaries by level for smarter selection
-      const admin10Districts: string[] = [];
-      const admin8Municipalities: string[] = [];
-      const admin6Counties: string[] = [];
-      const admin4States: string[] = [];
-      const nearbyPlaces: string[] = [];
-
+      // Simplified: only look at the admin levels we requested
       for (const element of elements) {
         const adminLevel = element.tags?.["admin_level"];
         const name = element.tags?.["name"];
 
-        if (adminLevel === "10" && name) {
-          admin10Districts.push(name);
-        } else if (adminLevel === "8" && name) {
-          admin8Municipalities.push(name);
-        } else if (adminLevel === "6" && name && !name.includes("County")) {
-          admin6Counties.push(name);
-        } else if (adminLevel === "4" && name) {
-          // State/Province level (admin_level=4)
-          admin4States.push(name);
-        } else if (element.tags?.["place"] && name) {
-          const placeType = element.tags["place"];
-          if (["city", "town", "village"].includes(placeType)) {
-            nearbyPlaces.push(name);
-          }
+        if (!name) continue;
+
+        if (adminLevel === "8" && !locality) {
+          locality = name;
+        } else if (adminLevel === "4" && !region) {
+          region = name;
         } else if (adminLevel === "2" && !country) {
-          // OSM admin_level=2 boundaries reliably have ISO codes
           country = element.tags?.["ISO3166-1"] ||
             element.tags?.["ISO3166-1:alpha2"] ||
-            // Only fall back to name if no ISO code is available
             element.tags?.["name:en"] ||
-            element.tags?.["name"];
+            name;
         }
-      }
 
-      // Smart locality selection with preference for specific districts
-      if (admin10Districts.length > 0) {
-        // Prefer district names that are NOT the same as municipality names
-        const specificDistricts = admin10Districts.filter((district) =>
-          !admin8Municipalities.some((muni) => district === muni)
-        );
-        locality = specificDistricts.length > 0
-          ? specificDistricts[0]
-          : admin10Districts[0];
-      } else if (nearbyPlaces.length > 0) {
-        locality = nearbyPlaces[0];
-      } else if (admin8Municipalities.length > 0) {
-        locality = admin8Municipalities[0];
-      } else if (admin6Counties.length > 0) {
-        locality = admin6Counties[0];
-      }
-
-      // Select region (state/province)
-      if (admin4States.length > 0) {
-        region = admin4States[0];
+        // Early exit if we have everything
+        if (locality && region && country) break;
       }
 
       console.log(
