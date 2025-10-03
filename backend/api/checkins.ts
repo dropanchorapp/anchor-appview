@@ -733,8 +733,75 @@ async function deleteCheckinAndAddress(
 
     const checkinData = await getRecordResponse.json();
     const addressRef = checkinData.value?.addressRef;
+    const imageData = checkinData.value?.image;
 
-    // Step 1: Delete the checkin record
+    // Step 1: Delete image blobs if they exist
+    if (imageData?.thumb?.ref?.$link || imageData?.fullsize?.ref?.$link) {
+      console.log(`🗑️ Deleting image blobs`);
+
+      // Delete thumbnail blob
+      if (imageData.thumb?.ref?.$link) {
+        try {
+          const thumbCid = imageData.thumb.ref.$link;
+          const deleteThumbResponse = await oauthSession.makeRequest(
+            "POST",
+            `${oauthSession.pdsUrl}/xrpc/com.atproto.repo.deleteBlob`,
+            {
+              headers: {
+                "Content-Type": "application/json",
+              },
+              body: JSON.stringify({
+                did: did,
+                cid: thumbCid,
+              }),
+            },
+          );
+
+          if (!deleteThumbResponse.ok) {
+            const error = await deleteThumbResponse.text();
+            console.warn("Failed to delete thumbnail blob (non-fatal):", error);
+          } else {
+            console.log(`✅ Deleted thumbnail blob: ${thumbCid}`);
+          }
+        } catch (err) {
+          console.warn("Failed to delete thumbnail blob:", err);
+        }
+      }
+
+      // Delete fullsize blob
+      if (imageData.fullsize?.ref?.$link) {
+        try {
+          const fullsizeCid = imageData.fullsize.ref.$link;
+          const deleteFullsizeResponse = await oauthSession.makeRequest(
+            "POST",
+            `${oauthSession.pdsUrl}/xrpc/com.atproto.repo.deleteBlob`,
+            {
+              headers: {
+                "Content-Type": "application/json",
+              },
+              body: JSON.stringify({
+                did: did,
+                cid: fullsizeCid,
+              }),
+            },
+          );
+
+          if (!deleteFullsizeResponse.ok) {
+            const error = await deleteFullsizeResponse.text();
+            console.warn(
+              "Failed to delete fullsize blob (non-fatal):",
+              error,
+            );
+          } else {
+            console.log(`✅ Deleted fullsize blob: ${fullsizeCid}`);
+          }
+        } catch (err) {
+          console.warn("Failed to delete fullsize blob:", err);
+        }
+      }
+    }
+
+    // Step 2: Delete the checkin record
     console.log(`🗑️ Deleting checkin record: ${checkinUri}`);
     const deleteCheckinResponse = await oauthSession.makeRequest(
       "POST",
@@ -762,7 +829,7 @@ async function deleteCheckinAndAddress(
 
     console.log(`✅ Deleted checkin record: ${checkinUri}`);
 
-    // Step 2: Delete the address record if we found a reference
+    // Step 3: Delete the address record if we found a reference
     if (addressRef?.uri) {
       const addressRkey = extractRkey(addressRef.uri);
       console.log(`🗑️ Deleting address record: ${addressRef.uri}`);
