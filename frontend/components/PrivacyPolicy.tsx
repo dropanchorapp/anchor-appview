@@ -58,11 +58,12 @@ export function PrivacyPolicy() {
             Overview
           </h2>
           <p style={{ marginBottom: "16px" }}>
-            Anchor is a personal location logging application that operates on
-            the decentralized AT Protocol network. Your location data is stored
-            on your Personal Data Server (PDS) and cached on our servers to
-            provide feed functionality. This privacy policy explains how your
-            data is handled within this decentralized architecture.
+            Anchor is a personal location logging application built on the
+            decentralized AT Protocol network. All location check-ins are stored
+            exclusively on your Personal Data Server (PDS), which you control.
+            Anchor's servers do not store or cache your check-in data. This
+            privacy policy explains how your data is handled within this
+            decentralized architecture.
           </p>
         </section>
 
@@ -79,9 +80,10 @@ export function PrivacyPolicy() {
           </h2>
           <p style={{ marginBottom: "16px" }}>
             <strong>Your Data, Your Server:</strong>{" "}
-            All location check-ins are primarily stored on your Personal Data
-            Server (PDS), which you control. Anchor's servers also cache
-            location data to provide feed functionality and improve performance.
+            All location check-ins are stored exclusively on your Personal Data
+            Server (PDS), which you control. Anchor's servers read your
+            check-ins directly from your PDS when displaying feeds—we do not
+            store or cache your location data.
           </p>
           <p style={{ marginBottom: "16px" }}>
             <strong>Public Visibility:</strong>{" "}
@@ -138,20 +140,23 @@ export function PrivacyPolicy() {
               color: "#1c1c1e",
             }}
           >
-            Technical Information
+            Technical Information We Store
           </h3>
           <ul style={{ paddingLeft: "24px", marginBottom: "16px" }}>
             <li style={{ marginBottom: "8px" }}>
-              OAuth authentication tokens (stored temporarily for session
-              management)
-            </li>
-            <li style={{ marginBottom: "8px" }}>
-              Basic usage analytics to improve the service
+              OAuth authentication sessions (encrypted and stored securely for
+              login management)
             </li>
             <li style={{ marginBottom: "8px" }}>
               Error logs for debugging purposes
             </li>
           </ul>
+          <p style={{ marginBottom: "16px" }}>
+            <strong>What we don't store:</strong>{" "}
+            We do not store your check-ins, location coordinates, venue
+            information, or any other personal content on our servers. All of
+            this data lives exclusively on your PDS.
+          </p>
         </section>
 
         <section style={{ marginBottom: "32px" }}>
@@ -167,19 +172,19 @@ export function PrivacyPolicy() {
           </h2>
           <ul style={{ paddingLeft: "24px", marginBottom: "16px" }}>
             <li style={{ marginBottom: "8px" }}>
-              To enable location check-in functionality
+              To authenticate you via AT Protocol OAuth
             </li>
             <li style={{ marginBottom: "8px" }}>
-              To resolve venue information and provide rich location data
+              To write check-ins directly to your PDS on your behalf
             </li>
             <li style={{ marginBottom: "8px" }}>
-              To connect you with friends through Bluesky's social network
+              To read check-ins from your PDS and the PDS of users you follow
+            </li>
+            <li style={{ marginBottom: "8px" }}>
+              To resolve venue information via OpenStreetMap/Overpass API
             </li>
             <li style={{ marginBottom: "8px" }}>
               To maintain and improve the Anchor service
-            </li>
-            <li style={{ marginBottom: "8px" }}>
-              To provide customer support when requested
             </li>
           </ul>
         </section>
@@ -205,11 +210,12 @@ export function PrivacyPolicy() {
               For decentralized data storage and social connectivity
             </li>
             <li style={{ marginBottom: "8px" }}>
-              <strong>Bluesky:</strong> For authentication and social graph data
+              <strong>Bluesky:</strong>{" "}
+              For authentication and following relationships
             </li>
             <li style={{ marginBottom: "8px" }}>
-              <strong>OpenStreetMap/Nominatim:</strong>{" "}
-              For location search and venue information
+              <strong>OpenStreetMap/Overpass API:</strong>{" "}
+              For venue search and location enrichment
             </li>
             <li style={{ marginBottom: "8px" }}>
               <strong>Val Town:</strong>{" "}
@@ -230,10 +236,10 @@ export function PrivacyPolicy() {
             Data Security
           </h2>
           <p style={{ marginBottom: "16px" }}>
-            We implement appropriate security measures to protect the
-            information we temporarily process. However, the security of your
-            location data primarily depends on your chosen PDS provider's
-            security practices.
+            We implement appropriate security measures to protect OAuth
+            sessions, which are encrypted using industry-standard methods. Since
+            we do not store your location data, the security of your check-ins
+            depends entirely on your chosen PDS provider's security practices.
           </p>
           <p style={{ marginBottom: "16px" }}>
             <strong>Important:</strong>{" "}
@@ -342,8 +348,15 @@ export function PrivacyPolicy() {
               </a>
             </li>
             <li style={{ marginBottom: "8px" }}>
-              Contact us through the AT Protocol network at your preferred
-              communication method
+              Contact us on Bluesky at{" "}
+              <a
+                href="https://bsky.app/profile/dropanchor.app"
+                target="_blank"
+                rel="noopener noreferrer"
+                style={{ color: "#007aff", textDecoration: "none" }}
+              >
+                @dropanchor.app
+              </a>
             </li>
           </ul>
         </section>
