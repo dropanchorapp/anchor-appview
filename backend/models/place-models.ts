@@ -93,6 +93,7 @@ export interface PlacesNearbyResponse {
     latitude: number;
     longitude: number;
   };
+  provider?: string; // "overpass" | "locationiq" - which provider was used
 }
 
 // Error types

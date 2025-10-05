@@ -203,8 +203,8 @@ async function authenticateUser(
       return null;
     }
 
-    // Get OAuth session data
-    const oauthSession = await storage.get(`oauth_session:${userDid}`);
+    // Get OAuth session data (using updated storage key pattern)
+    const oauthSession = await storage.get(`session:${userDid}`);
     if (!oauthSession) {
       return null;
     }

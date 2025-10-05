@@ -3,7 +3,6 @@
 import { initializeTables } from "../database/db.ts"; // Still needed for OAuth session storage
 // No drizzle imports needed
 // No profile resolver or storage provider needed
-import { OverpassService } from "../services/overpass-service.ts";
 import { CategoryService } from "../services/category-service.ts";
 import { NominatimService } from "../services/nominatim-service.ts";
 import { PlacesNearbyResponse } from "../models/place-models.ts";
@@ -156,6 +155,7 @@ async function getNearbyPlaces(
   );
   const categoriesParam = url.searchParams.get("categories");
   const categories = categoriesParam ? categoriesParam.split(",") : [];
+  const providerParam = url.searchParams.get("provider") || "overpass";
 
   // Validate coordinates
   if (!lat || !lng || Math.abs(lat) > 90 || Math.abs(lng) > 180) {
@@ -172,16 +172,20 @@ async function getNearbyPlaces(
   }
 
   try {
-    // Initialize Overpass service
-    const overpassService = new OverpassService();
+    // Get provider instance
+    const { PlaceProviderFactory } = await import(
+      "../services/places-provider.ts"
+    );
+    const provider = await PlaceProviderFactory.create(providerParam);
+
+    console.log(`📍 Using places provider: ${provider.name}`);
 
     // Search for nearby places
-    const placesWithDistance = await overpassService
-      .findNearbyPlacesWithDistance(
-        { latitude: lat, longitude: lng },
-        radius,
-        categories,
-      );
+    const placesWithDistance = await provider.findNearbyPlacesWithDistance(
+      { latitude: lat, longitude: lng },
+      radius,
+      categories,
+    );
 
     // Map backend PlaceWithDistance to API format (distanceMeters -> distance)
     const apiPlaces = placesWithDistance.map((place) => ({
@@ -199,6 +203,7 @@ async function getNearbyPlaces(
         latitude: lat,
         longitude: lng,
       },
+      provider: provider.name, // Include provider name in response
     };
 
     return new Response(JSON.stringify(response), { headers: corsHeaders });
