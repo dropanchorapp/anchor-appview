@@ -1,5 +1,7 @@
 # Anchor AppView
 
+[![ko-fi](https://ko-fi.com/img/githubbutton_sm.svg)](https://ko-fi.com/tijsteulings)
+
 A complete location-based social feed generator and web interface built on the
 AT Protocol for decentralized social networking. Provides both API endpoints for
 mobile clients and a web interface for viewing and sharing check-ins.
@@ -306,6 +308,10 @@ The AppView is fully compatible with the AT Protocol ecosystem:
 - **DID Resolution**: PLC directory and personal PDS servers
 - **StrongRef Pattern**: Address records referenced via CID-based StrongRefs
 - **Blob Storage**: Images stored as AT Protocol blobs in user's PDS
+
+## ☕ Support Development
+
+If you find this project useful and would like to support its development, you can [buy me a coffee on Ko-fi](https://ko-fi.com/tijsteulings).
 
 ## 📄 License
 
