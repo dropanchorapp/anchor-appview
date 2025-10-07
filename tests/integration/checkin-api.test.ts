@@ -58,7 +58,7 @@ function _createMockOAuthSession(did: string): MockOAuthSession {
                 $type: "app.dropanchor.checkin",
                 text: "Great coffee!",
                 createdAt: new Date().toISOString(),
-                coordinates: { latitude: 40.7128, longitude: -74.0060 },
+                coordinates: { latitude: "40.7128", longitude: "-74.0060" },
                 addressRef: {
                   uri: `at://${did}/community.lexicon.location.address/3k2addr`,
                   cid:

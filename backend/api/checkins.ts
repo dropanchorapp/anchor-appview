@@ -128,9 +128,10 @@ interface StrongRef {
   cid: string;
 }
 
+// DAG-CBOR doesn't support floats, so coordinates must be stored as strings
 interface GeoCoordinates {
-  latitude: number;
-  longitude: number;
+  latitude: string;
+  longitude: string;
 }
 
 // API input format - coordinates might be strings
@@ -427,10 +428,10 @@ async function createAddressAndCheckin(
     // Get enhanced address using existing OverpassService logic
     const addressRecord = await _getEnhancedAddressRecord(place);
 
-    // Build coordinates using validated values
+    // Build coordinates using validated values - convert to strings for DAG-CBOR compliance
     const coordinates: GeoCoordinates = {
-      latitude: place.latitude,
-      longitude: place.longitude,
+      latitude: place.latitude.toString(),
+      longitude: place.longitude.toString(),
     };
 
     // Use category information from the sanitized place object

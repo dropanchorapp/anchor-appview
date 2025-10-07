@@ -52,6 +52,13 @@ async function fetchCheckinData(identifier: string, rkey: string) {
     const profileData = await resolveProfileFromPds(did);
 
     // Build the response object
+    // Parse string coordinates back to numbers for rendering
+    const rawCoords = checkinData.value.coordinates;
+    const coordinates = {
+      latitude: parseFloat(rawCoords.latitude),
+      longitude: parseFloat(rawCoords.longitude),
+    };
+
     const checkin: any = {
       id: rkey,
       uri: `at://${did}/app.dropanchor.checkin/${rkey}`,
@@ -63,7 +70,7 @@ async function fetchCheckinData(identifier: string, rkey: string) {
       },
       text: checkinData.value.text,
       createdAt: checkinData.value.createdAt,
-      coordinates: checkinData.value.coordinates,
+      coordinates,
     };
 
     // Resolve address if addressRef exists

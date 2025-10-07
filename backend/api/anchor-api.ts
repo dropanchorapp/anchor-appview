@@ -438,6 +438,13 @@ async function getCheckinById(
     const profileData = await resolveProfileFromPds(did);
 
     // Build the response object
+    // Parse string coordinates back to numbers for API response
+    const rawCoords = checkinData.value.coordinates;
+    const coordinates = {
+      latitude: parseFloat(rawCoords.latitude),
+      longitude: parseFloat(rawCoords.longitude),
+    };
+
     const checkin: any = {
       id: rkey,
       uri: atUri,
@@ -449,7 +456,7 @@ async function getCheckinById(
       },
       text: checkinData.value.text,
       createdAt: checkinData.value.createdAt,
-      coordinates: checkinData.value.coordinates,
+      coordinates,
     };
 
     // Resolve address if addressRef exists
@@ -816,6 +823,14 @@ async function getUserCheckins(
       data.records.map(async (record: any) => {
         // Extract basic info from the record
         const rkey = record.uri.split("/").pop(); // Extract rkey from AT URI
+
+        // Parse string coordinates back to numbers for API response
+        const rawCoords = record.value.coordinates;
+        const coordinates = {
+          latitude: parseFloat(rawCoords.latitude),
+          longitude: parseFloat(rawCoords.longitude),
+        };
+
         const checkin: any = {
           id: rkey, // Use simple rkey for cleaner URLs
           uri: record.uri,
@@ -827,7 +842,7 @@ async function getUserCheckins(
           },
           text: record.value.text,
           createdAt: record.value.createdAt,
-          coordinates: record.value.coordinates,
+          coordinates,
         };
 
         // Resolve address if addressRef exists
@@ -953,6 +968,14 @@ async function getUserCheckinsByDid(
     const checkins = await Promise.all(
       data.records.map(async (record: any) => {
         const rkey = record.uri.split("/").pop(); // Extract rkey from AT URI
+
+        // Parse string coordinates back to numbers for API response
+        const rawCoords = record.value.coordinates;
+        const coordinates = {
+          latitude: parseFloat(rawCoords.latitude),
+          longitude: parseFloat(rawCoords.longitude),
+        };
+
         const checkin: any = {
           id: rkey, // Use simple rkey for cleaner URLs
           uri: record.uri,
@@ -964,7 +987,7 @@ async function getUserCheckinsByDid(
           },
           text: record.value.text,
           createdAt: record.value.createdAt,
-          coordinates: record.value.coordinates,
+          coordinates,
         };
 
         // Resolve address if addressRef exists
@@ -1083,6 +1106,13 @@ async function getCheckinByDidAndRkey(
     const profileData = await resolveProfileFromPds(did);
 
     // Build the response object
+    // Parse string coordinates back to numbers for API response
+    const rawCoords = checkinData.value.coordinates;
+    const coordinates = {
+      latitude: parseFloat(rawCoords.latitude),
+      longitude: parseFloat(rawCoords.longitude),
+    };
+
     const checkin: any = {
       id: rkey,
       uri: `at://${did}/app.dropanchor.checkin/${rkey}`,
@@ -1094,7 +1124,7 @@ async function getCheckinByDidAndRkey(
       },
       text: checkinData.value.text,
       createdAt: checkinData.value.createdAt,
-      coordinates: checkinData.value.coordinates,
+      coordinates,
     };
 
     // Resolve address if addressRef exists
