@@ -1,13 +1,14 @@
 // @val-town anchorAPI
 // Main HTTP API handler for Anchor AppView
-import { initializeTables } from "../database/db.ts"; // Still needed for OAuth session storage
-// No drizzle imports needed
-// No profile resolver or storage provider needed
+import { initializeTables } from "../database/db.ts";
 import { CategoryService } from "../services/category-service.ts";
 import { NominatimService } from "../services/nominatim-service.ts";
 import { PlacesNearbyResponse } from "../models/place-models.ts";
 import { createCheckin } from "./checkins.ts";
-// No database queries needed - PDS-only architecture
+import {
+  exportUserData as exportUsers,
+  getStatsResponse,
+} from "../services/user-stats-service.ts";
 
 // Types for better TypeScript support
 interface CorsHeaders {
@@ -76,7 +77,9 @@ export default async function (req: Request): Promise<Response> {
     case "/api/places/categories":
       return getPlaceCategories(corsHeaders);
     case "/api/stats":
-      return getStats(corsHeaders);
+      return await getStats(corsHeaders);
+    case "/api/stats/export":
+      return await getUserDataExport(corsHeaders);
     case "/api/user":
       return await getUserCheckins(req, corsHeaders);
     default: {
@@ -131,16 +134,41 @@ export default async function (req: Request): Promise<Response> {
 
 // Unused database-dependent functions removed - PDS-only architecture
 
-function getStats(corsHeaders: CorsHeaders): Response {
-  // PDS-only architecture - no database stats available
-  const stats = {
-    status: "PDS-only mode",
-    message: "All check-in data read directly from personal data servers",
-    architecture: "decentralized",
-    timestamp: new Date().toISOString(),
-  };
+async function getStats(corsHeaders: CorsHeaders): Promise<Response> {
+  try {
+    const statsResponse = await getStatsResponse();
 
-  return new Response(JSON.stringify(stats), { headers: corsHeaders });
+    if (statsResponse.success && statsResponse.data) {
+      return new Response(JSON.stringify(statsResponse), {
+        headers: corsHeaders,
+      });
+    } else {
+      return new Response(
+        JSON.stringify({
+          success: false,
+          error: statsResponse.error || "Failed to generate user statistics",
+          timestamp: new Date().toISOString(),
+        }),
+        {
+          status: 500,
+          headers: corsHeaders,
+        },
+      );
+    }
+  } catch (error) {
+    console.error("Stats endpoint error:", error);
+    return new Response(
+      JSON.stringify({
+        success: false,
+        error: "Internal server error",
+        timestamp: new Date().toISOString(),
+      }),
+      {
+        status: 500,
+        headers: corsHeaders,
+      },
+    );
+  }
 }
 
 async function getNearbyPlaces(
@@ -500,6 +528,43 @@ async function getCheckinById(
       status: 500,
       headers: corsHeaders,
     });
+  }
+}
+
+async function getUserDataExport(corsHeaders: CorsHeaders): Promise<Response> {
+  try {
+    const users = await exportUsers();
+
+    return new Response(
+      JSON.stringify({
+        success: true,
+        data: {
+          users,
+          totalUsers: users.length,
+          exportedAt: new Date().toISOString(),
+        },
+        timestamp: new Date().toISOString(),
+      }),
+      {
+        headers: {
+          ...corsHeaders,
+          "Content-Type": "application/json",
+        },
+      },
+    );
+  } catch (error) {
+    console.error("User data export error:", error);
+    return new Response(
+      JSON.stringify({
+        success: false,
+        error: "Failed to export user data",
+        timestamp: new Date().toISOString(),
+      }),
+      {
+        status: 500,
+        headers: corsHeaders,
+      },
+    );
   }
 }
 
