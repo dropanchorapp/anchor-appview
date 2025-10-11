@@ -120,7 +120,7 @@ function createAuthenticatedRequest(
   const headers = new Headers(options.headers || {});
 
   if (authType === "cookie") {
-    headers.set("Cookie", "sid=mock-session-cookie");
+    headers.set("Cookie", "session=mock-session-cookie");
   } else {
     headers.set("Authorization", "Bearer mock-bearer-token-valid");
   }
@@ -464,7 +464,7 @@ Deno.test("Checkin API - Authentication via Cookie (web)", () => {
   const req = new Request("http://localhost/api/checkins", {
     method: "POST",
     headers: {
-      "Cookie": "sid=mock-session-cookie",
+      "Cookie": "session=mock-session-cookie",
       "Content-Type": "application/json",
     },
     body: JSON.stringify({
@@ -479,7 +479,7 @@ Deno.test("Checkin API - Authentication via Cookie (web)", () => {
 
   const cookieHeader = req.headers.get("Cookie");
   assertExists(cookieHeader);
-  assertEquals(cookieHeader.includes("sid="), true);
+  assertEquals(cookieHeader.includes("session="), true);
 });
 
 Deno.test("Checkin API - Bearer token takes precedence over cookie", () => {
@@ -487,7 +487,7 @@ Deno.test("Checkin API - Bearer token takes precedence over cookie", () => {
     method: "POST",
     headers: {
       "Authorization": "Bearer mock-bearer-token-valid",
-      "Cookie": "sid=mock-session-cookie",
+      "Cookie": "session=mock-session-cookie",
       "Content-Type": "application/json",
     },
     body: JSON.stringify({

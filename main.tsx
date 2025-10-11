@@ -3,8 +3,6 @@
 import { Hono } from "jsr:@hono/hono@4.9.6";
 import { initializeTables } from "./backend/database/db.ts";
 import { oauthRoutes } from "./backend/routes/oauth.ts";
-// No admin routes needed - PDS-only architecture
-// No cron/ingestion routes needed - PDS-only architecture
 import { createFrontendRoutes } from "./backend/routes/frontend.ts";
 import anchorApiHandler from "./backend/api/anchor-api.ts";
 import { createCheckin, deleteCheckin } from "./backend/api/checkins.ts";
@@ -14,7 +12,10 @@ const app = new Hono();
 // Initialize database on startup
 await initializeTables();
 
-// Mount API routes FIRST (before catch-all frontend routes)
+// Mount OAuth routes FIRST - provides /login, /oauth/callback, /api/auth/session, etc.
+app.route("/", oauthRoutes);
+
+// Mount API routes (before catch-all frontend routes)
 app.get("/api/nearby", async (c) => {
   return await anchorApiHandler(c.req.raw);
 });
@@ -39,6 +40,34 @@ app.post("/api/checkins", async (c) => {
 app.delete("/api/checkins/:did/:rkey", async (c) => {
   return await deleteCheckin(c);
 });
+
+// Likes and comments endpoints - handled by anchor-api
+// Routes: /api/checkins/:did/:rkey/likes and /api/checkins/:did/:rkey/comments
+app.get("/api/checkins/:did/:rkey/likes", async (c) => {
+  return await anchorApiHandler(c.req.raw);
+});
+
+app.post("/api/checkins/:did/:rkey/likes", async (c) => {
+  return await anchorApiHandler(c.req.raw);
+});
+
+app.delete("/api/checkins/:did/:rkey/likes", async (c) => {
+  return await anchorApiHandler(c.req.raw);
+});
+
+app.get("/api/checkins/:did/:rkey/comments", async (c) => {
+  return await anchorApiHandler(c.req.raw);
+});
+
+app.post("/api/checkins/:did/:rkey/comments", async (c) => {
+  return await anchorApiHandler(c.req.raw);
+});
+
+app.delete("/api/checkins/:did/:rkey/comments", async (c) => {
+  return await anchorApiHandler(c.req.raw);
+});
+
+// Note: /api/auth/session endpoint is provided by the OAuth package (oauthRoutes)
 
 // Legacy /api/user endpoints for backward compatibility
 app.get("/api/user/:identifier", (c) => {
@@ -178,8 +207,6 @@ app.get("/api/debug/oauth-sessions", async (c) => {
   }
 });
 
-// Mount other route groups
-app.route("/", oauthRoutes);
 // No admin routes mounted - PDS-only architecture
 // No cron/ingestion routes mounted - PDS-only architecture
 

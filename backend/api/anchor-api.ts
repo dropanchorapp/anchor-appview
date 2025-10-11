@@ -9,6 +9,13 @@ import {
   exportUserData as exportUsers,
   getStatsResponse,
 } from "../services/user-stats-service.ts";
+import { createLike, getLikesForCheckin, removeLike } from "./likes.ts";
+import {
+  createComment,
+  getCommentsForCheckin,
+  removeComment,
+} from "./comments.ts";
+import { sessions } from "../routes/oauth.ts";
 
 // Types for better TypeScript support
 interface CorsHeaders {
@@ -83,6 +90,82 @@ export default async function (req: Request): Promise<Response> {
     case "/api/user":
       return await getUserCheckins(req, corsHeaders);
     default: {
+      // Handle likes endpoints: /api/checkins/:identifier/:rkey/likes
+      // identifier can be either a DID or a handle
+      const likesMatch = url.pathname.match(
+        /^\/api\/checkins\/([^\/]+)\/([^\/]+)\/likes$/,
+      );
+      if (likesMatch) {
+        const [, identifier, rkey] = likesMatch;
+
+        // For GET requests, resolve identifier to DID
+        if (req.method === "GET") {
+          let did = identifier;
+          if (!identifier.startsWith("did:")) {
+            const resolvedDid = await resolveHandleToDid(identifier);
+            if (!resolvedDid) {
+              return new Response(
+                JSON.stringify({
+                  error: `Failed to resolve handle: ${identifier}`,
+                }),
+                {
+                  status: 400,
+                  headers: corsHeaders,
+                },
+              );
+            }
+            did = resolvedDid;
+          }
+          return await getLikesForCheckin(did, rkey, corsHeaders);
+        }
+
+        if (req.method === "POST") {
+          return await handleCreateLike(identifier, rkey, req, corsHeaders);
+        }
+
+        if (req.method === "DELETE") {
+          return await handleRemoveLike(identifier, rkey, req, corsHeaders);
+        }
+      }
+
+      // Handle comments endpoints: /api/checkins/:identifier/:rkey/comments
+      // identifier can be either a DID or a handle
+      const commentsMatch = url.pathname.match(
+        /^\/api\/checkins\/([^\/]+)\/([^\/]+)\/comments$/,
+      );
+      if (commentsMatch) {
+        const [, identifier, rkey] = commentsMatch;
+
+        // For GET requests, resolve identifier to DID
+        if (req.method === "GET") {
+          let did = identifier;
+          if (!identifier.startsWith("did:")) {
+            const resolvedDid = await resolveHandleToDid(identifier);
+            if (!resolvedDid) {
+              return new Response(
+                JSON.stringify({
+                  error: `Failed to resolve handle: ${identifier}`,
+                }),
+                {
+                  status: 400,
+                  headers: corsHeaders,
+                },
+              );
+            }
+            did = resolvedDid;
+          }
+          return await getCommentsForCheckin(did, rkey, corsHeaders);
+        }
+
+        if (req.method === "POST") {
+          return await handleCreateComment(identifier, rkey, req, corsHeaders);
+        }
+
+        if (req.method === "DELETE") {
+          return await handleRemoveComment(identifier, rkey, req, corsHeaders);
+        }
+      }
+
       // Handle DELETE /api/checkins/:did/:rkey (authenticated endpoint)
       if (req.method === "DELETE") {
         const deleteMatch = url.pathname.match(
@@ -1366,7 +1449,6 @@ async function deleteCheckin(
     }
 
     // Get the stored OAuth session data for API access
-    const { sessions } = await import("../routes/oauth.ts");
     let oauthSession = await sessions.getOAuthSession(did);
     if (!oauthSession) {
       console.log(`DELETE request - No OAuth session found for ${did}`);
@@ -1920,5 +2002,427 @@ async function deleteCheckin(
       status: 500,
       headers: corsHeaders,
     });
+  }
+}
+
+// Handler for creating a like
+async function handleCreateLike(
+  checkinIdentifier: string, // Can be either a DID or a handle
+  checkinRkey: string,
+  req: Request,
+  corsHeaders: Record<string, string>,
+): Promise<Response> {
+  try {
+    // Check authentication
+    const authResult = await getAuthenticatedUserDid(req);
+    if (!authResult.success) {
+      console.error(
+        "Like auth failed:",
+        authResult.error,
+        "Cookie:",
+        req.headers.get("Cookie"),
+      );
+      return new Response(JSON.stringify({ error: authResult.error }), {
+        status: 401,
+        headers: corsHeaders,
+      });
+    }
+
+    const authorDid = authResult.did;
+    const oauthSession = authResult.oauthSession;
+
+    if (!oauthSession) {
+      return new Response(
+        JSON.stringify({ error: "OAuth session not found" }),
+        {
+          status: 401,
+          headers: corsHeaders,
+        },
+      );
+    }
+
+    // Resolve identifier to DID (handles both DIDs and handles)
+    let checkinDid = checkinIdentifier;
+    if (!checkinIdentifier.startsWith("did:")) {
+      // It's a handle, resolve it to a DID
+      const resolvedDid = await resolveHandleToDid(checkinIdentifier);
+      if (!resolvedDid) {
+        return new Response(
+          JSON.stringify({
+            error: `Failed to resolve handle: ${checkinIdentifier}`,
+          }),
+          {
+            status: 400,
+            headers: corsHeaders,
+          },
+        );
+      }
+      checkinDid = resolvedDid;
+    }
+
+    // Create the like using OAuth session (handles token refresh and DPoP automatically)
+    const result = await createLike(
+      checkinDid,
+      checkinRkey,
+      authorDid,
+      oauthSession,
+    );
+
+    return new Response(
+      JSON.stringify({
+        success: true,
+        like: {
+          uri: result.uri,
+          createdAt: new Date().toISOString(),
+        },
+      }),
+      {
+        headers: corsHeaders,
+      },
+    );
+  } catch (error) {
+    console.error("Create like error:", error);
+    return new Response(
+      JSON.stringify({
+        error: error instanceof Error ? error.message : "Internal server error",
+      }),
+      {
+        status: 500,
+        headers: corsHeaders,
+      },
+    );
+  }
+}
+
+// Handler for removing a like
+async function handleRemoveLike(
+  checkinIdentifier: string, // Can be either a DID or a handle
+  checkinRkey: string,
+  req: Request,
+  corsHeaders: Record<string, string>,
+): Promise<Response> {
+  try {
+    // Check authentication
+    const authResult = await getAuthenticatedUserDid(req);
+    if (!authResult.success) {
+      return new Response(JSON.stringify({ error: authResult.error }), {
+        status: 401,
+        headers: corsHeaders,
+      });
+    }
+
+    const authorDid = authResult.did;
+    const oauthSession = authResult.oauthSession;
+
+    if (!oauthSession) {
+      return new Response(
+        JSON.stringify({ error: "OAuth session not found" }),
+        {
+          status: 401,
+          headers: corsHeaders,
+        },
+      );
+    }
+
+    // Resolve identifier to DID (handles both DIDs and handles)
+    let checkinDid = checkinIdentifier;
+    if (!checkinIdentifier.startsWith("did:")) {
+      // It's a handle, resolve it to a DID
+      const resolvedDid = await resolveHandleToDid(checkinIdentifier);
+      if (!resolvedDid) {
+        return new Response(
+          JSON.stringify({
+            error: `Failed to resolve handle: ${checkinIdentifier}`,
+          }),
+          {
+            status: 400,
+            headers: corsHeaders,
+          },
+        );
+      }
+      checkinDid = resolvedDid;
+    }
+
+    // Remove the like using OAuth session (handles token refresh and DPoP automatically)
+    await removeLike(
+      checkinDid,
+      checkinRkey,
+      authorDid,
+      oauthSession,
+    );
+
+    return new Response(
+      JSON.stringify({
+        success: true,
+        message: "Like removed successfully",
+      }),
+      {
+        headers: corsHeaders,
+      },
+    );
+  } catch (error) {
+    console.error("Remove like error:", error);
+    return new Response(
+      JSON.stringify({
+        error: error instanceof Error ? error.message : "Internal server error",
+      }),
+      {
+        status: 500,
+        headers: corsHeaders,
+      },
+    );
+  }
+}
+
+// Handler for creating a comment
+async function handleCreateComment(
+  checkinIdentifier: string, // Can be either a DID or a handle
+  checkinRkey: string,
+  req: Request,
+  corsHeaders: Record<string, string>,
+): Promise<Response> {
+  try {
+    // Check authentication
+    const authResult = await getAuthenticatedUserDid(req);
+    if (!authResult.success) {
+      return new Response(JSON.stringify({ error: authResult.error }), {
+        status: 401,
+        headers: corsHeaders,
+      });
+    }
+
+    const authorDid = authResult.did;
+    const oauthSession = authResult.oauthSession;
+
+    if (!oauthSession) {
+      return new Response(
+        JSON.stringify({ error: "OAuth session not found" }),
+        {
+          status: 401,
+          headers: corsHeaders,
+        },
+      );
+    }
+
+    // Resolve identifier to DID (handles both DIDs and handles)
+    let checkinDid = checkinIdentifier;
+    if (!checkinIdentifier.startsWith("did:")) {
+      // It's a handle, resolve it to a DID
+      const resolvedDid = await resolveHandleToDid(checkinIdentifier);
+      if (!resolvedDid) {
+        return new Response(
+          JSON.stringify({
+            error: `Failed to resolve handle: ${checkinIdentifier}`,
+          }),
+          {
+            status: 400,
+            headers: corsHeaders,
+          },
+        );
+      }
+      checkinDid = resolvedDid;
+    }
+
+    // Parse request body
+    const body = await req.json();
+    const commentText = body.text;
+
+    if (
+      !commentText || typeof commentText !== "string" ||
+      commentText.trim().length === 0
+    ) {
+      return new Response(
+        JSON.stringify({ error: "Comment text is required" }),
+        {
+          status: 400,
+          headers: corsHeaders,
+        },
+      );
+    }
+
+    // Create the comment using OAuth session (handles token refresh and DPoP automatically)
+    const result = await createComment(
+      checkinDid,
+      checkinRkey,
+      authorDid,
+      commentText,
+      oauthSession,
+    );
+
+    return new Response(
+      JSON.stringify({
+        success: true,
+        comment: {
+          uri: result.uri,
+          text: commentText,
+          createdAt: new Date().toISOString(),
+        },
+      }),
+      {
+        headers: corsHeaders,
+      },
+    );
+  } catch (error) {
+    console.error("Create comment error:", error);
+    return new Response(
+      JSON.stringify({
+        error: error instanceof Error ? error.message : "Internal server error",
+      }),
+      {
+        status: 500,
+        headers: corsHeaders,
+      },
+    );
+  }
+}
+
+// Handler for removing a comment
+async function handleRemoveComment(
+  checkinIdentifier: string, // Can be either a DID or a handle
+  checkinRkey: string,
+  req: Request,
+  corsHeaders: Record<string, string>,
+): Promise<Response> {
+  try {
+    // Check authentication
+    const authResult = await getAuthenticatedUserDid(req);
+    if (!authResult.success) {
+      return new Response(JSON.stringify({ error: authResult.error }), {
+        status: 401,
+        headers: corsHeaders,
+      });
+    }
+
+    const authorDid = authResult.did;
+    const oauthSession = authResult.oauthSession;
+
+    if (!oauthSession) {
+      return new Response(
+        JSON.stringify({ error: "OAuth session not found" }),
+        {
+          status: 401,
+          headers: corsHeaders,
+        },
+      );
+    }
+
+    // Resolve identifier to DID (handles both DIDs and handles)
+    let checkinDid = checkinIdentifier;
+    if (!checkinIdentifier.startsWith("did:")) {
+      // It's a handle, resolve it to a DID
+      const resolvedDid = await resolveHandleToDid(checkinIdentifier);
+      if (!resolvedDid) {
+        return new Response(
+          JSON.stringify({
+            error: `Failed to resolve handle: ${checkinIdentifier}`,
+          }),
+          {
+            status: 400,
+            headers: corsHeaders,
+          },
+        );
+      }
+      checkinDid = resolvedDid;
+    }
+
+    // Parse request body to get comment rkey
+    const body = await req.json();
+    const commentRkey = body.commentRkey;
+
+    if (!commentRkey || typeof commentRkey !== "string") {
+      return new Response(
+        JSON.stringify({ error: "Comment rkey is required" }),
+        {
+          status: 400,
+          headers: corsHeaders,
+        },
+      );
+    }
+
+    // Remove the comment using OAuth session (handles token refresh and DPoP automatically)
+    await removeComment(
+      checkinDid,
+      checkinRkey,
+      commentRkey,
+      authorDid,
+      oauthSession,
+    );
+
+    return new Response(
+      JSON.stringify({
+        success: true,
+        message: "Comment removed successfully",
+      }),
+      {
+        headers: corsHeaders,
+      },
+    );
+  } catch (error) {
+    console.error("Remove comment error:", error);
+    return new Response(
+      JSON.stringify({
+        error: error instanceof Error ? error.message : "Internal server error",
+      }),
+      {
+        status: 500,
+        headers: corsHeaders,
+      },
+    );
+  }
+}
+
+// Helper function to get authenticated user DID and OAuth session
+async function getAuthenticatedUserDid(req: Request): Promise<{
+  success: boolean;
+  did?: string;
+  oauthSession?: any;
+  error?: string;
+}> {
+  try {
+    // Extract session cookie (OAuth package uses "sid" as cookie name)
+    const cookieHeader = req.headers.get("cookie");
+    if (!cookieHeader || !cookieHeader.includes("sid=")) {
+      return { success: false, error: "Authentication required" };
+    }
+
+    const sessionCookie = cookieHeader
+      .split(";")
+      .find((c) => c.trim().startsWith("sid="))
+      ?.split("=")[1];
+
+    if (!sessionCookie) {
+      console.error("No sid cookie found in:", cookieHeader);
+      return { success: false, error: "Authentication required" };
+    }
+
+    // Unseal session data
+    const { unsealData } = await import("npm:iron-session@8.0.4");
+    const COOKIE_SECRET = Deno.env.get("COOKIE_SECRET") ||
+      "anchor-default-secret-for-development-only";
+
+    const sessionData = await unsealData(decodeURIComponent(sessionCookie), {
+      password: COOKIE_SECRET,
+    });
+
+    const userDid = (sessionData as any)?.did || (sessionData as any)?.userId ||
+      (sessionData as any)?.sub;
+    if (!userDid) {
+      console.error("No DID in session data:", sessionData);
+      return { success: false, error: "Authentication required" };
+    }
+
+    // Get OAuth session using sessions manager (provides makeRequest and other methods)
+    const { sessions } = await import("../routes/oauth.ts");
+    const oauthSession = await sessions.getOAuthSession(userDid);
+
+    if (!oauthSession) {
+      console.error("No OAuth session found for DID:", userDid);
+      return { success: false, error: "OAuth session not found" };
+    }
+
+    return { success: true, did: userDid, oauthSession };
+  } catch (error) {
+    console.error("Authentication error:", error);
+    return { success: false, error: "Authentication failed" };
   }
 }

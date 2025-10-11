@@ -3,11 +3,16 @@ import {
   assertExists,
 } from "https://deno.land/std@0.208.0/assert/mod.ts";
 
-Deno.test("Lexicon - app.dropanchor.checkin structure", async () => {
-  const checkinLexicon = await Deno.readTextFile(
-    "./lexicons/app/dropanchor/checkin.json",
-  );
-  const parsed = JSON.parse(checkinLexicon);
+// Import lexicon files directly as modules (no permissions needed)
+import checkinLexicon from "../../lexicons/app/dropanchor/checkin.json" with {
+  type: "json",
+};
+import addressLexicon from "../../lexicons/community/lexicon/location/address.json" with {
+  type: "json",
+};
+
+Deno.test("Lexicon - app.dropanchor.checkin structure", () => {
+  const parsed = checkinLexicon;
 
   // Verify basic structure
   assertEquals(parsed.lexicon, 1);
@@ -49,11 +54,8 @@ Deno.test("Lexicon - app.dropanchor.checkin structure", async () => {
   assertEquals(record.required.includes("coordinates"), true);
 });
 
-Deno.test("Lexicon - app.dropanchor.checkin image definition", async () => {
-  const checkinLexicon = await Deno.readTextFile(
-    "./lexicons/app/dropanchor/checkin.json",
-  );
-  const parsed = JSON.parse(checkinLexicon);
+Deno.test("Lexicon - app.dropanchor.checkin image definition", () => {
+  const parsed = checkinLexicon;
 
   // Verify checkinImage definition exists
   assertExists(parsed.defs.checkinImage);
@@ -86,11 +88,8 @@ Deno.test("Lexicon - app.dropanchor.checkin image definition", async () => {
   assertEquals(parsed.defs.checkinImage.required.includes("alt"), false);
 });
 
-Deno.test("Lexicon - community.lexicon.location.address structure", async () => {
-  const addressLexicon = await Deno.readTextFile(
-    "./lexicons/community/lexicon/location/address.json",
-  );
-  const parsed = JSON.parse(addressLexicon);
+Deno.test("Lexicon - community.lexicon.location.address structure", () => {
+  const parsed = addressLexicon;
 
   // Verify basic structure
   assertEquals(parsed.lexicon, 1);
@@ -117,15 +116,12 @@ Deno.test("Lexicon - community.lexicon.location.address structure", async () => 
     assertEquals(record.properties[field].type, "string");
   }
 
-  // Verify no required fields (all optional)
-  assertEquals(record.required, undefined);
+  // Verify no required fields (all optional) - address lexicon has no required fields
+  assertEquals((record as any).required, undefined);
 });
 
-Deno.test("Lexicon - Backward compatibility", async () => {
-  const checkinLexicon = await Deno.readTextFile(
-    "./lexicons/app/dropanchor/checkin.json",
-  );
-  const parsed = JSON.parse(checkinLexicon);
+Deno.test("Lexicon - Backward compatibility", () => {
+  const parsed = checkinLexicon;
 
   // Ensure image is not required (backward compatibility)
   assertEquals(

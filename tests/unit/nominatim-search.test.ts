@@ -5,6 +5,22 @@ import {
   assertEquals,
   assertExists,
 } from "https://deno.land/std@0.208.0/assert/mod.ts";
+
+// Mock the Deno.env.get function to avoid permission issues
+const originalEnvGet = Deno.env.get;
+Deno.env.get = (key: string) => {
+  if (key === "NOMINATIM_BASE_URL") {
+    return "https://nominatim.geocoding.ai";
+  }
+  return originalEnvGet(key);
+};
+
+// Restore original env.get function after all tests
+globalThis.addEventListener("unload", () => {
+  Deno.env.get = originalEnvGet;
+});
+
+// Import after mocking is set up
 import { NominatimService } from "../../backend/services/nominatim-service.ts";
 
 Deno.test("NominatimService - Constructor with default config", () => {

@@ -5,9 +5,24 @@ import {
   assertEquals,
   assertExists,
 } from "https://deno.land/std@0.208.0/assert/mod.ts";
+
+// Mock the Deno.env.get function to avoid permission issues
+const originalEnvGet = Deno.env.get;
+Deno.env.get = (key: string) => {
+  if (key === "NOMINATIM_BASE_URL") {
+    return "https://nominatim.geocoding.ai";
+  }
+  return originalEnvGet(key);
+};
+
 import { OverpassService } from "../../backend/services/overpass-service.ts";
 import { PlaceCategorization } from "../../backend/utils/place-categorization.ts";
 import { PlaceCategoryGroup } from "../../backend/models/place-models.ts";
+
+// Restore original env.get function after all tests
+globalThis.addEventListener("unload", () => {
+  Deno.env.get = originalEnvGet;
+});
 
 Deno.test("PlaceCategorization - Category mapping", () => {
   // Test category group mapping

@@ -410,6 +410,61 @@ const MIGRATIONS = [
       DROP TABLE IF EXISTS oauth_sessions;
     `,
   },
+  {
+    version: "014_add_interaction_indexes",
+    description: "Add index tables for efficient likes and comments discovery",
+    sql: `
+      -- Create checkin_interactions table for individual interaction tracking
+      CREATE TABLE IF NOT EXISTS checkin_interactions (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        checkin_did TEXT NOT NULL,
+        checkin_rkey TEXT NOT NULL,
+        checkin_uri TEXT NOT NULL,
+        author_did TEXT NOT NULL,
+        author_handle TEXT,
+        author_display_name TEXT,
+        author_avatar TEXT,
+        interaction_type TEXT NOT NULL, -- 'like' or 'comment'
+        interaction_uri TEXT NOT NULL,
+        interaction_rkey TEXT NOT NULL,
+        interaction_cid TEXT NOT NULL,
+        comment_text TEXT, -- null for likes
+        created_at TEXT NOT NULL,
+        indexed_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+      );
+
+      -- Create checkin_counts table for pre-computed aggregation
+      CREATE TABLE IF NOT EXISTS checkin_counts (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        checkin_did TEXT NOT NULL,
+        checkin_rkey TEXT NOT NULL,
+        checkin_uri TEXT NOT NULL,
+        likes_count INTEGER NOT NULL DEFAULT 0,
+        comments_count INTEGER NOT NULL DEFAULT 0,
+        last_like_at TEXT,
+        last_comment_at TEXT,
+        indexed_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+      );
+
+      -- Create indexes for efficient queries
+      CREATE UNIQUE INDEX IF NOT EXISTS idx_checkin_interactions_checkin
+      ON checkin_interactions(checkin_did, checkin_rkey, author_did, interaction_type);
+
+      CREATE INDEX IF NOT EXISTS idx_checkin_interactions_type
+      ON checkin_interactions(interaction_type, created_at DESC);
+
+      CREATE INDEX IF NOT EXISTS idx_checkin_interactions_author
+      ON checkin_interactions(author_did, created_at DESC);
+
+      CREATE UNIQUE INDEX IF NOT EXISTS idx_checkin_counts_checkin
+      ON checkin_counts(checkin_did, checkin_rkey);
+
+      CREATE INDEX IF NOT EXISTS idx_checkin_counts_updated
+      ON checkin_counts(updated_at DESC);
+    `,
+  },
 ];
 
 export async function runMigrations() {
