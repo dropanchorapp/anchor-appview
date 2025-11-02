@@ -29,6 +29,7 @@ export interface CheckinData {
     alt?: string;
   };
   distance?: number;
+  likesCount?: number;
 }
 
 export interface AuthState {

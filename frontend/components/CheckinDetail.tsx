@@ -2,6 +2,7 @@
 import { useEffect, useRef, useState } from "https://esm.sh/react@19.1.0";
 import { AuthState, CheckinData } from "../types/index.ts";
 import { ImageLightbox } from "./ImageLightbox.tsx";
+import { apiDelete, apiFetch } from "../utils/api.ts";
 
 interface CheckinDetailProps {
   checkinId: string;
@@ -167,7 +168,7 @@ export function CheckinDetail({ checkinId, auth }: CheckinDetailProps) {
           apiUrl = `/api/checkin/${checkinId}`;
         }
 
-        const response = await fetch(apiUrl);
+        const response = await apiFetch(apiUrl);
 
         if (!response.ok) {
           if (response.status === 404) {
@@ -179,7 +180,7 @@ export function CheckinDetail({ checkinId, auth }: CheckinDetailProps) {
         }
 
         const data = await response.json();
-        setCheckin(data);
+        setCheckin(data.checkin);
       } catch (err) {
         setError("Failed to load checkin");
         console.error("Failed to fetch checkin:", err);
@@ -192,6 +193,7 @@ export function CheckinDetail({ checkinId, auth }: CheckinDetailProps) {
   }, [checkinId]);
 
   // Check authentication status
+  // NOTE: Use regular fetch() here, not apiFetch(), to avoid redirect loops
   useEffect(() => {
     const checkAuth = async () => {
       try {
@@ -232,11 +234,8 @@ export function CheckinDetail({ checkinId, auth }: CheckinDetailProps) {
       // Parse checkin ID to get DID and rkey
       const [checkinDid, checkinRkey] = checkinId.split("/");
 
-      const response = await fetch(
+      const response = await apiFetch(
         `/api/checkins/${checkinDid}/${checkinRkey}/likes`,
-        {
-          credentials: "include", // Send cookies for authentication check
-        },
       );
 
       if (!response.ok) {
@@ -286,12 +285,8 @@ export function CheckinDetail({ checkinId, auth }: CheckinDetailProps) {
 
       if (isLiked) {
         // Unlike
-        const response = await fetch(
+        const response = await apiDelete(
           `/api/checkins/${checkinDid}/${checkinRkey}/likes`,
-          {
-            method: "DELETE",
-            credentials: "include", // Cookies sent automatically
-          },
         );
 
         if (!response.ok) {
@@ -302,11 +297,11 @@ export function CheckinDetail({ checkinId, auth }: CheckinDetailProps) {
         setLikesCount((prev) => Math.max(0, prev - 1));
       } else {
         // Like
-        const response = await fetch(
+        const response = await apiFetch(
           `/api/checkins/${checkinDid}/${checkinRkey}/likes`,
           {
             method: "POST",
-            credentials: "include", // Cookies sent automatically
+            credentials: "include",
           },
         );
 
@@ -359,10 +354,9 @@ export function CheckinDetail({ checkinId, auth }: CheckinDetailProps) {
     );
   }
 
-  // Use handle-based URL for sharing (more readable), fallback to DID if handle not available
-  const identifier = checkin.author.handle || checkin.author.did;
+  // Use DID-based URL for sharing (consistent, permanent identifier)
   const shareUrl =
-    `${globalThis.location.origin}/checkins/${identifier}/${checkin.id}`;
+    `${globalThis.location.origin}/checkins/${checkin.author.did}/${checkin.id}`;
 
   return (
     <div

@@ -11,6 +11,8 @@
   "permissions": {
     "net": true,
     "read": true,
-    "write": true
+    "write": true,
+    "env": true,
+    "import": true
   }
 }

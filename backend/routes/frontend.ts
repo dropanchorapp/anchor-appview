@@ -5,7 +5,7 @@ import {
   resolveHandleToDid,
   resolvePdsUrl,
   resolveProfileFromPds,
-} from "../api/anchor-api.ts";
+} from "../utils/atproto-resolver.ts";
 
 // Helper function to escape HTML entities for safe meta tag content
 function escapeHtml(text: string): string {
@@ -436,11 +436,20 @@ export function createFrontendRoutes() {
     );
   }
 
-  // Individual checkin pages - /checkins/:did/:rkey
+  // Individual checkin pages - /checkins/:did/:rkey (new format)
   app.get("/checkins/:did/:rkey", async (c) => {
     const did = c.req.param("did");
     const rkey = c.req.param("rkey");
     const checkinId = `${did}/${rkey}`;
+    return await renderCheckinPage(c, checkinId);
+  });
+
+  // Legacy checkin URL format - /checkin/:identifier/:rkey (singular)
+  // Used by mobile app and older links
+  app.get("/checkin/:identifier/:rkey", async (c) => {
+    const identifier = c.req.param("identifier");
+    const rkey = c.req.param("rkey");
+    const checkinId = `${identifier}/${rkey}`;
     return await renderCheckinPage(c, checkinId);
   });
 

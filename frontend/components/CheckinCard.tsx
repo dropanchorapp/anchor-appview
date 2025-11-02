@@ -1,6 +1,7 @@
 /** @jsxImportSource https://esm.sh/react@19.1.0 */
 import { useState } from "https://esm.sh/react@19.1.0";
 import { AuthState, CheckinData } from "../types/index.ts";
+import { apiDelete } from "../utils/api.ts";
 
 interface CheckinCardProps {
   checkin: CheckinData;
@@ -12,9 +13,8 @@ export function CheckinCard({ checkin, auth, onDelete }: CheckinCardProps) {
   const [isDeleting, setIsDeleting] = useState(false);
 
   const handleClick = () => {
-    // Use handle-based URL for better readability, fallback to DID if handle not available
-    const identifier = checkin.author.handle || checkin.author.did;
-    globalThis.location.href = `/checkins/${identifier}/${checkin.id}`;
+    // Use DID-based URL for consistency with share URL
+    globalThis.location.href = `/checkins/${checkin.author.did}/${checkin.id}`;
   };
 
   const handleDelete = async (e: React.MouseEvent) => {
@@ -26,12 +26,8 @@ export function CheckinCard({ checkin, auth, onDelete }: CheckinCardProps) {
 
     setIsDeleting(true);
     try {
-      const response = await fetch(
+      const response = await apiDelete(
         `/api/checkins/${checkin.author.did}/${checkin.id}`,
-        {
-          method: "DELETE",
-          credentials: "include",
-        },
       );
 
       if (response.ok) {
@@ -255,6 +251,30 @@ export function CheckinCard({ checkin, auth, onDelete }: CheckinCardProps) {
                 }`
                 : ""}
             </span>
+          </div>
+        )}
+
+        {checkin.likesCount && checkin.likesCount > 0 && (
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: "4px",
+              fontSize: "13px",
+              color: "#8e8e93",
+              marginTop: "8px",
+            }}
+          >
+            <svg
+              width="14"
+              height="14"
+              viewBox="0 0 24 24"
+              fill="currentColor"
+              style={{ opacity: 0.8 }}
+            >
+              <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z" />
+            </svg>
+            <span>{checkin.likesCount}</span>
           </div>
         )}
       </div>

@@ -2,8 +2,9 @@
 import type { Context } from "jsr:@hono/hono@4.9.6";
 import { OverpassService } from "../services/overpass-service.ts";
 import type { Place } from "../models/place-models.ts";
+import { getAuthSession, unauthorizedResponse } from "../services/auth.ts";
 // No database imports needed - all data read from PDS
-import type { OAuthSessionsInterface } from "jsr:@tijs/atproto-oauth-hono@^0.3.1";
+import type { OAuthSessionsInterface } from "jsr:@tijs/atproto-oauth-hono@^0.4.0";
 
 // Global service instance for address enhancement
 const overpassService = new OverpassService();
@@ -150,86 +151,19 @@ interface PlaceInput {
   icon?: string;
 }
 
-// Helper function to authenticate user with Iron Session (both web and mobile)
-async function authenticateUser(
-  c: Context,
-): Promise<{ did: string; oauthSession: any } | null> {
-  try {
-    const { getIronSession, unsealData } = await import(
-      "npm:iron-session@8.0.4"
-    );
-    const { storage } = await import("../oauth/storage-adapter.ts");
-
-    const COOKIE_SECRET = Deno.env.get("COOKIE_SECRET") ||
-      "anchor-default-secret-for-development-only";
-
-    let userDid: string | null = null;
-
-    // Try Bearer token first (mobile)
-    const authHeader = c.req.header("Authorization");
-    if (authHeader?.startsWith("Bearer ")) {
-      try {
-        const sealedToken = authHeader.slice(7);
-        const sessionData = await unsealData(sealedToken, {
-          password: COOKIE_SECRET,
-        }) as { did: string };
-        userDid = sessionData.did;
-      } catch (err) {
-        console.log("Bearer token authentication failed:", err);
-      }
-    }
-
-    // Fallback to cookie authentication (web)
-    if (!userDid) {
-      try {
-        interface Session {
-          did: string;
-        }
-        const session = await getIronSession<Session>(c.req.raw, c.res, {
-          cookieName: "sid",
-          password: COOKIE_SECRET,
-        });
-        userDid = session.did;
-
-        // Extend session TTL if valid (sliding expiration)
-        if (userDid) {
-          await session.save();
-        }
-      } catch (err) {
-        console.log("Cookie authentication failed:", err);
-      }
-    }
-
-    if (!userDid) {
-      return null;
-    }
-
-    // Get OAuth session data (using updated storage key pattern)
-    const oauthSession = await storage.get(`session:${userDid}`);
-    if (!oauthSession) {
-      return null;
-    }
-
-    return { did: userDid, oauthSession };
-  } catch (err) {
-    console.error("Authentication failed:", err);
-    return null;
-  }
-}
+// Authentication is now handled by getAuthSession() from ../services/auth.ts
+// which automatically refreshes expired tokens and supports both cookie and Bearer auth
 
 // Create a checkin with address using StrongRef architecture
 export async function createCheckin(c: Context): Promise<Response> {
   try {
-    // Authenticate user with Iron Session
-    const authResult = await authenticateUser(c);
-    if (!authResult) {
-      return c.json({
-        success: false,
-        error: "Authentication required",
-      }, 401);
+    // Authenticate user with Iron Session (automatically refreshes tokens)
+    const oauthSession = await getAuthSession(c.req.raw);
+    if (!oauthSession) {
+      return unauthorizedResponse(c);
     }
 
-    const { did } = authResult;
+    const did = oauthSession.did;
 
     // Detect content type and parse accordingly
     const contentType = c.req.header("content-type") || "";
@@ -637,16 +571,13 @@ async function createAddressAndCheckin(
 // Delete a checkin and its associated address record
 export async function deleteCheckin(c: Context): Promise<Response> {
   try {
-    // Authenticate user with Iron Session
-    const authResult = await authenticateUser(c);
-    if (!authResult) {
-      return c.json({
-        success: false,
-        error: "Authentication required",
-      }, 401);
+    // Authenticate user with Iron Session (automatically refreshes tokens)
+    const oauthSession = await getAuthSession(c.req.raw);
+    if (!oauthSession) {
+      return unauthorizedResponse(c);
     }
 
-    const { did } = authResult;
+    const did = oauthSession.did;
 
     // Get checkin DID and rkey from URL params
     const targetDid = c.req.param("did");

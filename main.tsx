@@ -67,6 +67,11 @@ app.delete("/api/checkins/:did/:rkey/comments", async (c) => {
   return await anchorApiHandler(c.req.raw);
 });
 
+// Checkin migration endpoint - fixes coordinate format for legacy checkins
+app.post("/api/migrate-checkins", async (c) => {
+  return await anchorApiHandler(c.req.raw);
+});
+
 // Note: /api/auth/session endpoint is provided by the OAuth package (oauthRoutes)
 
 // Legacy /api/user endpoints for backward compatibility

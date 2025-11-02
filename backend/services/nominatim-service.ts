@@ -64,10 +64,15 @@ export class NominatimService {
   private readonly config: NominatimServiceConfig;
   private lastRequestTime = 0;
 
-  constructor(config?: Partial<NominatimServiceConfig>) {
+  private getBaseURL(): string {
     // Allow configurable Nominatim instance via environment variable
-    const baseURL = Deno.env.get("NOMINATIM_BASE_URL") ||
+    return Deno.env.get("NOMINATIM_BASE_URL") ||
       "https://nominatim.geocoding.ai";
+  }
+
+  constructor(config?: Partial<NominatimServiceConfig>) {
+    // Defer environment variable access to avoid issues during testing
+    const baseURL = config?.baseURL || this.getBaseURL();
 
     console.log(`🌐 NominatimService configured with baseURL: ${baseURL}`);
 

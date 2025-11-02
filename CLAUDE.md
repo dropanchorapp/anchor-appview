@@ -23,7 +23,22 @@ locally. All checkins are:
    `com.atproto.repo.listRecords`
 3. Never cached or persisted in local database
 
-The only local data storage is `iron_session_storage` table for OAuth sessions.
+**Exception for Likes and Comments**: While checkins remain PDS-only, likes and
+comments use a **hybrid architecture** with local indexing for performance:
+
+- Like/comment records are stored in users' PDS (fully decentralized)
+- A local index (`checkin_interactions` and `checkin_counts` tables) tracks
+  interactions for efficient discovery and counting
+- Index is updated when likes/comments are created/deleted through this AppView
+- Trade-off: External likes/comments (created directly via PDS) won't appear
+  until indexed
+- Future: Background sync process could crawl for external interactions
+
+Local database storage:
+
+- `iron_session_storage`: OAuth session management
+- `checkin_interactions`: Index of likes/comments for efficient queries
+- `checkin_counts`: Aggregated counts per checkin for performance
 
 ### Entry Point
 
@@ -59,10 +74,19 @@ The only local data storage is `iron_session_storage` table for OAuth sessions.
 - Spatial queries, user feeds, following feeds
 - No local database reads for checkin data
 
+**Likes and Comments API** (`backend/api/likes.ts`, `backend/api/comments.ts`):
+
+- Creates likes/comments via AT Protocol `createRecord` in user's PDS
+- Updates local index for efficient discovery
+- Authentication via OAuth session with automatic token refresh
+- Uses OAuth session's `makeRequest()` for all PDS communication
+- REST endpoints: `/api/checkins/:did/:rkey/likes` and
+  `/api/checkins/:did/:rkey/comments`
+
 **Database Layer** (`backend/database/`):
 
 - Drizzle ORM with `sqlite-proxy` adapter
-- Schema: `backend/database/schema.ts` (only OAuth session storage)
+- Schema: `backend/database/schema.ts` (OAuth sessions + interaction indexes)
 - Migrations: `backend/database/migrations.ts`
 
 ## Development Commands
@@ -254,6 +278,27 @@ Never manually construct Authorization headers - always use
 }
 ```
 
+**Like record** (`app.dropanchor.like`):
+
+```typescript
+{
+  $type: "app.dropanchor.like",
+  createdAt: string,  // ISO8601
+  checkinRef: StrongRef  // Reference to the liked checkin
+}
+```
+
+**Comment record** (`app.dropanchor.comment`):
+
+```typescript
+{
+  $type: "app.dropanchor.comment",
+  text: string,  // Max 1000 characters
+  createdAt: string,  // ISO8601
+  checkinRef: StrongRef  // Reference to the commented checkin
+}
+```
+
 ### StrongRef Pattern
 
 Checkins reference addresses via StrongRefs (CID + URI):
@@ -276,6 +321,18 @@ POST   /api/checkins                    Create checkin
 GET    /api/checkins/:did                Get all checkins for user
 GET    /api/checkins/:did/:rkey          Get specific checkin
 DELETE /api/checkins/:did/:rkey          Delete checkin
+```
+
+### Likes and Comments (REST-style)
+
+```
+GET    /api/checkins/:did/:rkey/likes       Get likes for checkin
+POST   /api/checkins/:did/:rkey/likes       Like a checkin (requires auth)
+DELETE /api/checkins/:did/:rkey/likes       Unlike a checkin (requires auth)
+
+GET    /api/checkins/:did/:rkey/comments    Get comments for checkin
+POST   /api/checkins/:did/:rkey/comments    Comment on checkin (requires auth)
+DELETE /api/checkins/:did/:rkey/comments    Delete comment (requires auth)
 ```
 
 ### Feed Queries
@@ -488,3 +545,7 @@ database caching. Now migrated to **PDS-only architecture** where:
 
 Comments and variable names may reference old architecture - these are safe to
 update.
+
+- to deploy new updates use `deno task deploy`
+- code files should never be more than 500 lines, once you hit this size you
+  know it's time to break up your file in smaller modules

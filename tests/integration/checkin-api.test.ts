@@ -608,3 +608,164 @@ Deno.test("Checkin API - POST /api/checkins with image attachment via multipart/
   assertExists(contentType);
   assertEquals(contentType?.includes("multipart/form-data"), true);
 });
+
+/**
+ * CRITICAL TEST: Validate API response structure matches lexicon
+ * This test caught the bug where image field was incorrectly structured
+ */
+Deno.test("Checkin API - GET /api/checkins/:did/:rkey returns lexicon-compliant structure", async () => {
+  // Mock a checkin with all fields including image
+  const mockCheckin = {
+    uri: "at://did:plc:test123/app.dropanchor.checkin/3k2abc",
+    cid: "bafytest",
+    value: {
+      $type: "app.dropanchor.checkin",
+      text: "Coffee with photo",
+      createdAt: "2024-01-15T10:30:00Z",
+      coordinates: {
+        latitude: "52.0808",
+        longitude: "4.3629",
+      },
+      addressRef: {
+        uri: "at://did:plc:test123/community.lexicon.location.address/xyz",
+        cid: "bafyaddr",
+      },
+      category: "cafe",
+      categoryGroup: "food_and_drink",
+      categoryIcon: "☕",
+      // IMPORTANT: Image structure according to lexicon
+      image: {
+        thumb: {
+          $type: "blob",
+          ref: { $link: "bafythumb123" },
+          mimeType: "image/jpeg",
+          size: 150000,
+        },
+        fullsize: {
+          $type: "blob",
+          ref: { $link: "bafyfull456" },
+          mimeType: "image/jpeg",
+          size: 1000000,
+        },
+        alt: "A nice cup of coffee",
+      },
+    },
+  };
+
+  // Mock fetch to return this checkin
+  globalThis.fetch = ((_url: string | URL | Request) => {
+    const url = _url.toString();
+    if (url.includes("getRecord") && url.includes("app.dropanchor.checkin")) {
+      return Promise.resolve(
+        new Response(JSON.stringify(mockCheckin), {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        }),
+      );
+    }
+    if (url.includes("plc.directory")) {
+      return Promise.resolve(
+        new Response(
+          JSON.stringify({
+            service: [{
+              id: "#atproto_pds",
+              type: "AtprotoPersonalDataServer",
+              serviceEndpoint: "https://bsky.social",
+            }],
+          }),
+          { status: 200 },
+        ),
+      );
+    }
+    if (url.includes("xrpc/com.atproto.identity.resolveHandle")) {
+      return Promise.resolve(
+        new Response(JSON.stringify({ did: "did:plc:test123" }), {
+          status: 200,
+        }),
+      );
+    }
+    if (url.includes("app.bsky.actor.getProfile")) {
+      return Promise.resolve(
+        new Response(
+          JSON.stringify({
+            handle: "test.bsky.social",
+            displayName: "Test User",
+          }),
+          { status: 200 },
+        ),
+      );
+    }
+    return Promise.resolve(new Response("", { status: 404 }));
+  }) as typeof fetch;
+
+  // Import and call the actual API handler
+  const { getCheckinByDidAndRkey } = await import(
+    "../../backend/api/user-checkins.ts"
+  );
+
+  const corsHeaders = {
+    "Access-Control-Allow-Origin": "*",
+    "Access-Control-Allow-Methods": "GET, POST, DELETE, OPTIONS",
+    "Access-Control-Allow-Headers": "Content-Type, Cookie, Authorization",
+    "Content-Type": "application/json",
+  };
+
+  const response = await getCheckinByDidAndRkey(
+    "did:plc:test123",
+    "3k2abc",
+    corsHeaders,
+  );
+
+  assertEquals(response.status, 200);
+
+  const data = await response.json();
+  const checkin = data.checkin;
+
+  // Validate basic structure
+  assertExists(checkin);
+  assertEquals(checkin.id, "3k2abc");
+  assertEquals(checkin.text, "Coffee with photo");
+  assertEquals(typeof checkin.coordinates.latitude, "number");
+  assertEquals(typeof checkin.coordinates.longitude, "number");
+
+  // CRITICAL: Validate image URLs are properly constructed
+  assertExists(checkin.image, "Image field should exist");
+  assertExists(checkin.image.thumbUrl, "Image should have thumbUrl");
+  assertExists(checkin.image.fullsizeUrl, "Image should have fullsizeUrl");
+
+  // Validate URLs are properly formatted
+  assertEquals(
+    checkin.image.thumbUrl.includes("/xrpc/com.atproto.sync.getBlob"),
+    true,
+    "thumbUrl should be a proper blob URL",
+  );
+  assertEquals(
+    checkin.image.thumbUrl.includes("did=did:plc:test123"),
+    true,
+    "thumbUrl should include DID",
+  );
+  assertEquals(
+    checkin.image.thumbUrl.includes("cid=bafythumb123"),
+    true,
+    "thumbUrl should include CID",
+  );
+
+  assertEquals(
+    checkin.image.fullsizeUrl.includes("/xrpc/com.atproto.sync.getBlob"),
+    true,
+    "fullsizeUrl should be a proper blob URL",
+  );
+  assertEquals(
+    checkin.image.fullsizeUrl.includes("cid=bafyfull456"),
+    true,
+    "fullsizeUrl should include CID",
+  );
+
+  // Validate optional alt text
+  assertEquals(checkin.image.alt, "A nice cup of coffee");
+
+  // Validate category fields
+  assertEquals(checkin.category, "cafe");
+  assertEquals(checkin.categoryGroup, "food_and_drink");
+  assertEquals(checkin.categoryIcon, "☕");
+});

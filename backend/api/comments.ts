@@ -1,7 +1,10 @@
 // Comments API endpoints for checkin interactions
 // Handles comment creation, retrieval, and deletion for check-ins
 
-import { resolvePdsUrl, resolveProfileFromPds } from "./anchor-api.ts";
+import {
+  resolvePdsUrl,
+  resolveProfileFromPds,
+} from "../utils/atproto-resolver.ts";
 import { db } from "../database/db.ts";
 import {
   CheckinCountInsert,
@@ -10,6 +13,16 @@ import {
   checkinInteractionsTable,
 } from "../database/schema.ts";
 import { and, desc, eq, sql } from "https://esm.sh/drizzle-orm@0.44.5";
+import { getAuthenticatedUserDid } from "../utils/auth-helpers.ts";
+import { resolveHandleToDid } from "../utils/atproto-resolver.ts";
+
+export interface CorsHeaders {
+  "Access-Control-Allow-Origin": string;
+  "Access-Control-Allow-Methods": string;
+  "Access-Control-Allow-Headers": string;
+  "Content-Type": string;
+  [key: string]: string;
+}
 
 // Interface for comment records
 interface CommentRecord {
@@ -389,5 +402,179 @@ export async function removeComment(
   } catch (error) {
     console.error("Remove comment error:", error);
     throw error;
+  }
+}
+
+// HTTP Handler wrappers for REST API
+
+/**
+ * HTTP handler for POST /api/checkins/:identifier/:rkey/comments
+ */
+export async function createCommentHandler(
+  req: Request,
+  identifier: string,
+  rkey: string,
+  corsHeaders: CorsHeaders,
+): Promise<Response> {
+  try {
+    // Get authentication
+    const authResult = await getAuthenticatedUserDid(req);
+    if (!authResult.success || !authResult.oauthSession) {
+      return new Response(
+        JSON.stringify({
+          error: authResult.error || "Authentication required",
+        }),
+        {
+          status: 401,
+          headers: corsHeaders,
+        },
+      );
+    }
+
+    // Resolve identifier to DID
+    let checkinDid = identifier;
+    if (!identifier.startsWith("did:")) {
+      const resolvedDid = await resolveHandleToDid(identifier);
+      if (!resolvedDid) {
+        return new Response(
+          JSON.stringify({ error: "Could not resolve handle to DID" }),
+          {
+            status: 404,
+            headers: corsHeaders,
+          },
+        );
+      }
+      checkinDid = resolvedDid;
+    }
+
+    // Parse request body
+    const body = await req.json();
+    const commentText = body.text;
+
+    if (!commentText) {
+      return new Response(
+        JSON.stringify({ error: "Comment text is required" }),
+        {
+          status: 400,
+          headers: corsHeaders,
+        },
+      );
+    }
+
+    // Create comment
+    const result = await createComment(
+      checkinDid,
+      rkey,
+      authResult.did,
+      commentText,
+      authResult.oauthSession,
+    );
+
+    return new Response(
+      JSON.stringify(result),
+      {
+        status: 201,
+        headers: corsHeaders,
+      },
+    );
+  } catch (error) {
+    console.error("Create comment HTTP handler error:", error);
+    return new Response(
+      JSON.stringify({
+        error: error instanceof Error
+          ? error.message
+          : "Failed to create comment",
+      }),
+      {
+        status: 500,
+        headers: corsHeaders,
+      },
+    );
+  }
+}
+
+/**
+ * HTTP handler for DELETE /api/checkins/:identifier/:rkey/comments
+ */
+export async function removeCommentHandler(
+  req: Request,
+  identifier: string,
+  rkey: string,
+  corsHeaders: CorsHeaders,
+): Promise<Response> {
+  try {
+    // Get authentication
+    const authResult = await getAuthenticatedUserDid(req);
+    if (!authResult.success || !authResult.oauthSession) {
+      return new Response(
+        JSON.stringify({
+          error: authResult.error || "Authentication required",
+        }),
+        {
+          status: 401,
+          headers: corsHeaders,
+        },
+      );
+    }
+
+    // Resolve identifier to DID
+    let checkinDid = identifier;
+    if (!identifier.startsWith("did:")) {
+      const resolvedDid = await resolveHandleToDid(identifier);
+      if (!resolvedDid) {
+        return new Response(
+          JSON.stringify({ error: "Could not resolve handle to DID" }),
+          {
+            status: 404,
+            headers: corsHeaders,
+          },
+        );
+      }
+      checkinDid = resolvedDid;
+    }
+
+    // Parse request body to get comment rkey
+    const body = await req.json();
+    const commentRkey = body.rkey;
+
+    if (!commentRkey) {
+      return new Response(
+        JSON.stringify({ error: "Comment rkey is required" }),
+        {
+          status: 400,
+          headers: corsHeaders,
+        },
+      );
+    }
+
+    // Remove comment
+    await removeComment(
+      checkinDid,
+      rkey,
+      commentRkey,
+      authResult.did,
+      authResult.oauthSession,
+    );
+
+    return new Response(
+      JSON.stringify({ success: true }),
+      {
+        status: 200,
+        headers: corsHeaders,
+      },
+    );
+  } catch (error) {
+    console.error("Remove comment HTTP handler error:", error);
+    return new Response(
+      JSON.stringify({
+        error: error instanceof Error
+          ? error.message
+          : "Failed to remove comment",
+      }),
+      {
+        status: 500,
+        headers: corsHeaders,
+      },
+    );
   }
 }

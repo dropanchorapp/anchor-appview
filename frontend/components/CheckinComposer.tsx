@@ -2,6 +2,7 @@
 import { useState } from "https://esm.sh/react@19.1.0";
 import imageCompression from "https://esm.sh/browser-image-compression@2.0.2";
 import type { Place } from "../types/index.ts";
+import { apiFetch } from "../utils/api.ts";
 
 interface CheckinComposerProps {
   isOpen: boolean;
@@ -268,7 +269,7 @@ export function CheckinComposer(
         }
       }
 
-      const response = await fetch("/api/checkins", {
+      const response = await apiFetch("/api/checkins", {
         method: "POST",
         credentials: "include",
         body: formData,

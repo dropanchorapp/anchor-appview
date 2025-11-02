@@ -13,6 +13,7 @@ import { MobileAuth } from "./MobileAuth.tsx";
 import { CheckinDetail } from "./CheckinDetail.tsx";
 import { CheckinComposer } from "./CheckinComposer.tsx";
 import { AuthState, CheckinData } from "../types/index.ts";
+import { apiFetch } from "../utils/api.ts";
 
 export function App() {
   // Check if we're on the mobile-auth route first, before any hooks
@@ -116,6 +117,7 @@ export function App() {
   }, []);
 
   // Check authentication status on load
+  // NOTE: Use regular fetch() here, not apiFetch(), to avoid redirect loops
   useEffect(() => {
     const checkAuth = async () => {
       try {
@@ -186,7 +188,7 @@ export function App() {
           return;
         }
 
-        const response = await fetch(url);
+        const response = await apiFetch(url);
         if (!response.ok) {
           const errorText = await response.text();
           console.error("API error response:", errorText);
@@ -244,7 +246,7 @@ export function App() {
   const handleLogout = async () => {
     try {
       if (auth.userDid) {
-        await fetch("/api/auth/logout", {
+        await apiFetch("/api/auth/logout", {
           method: "POST",
           headers: {
             "Content-Type": "application/json",

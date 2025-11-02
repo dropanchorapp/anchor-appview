@@ -1,7 +1,10 @@
 // Likes API endpoints for checkin interactions
 // Handles like creation, retrieval, and deletion for check-ins
 
-import { resolvePdsUrl, resolveProfileFromPds } from "./anchor-api.ts";
+import {
+  resolvePdsUrl,
+  resolveProfileFromPds,
+} from "../utils/atproto-resolver.ts";
 import { db } from "../database/db.ts";
 import {
   CheckinCountInsert,
@@ -10,6 +13,16 @@ import {
   checkinInteractionsTable,
 } from "../database/schema.ts";
 import { and, desc, eq, sql } from "https://esm.sh/drizzle-orm@0.44.5";
+import { getAuthenticatedUserDid } from "../utils/auth-helpers.ts";
+import { resolveHandleToDid } from "../utils/atproto-resolver.ts";
+
+export interface CorsHeaders {
+  "Access-Control-Allow-Origin": string;
+  "Access-Control-Allow-Methods": string;
+  "Access-Control-Allow-Headers": string;
+  "Content-Type": string;
+  [key: string]: string;
+}
 
 // Interface for like records
 interface LikeRecord {
@@ -384,5 +397,145 @@ export async function removeLike(
   } catch (error) {
     console.error("Remove like error:", error);
     throw error;
+  }
+}
+
+// HTTP Handler wrappers for REST API
+
+/**
+ * HTTP handler for POST /api/checkins/:identifier/:rkey/likes
+ */
+export async function createLikeHandler(
+  req: Request,
+  identifier: string,
+  rkey: string,
+  corsHeaders: CorsHeaders,
+): Promise<Response> {
+  try {
+    // Get authentication
+    const authResult = await getAuthenticatedUserDid(req);
+    if (!authResult.success || !authResult.oauthSession) {
+      return new Response(
+        JSON.stringify({
+          error: authResult.error || "Authentication required",
+        }),
+        {
+          status: 401,
+          headers: corsHeaders,
+        },
+      );
+    }
+
+    // Resolve identifier to DID
+    let checkinDid = identifier;
+    if (!identifier.startsWith("did:")) {
+      const resolvedDid = await resolveHandleToDid(identifier);
+      if (!resolvedDid) {
+        return new Response(
+          JSON.stringify({ error: "Could not resolve handle to DID" }),
+          {
+            status: 404,
+            headers: corsHeaders,
+          },
+        );
+      }
+      checkinDid = resolvedDid;
+    }
+
+    // Create like
+    const result = await createLike(
+      checkinDid,
+      rkey,
+      authResult.did,
+      authResult.oauthSession,
+    );
+
+    return new Response(
+      JSON.stringify(result),
+      {
+        status: 201,
+        headers: corsHeaders,
+      },
+    );
+  } catch (error) {
+    console.error("Create like HTTP handler error:", error);
+    return new Response(
+      JSON.stringify({
+        error: error instanceof Error ? error.message : "Failed to create like",
+      }),
+      {
+        status: 500,
+        headers: corsHeaders,
+      },
+    );
+  }
+}
+
+/**
+ * HTTP handler for DELETE /api/checkins/:identifier/:rkey/likes
+ */
+export async function removeLikeHandler(
+  req: Request,
+  identifier: string,
+  rkey: string,
+  corsHeaders: CorsHeaders,
+): Promise<Response> {
+  try {
+    // Get authentication
+    const authResult = await getAuthenticatedUserDid(req);
+    if (!authResult.success || !authResult.oauthSession) {
+      return new Response(
+        JSON.stringify({
+          error: authResult.error || "Authentication required",
+        }),
+        {
+          status: 401,
+          headers: corsHeaders,
+        },
+      );
+    }
+
+    // Resolve identifier to DID
+    let checkinDid = identifier;
+    if (!identifier.startsWith("did:")) {
+      const resolvedDid = await resolveHandleToDid(identifier);
+      if (!resolvedDid) {
+        return new Response(
+          JSON.stringify({ error: "Could not resolve handle to DID" }),
+          {
+            status: 404,
+            headers: corsHeaders,
+          },
+        );
+      }
+      checkinDid = resolvedDid;
+    }
+
+    // Remove like (removeLike finds the like record automatically)
+    await removeLike(
+      checkinDid,
+      rkey,
+      authResult.did,
+      authResult.oauthSession,
+    );
+
+    return new Response(
+      JSON.stringify({ success: true }),
+      {
+        status: 200,
+        headers: corsHeaders,
+      },
+    );
+  } catch (error) {
+    console.error("Remove like HTTP handler error:", error);
+    return new Response(
+      JSON.stringify({
+        error: error instanceof Error ? error.message : "Failed to remove like",
+      }),
+      {
+        status: 500,
+        headers: corsHeaders,
+      },
+    );
   }
 }
