@@ -1,0 +1,274 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Anchor - Sign In</title>
+    <style>
+      * {
+        margin: 0;
+        padding: 0;
+        box-sizing: border-box;
+      }
+
+      body {
+        font-family:
+          -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui,
+          sans-serif;
+        line-height: 1.5;
+        color: #1c1c1e;
+        background: #f2f2f7;
+        min-height: 100vh;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 20px;
+      }
+
+      .container {
+        background: white;
+        border-radius: 20px;
+        padding: 60px 40px;
+        max-width: 400px;
+        width: 100%;
+        box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1);
+        text-align: center;
+      }
+
+      .logo {
+        width: 160px;
+        height: 160px;
+        margin: 0 auto 24px;
+      }
+
+      h1 {
+        font-size: 28px;
+        font-weight: 700;
+        margin-bottom: 8px;
+        color: #1c1c1e;
+      }
+
+      .subtitle {
+        color: #8e8e93;
+        margin-bottom: 32px;
+        font-size: 16px;
+        line-height: 1.4;
+      }
+
+      .error {
+        background: #ff3b30;
+        color: white;
+        padding: 12px;
+        border-radius: 8px;
+        margin-bottom: 20px;
+        font-size: 14px;
+        display: none;
+      }
+
+      .error.show {
+        display: block;
+      }
+
+      form {
+        text-align: left;
+      }
+
+      label {
+        display: block;
+        font-weight: 600;
+        margin-bottom: 8px;
+        color: #1c1c1e;
+        font-size: 14px;
+      }
+
+      input {
+        width: 100%;
+        padding: 16px;
+        border: 2px solid #f2f2f7;
+        border-radius: 12px;
+        font-size: 16px;
+        background: #f9f9f9;
+        transition: all 0.2s ease;
+        margin-bottom: 20px;
+      }
+
+      input:focus {
+        outline: none;
+        border-color: #007aff;
+        background: white;
+        box-shadow: 0 0 0 4px rgba(0, 122, 255, 0.1);
+      }
+
+      button {
+        width: 100%;
+        background: #007aff;
+        color: white;
+        border: none;
+        padding: 16px;
+        border-radius: 12px;
+        font-size: 16px;
+        font-weight: 600;
+        cursor: pointer;
+        transition: all 0.2s ease;
+      }
+
+      button:hover:not(:disabled) {
+        background: #0056b3;
+        transform: translateY(-1px);
+      }
+
+      button:disabled {
+        background: #8e8e93;
+        cursor: not-allowed;
+      }
+
+      .spinner {
+        display: inline-block;
+        width: 20px;
+        height: 20px;
+        border: 2px solid transparent;
+        border-top: 2px solid white;
+        border-radius: 50%;
+        animation: spin 1s linear infinite;
+        vertical-align: middle;
+        margin-right: 8px;
+      }
+
+      @keyframes spin {
+        to {
+          transform: rotate(360deg);
+        }
+      }
+
+      .footer {
+        margin-top: 32px;
+        padding-top: 24px;
+        border-top: 1px solid #f2f2f7;
+        color: #8e8e93;
+        font-size: 14px;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="container">
+      <img
+        src="https://res.cloudinary.com/dru3aznlk/image/upload/v1754747200/anchor-logo-transparent_nrw70y.png"
+        alt="Anchor Logo"
+        class="logo"
+      >
+
+      <h1>Sign in to Anchor</h1>
+      <p class="subtitle">Connect with your Bluesky account</p>
+
+      <div id="error" class="error"></div>
+
+      <form id="loginForm">
+        <label for="handle">Bluesky Handle</label>
+        <input
+          type="text"
+          id="handle"
+          name="handle"
+          placeholder="alice.bsky.social"
+          autocomplete="username"
+          required
+        >
+
+        <button type="submit" id="submitBtn">
+          Sign in with Bluesky
+        </button>
+      </form>
+
+      <div class="footer">
+        Powered by AT Protocol
+      </div>
+    </div>
+
+    <script>
+      const form = document.getElementById("loginForm");
+      const errorDiv = document.getElementById("error");
+      const submitBtn = document.getElementById("submitBtn");
+      const handleInput = document.getElementById("handle");
+
+      // Generate PKCE parameters
+      async function generatePKCE() {
+        const array = new Uint8Array(96);
+        crypto.getRandomValues(array);
+        const codeVerifier = btoa(
+          String.fromCharCode.apply(null, array),
+        )
+          .replace(/\+/g, "-")
+          .replace(/\//g, "_")
+          .replace(/=/g, "");
+
+        const encoder = new TextEncoder();
+        const data = encoder.encode(codeVerifier);
+        const hashBuffer = await crypto.subtle.digest("SHA-256", data);
+        const hashArray = Array.from(new Uint8Array(hashBuffer));
+        const codeChallenge = btoa(
+          String.fromCharCode.apply(null, hashArray),
+        )
+          .replace(/\+/g, "-")
+          .replace(/\//g, "_")
+          .replace(/=/g, "");
+
+        return { codeVerifier, codeChallenge };
+      }
+
+      form.addEventListener("submit", async function (e) {
+        e.preventDefault();
+
+        const handle = handleInput.value.trim();
+        if (!handle) {
+          showError("Please enter your Bluesky handle");
+          return;
+        }
+
+        errorDiv.classList.remove("show");
+        submitBtn.disabled = true;
+        submitBtn.innerHTML =
+          '<span class="spinner"></span>Signing in...';
+
+        try {
+          // Generate PKCE parameters
+          const { codeVerifier, codeChallenge } = await generatePKCE();
+          sessionStorage.setItem("pkce_code_verifier", codeVerifier);
+
+          const response = await fetch("/api/auth/mobile-start", {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+              handle: handle,
+              code_challenge: codeChallenge,
+            }),
+          });
+
+          if (!response.ok) {
+            throw new Error("Failed to start authentication");
+          }
+
+          const data = await response.json();
+
+          if (data.authUrl) {
+            window.location.href = data.authUrl;
+          } else {
+            throw new Error("No authorization URL received");
+          }
+        } catch (error) {
+          console.error("Login failed:", error);
+          showError(
+            "Login failed. Please check your handle and try again.",
+          );
+          submitBtn.disabled = false;
+          submitBtn.textContent = "Sign in with Bluesky";
+        }
+      });
+
+      function showError(message) {
+        errorDiv.textContent = message;
+        errorDiv.classList.add("show");
+      }
+    </script>
+  </body>
+</html>

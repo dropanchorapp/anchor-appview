@@ -10,11 +10,41 @@
       href="https://fonts.googleapis.com/css2?family=Syne:wght@400;700;800&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Epilogue:wght@400;600;700;800;900&display=swap"
       rel="stylesheet"
     >
-    <script src="https://cdn.twind.style" crossorigin></script>
-    <script src="https://esm.town/v/std/catch"></script>
+    <!-- Removed Twind - causing source map 404 errors in ASWebAuthenticationSession -->
+    <!-- Removed std/catch - empty script blocking JavaScript execution -->
+    <script>
+      // Debug logging for ASWebAuthenticationSession
+      window.addEventListener("error", function (e) {
+        console.error("Global error:", e.error || e.message);
+        document.getElementById("root").innerHTML =
+          '<div style="padding: 20px; color: white; font-family: monospace;">Error: ' +
+          (e.error?.message || e.message) + "</div>";
+      });
+
+      window.addEventListener("unhandledrejection", function (e) {
+        console.error("Unhandled rejection:", e.reason);
+        document.getElementById("root").innerHTML =
+          '<div style="padding: 20px; color: white; font-family: monospace;">Promise rejection: ' +
+          e.reason + "</div>";
+      });
+    </script>
   </head>
   <body>
-    <div id="root" style="background: #ff006b; min-height: 100vh"></div>
+    <div id="root" style="background: #ff006b; min-height: 100vh">
+      <div style="padding: 20px; color: white; font-family: monospace">
+        Loading...<br>
+        <span id="debug-log"></span>
+      </div>
+    </div>
+    <script>
+      // Add debug logging
+      const log = document.getElementById("debug-log");
+      log.innerHTML += "Script started<br>";
+
+      // Log when module starts loading
+      console.log("About to load module");
+      log.innerHTML += "About to load module<br>";
+    </script>
     <noscript>
       <div
         style="padding: 2rem; text-align: center; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif"

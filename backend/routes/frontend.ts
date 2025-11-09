@@ -453,6 +453,13 @@ export function createFrontendRoutes() {
     return await renderCheckinPage(c, checkinId);
   });
 
+  // Mobile auth page - serves simple standalone HTML without ES modules
+  // This is required because ASWebAuthenticationSession doesn't support ES module loading from external URLs
+  app.get(
+    "/mobile-auth",
+    (_c) => serveFile("/frontend/mobile-auth-simple.html", import.meta.url),
+  );
+
   // Catch-all route for SPA
   app.get("*", (_c) => serveFile("/frontend/index.html", import.meta.url));
 
