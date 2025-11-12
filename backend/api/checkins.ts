@@ -52,7 +52,26 @@ function _sanitizePlaceInput(input: PlaceInput): Place {
 async function _getEnhancedAddressRecord(
   place: Place,
 ): Promise<CommunityAddressRecord> {
-  // Use OverpassService to enhance the address directly
+  // If place already has complete address data (from iOS app), use it directly
+  if (
+    place.address &&
+    place.address.country &&
+    place.address.region
+  ) {
+    console.log(
+      `✅ Using complete address data from client for: ${place.name}`,
+    );
+    // Ensure no name/locality duplication
+    return {
+      ...place.address,
+      name: place.name,
+      locality: place.address.locality === place.name
+        ? undefined
+        : place.address.locality,
+    };
+  }
+
+  // Use OverpassService to enhance the address
   try {
     console.log(`🔍 Enhancing address for place: ${place.name}`);
     const enhancedAddress = await overpassService.getEnhancedAddress(place);
