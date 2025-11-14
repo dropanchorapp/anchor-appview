@@ -2,8 +2,8 @@
  * OAuth authentication routes using @tijs/atproto-oauth-hono package
  */
 
-import { createATProtoOAuth } from "jsr:@tijs/atproto-oauth-hono@^1.0.1";
-import type { ATProtoOAuthInstance } from "jsr:@tijs/atproto-oauth-hono@^1.0.1";
+import { createATProtoOAuth } from "jsr:@tijs/atproto-oauth-hono@^1.0.2";
+import type { ATProtoOAuthInstance } from "jsr:@tijs/atproto-oauth-hono@^1.0.2";
 import { storage } from "../oauth/storage-adapter.ts";
 
 const COOKIE_SECRET = Deno.env.get("COOKIE_SECRET") ||

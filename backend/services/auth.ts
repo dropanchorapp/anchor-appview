@@ -8,7 +8,7 @@ import {
   SessionError,
   SessionNotFoundError,
   TokenExchangeError,
-} from "jsr:@tijs/oauth-client-deno@^3.0.0";
+} from "jsr:@tijs/atproto-oauth-hono@^1.0.2";
 
 /**
  * Get authenticated user session from OAuth with automatic token refresh.

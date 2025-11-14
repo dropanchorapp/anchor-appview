@@ -48,7 +48,9 @@ export async function apiFetch(
  * Helper for GET requests
  */
 export function apiGet(url: string): Promise<Response> {
-  return apiFetch(url);
+  return apiFetch(url, {
+    credentials: "include",
+  });
 }
 
 /**
