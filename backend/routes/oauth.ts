@@ -2,9 +2,12 @@
  * OAuth authentication routes using @tijs/atproto-oauth-hono package
  */
 
-import { createATProtoOAuth } from "jsr:@tijs/atproto-oauth-hono@^1.0.2";
-import type { ATProtoOAuthInstance } from "jsr:@tijs/atproto-oauth-hono@^1.0.2";
-import { storage } from "../oauth/storage-adapter.ts";
+import {
+  createATProtoOAuth,
+  SQLiteStorage,
+} from "jsr:@tijs/atproto-oauth-hono@2.0.11";
+import type { ATProtoOAuthInstance } from "jsr:@tijs/atproto-oauth-hono@2.0.11";
+import { rawDb } from "../database/db.ts";
 
 const COOKIE_SECRET = Deno.env.get("COOKIE_SECRET") ||
   "anchor-default-secret-for-development-only";
@@ -20,7 +23,8 @@ const oauth: ATProtoOAuthInstance = createATProtoOAuth({
   logoUri: `${BASE_URL}/static/anchor-logo-transparent.png`,
   policyUri: `${BASE_URL}/privacy-policy`,
   sessionTtl: 60 * 60 * 24 * 30, // 30 days for mobile compatibility
-  storage,
+  storage: new SQLiteStorage(rawDb),
+  logger: console, // Enable logging for debugging
 });
 
 // Export what other parts of the app need

@@ -4,7 +4,7 @@ import { OverpassService } from "../services/overpass-service.ts";
 import type { Place } from "../models/place-models.ts";
 import { getAuthSession, unauthorizedResponse } from "../services/auth.ts";
 // No database imports needed - all data read from PDS
-import type { OAuthSessionsInterface } from "jsr:@tijs/atproto-oauth-hono@^0.4.0";
+import type { OAuthSessionsInterface } from "jsr:@tijs/atproto-oauth-hono@2.0.11";
 
 // Global service instance for address enhancement
 const overpassService = new OverpassService();

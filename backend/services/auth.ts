@@ -1,6 +1,6 @@
 import { oauth } from "../routes/oauth.ts";
 import type { Context } from "jsr:@hono/hono@4.9.6";
-import type { SessionInterface } from "jsr:@tijs/hono-oauth-sessions@^1.0.0";
+import type { SessionInterface } from "jsr:@tijs/hono-oauth-sessions@2.1.1";
 import {
   NetworkError,
   RefreshTokenExpiredError,
@@ -8,7 +8,7 @@ import {
   SessionError,
   SessionNotFoundError,
   TokenExchangeError,
-} from "jsr:@tijs/atproto-oauth-hono@^1.0.2";
+} from "jsr:@tijs/atproto-oauth-hono@2.0.11";
 
 /**
  * Get authenticated user session from OAuth with automatic token refresh.
