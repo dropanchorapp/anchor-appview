@@ -2,9 +2,9 @@
 import type { Context } from "jsr:@hono/hono@4.9.6";
 import { OverpassService } from "../services/overpass-service.ts";
 import type { Place } from "../models/place-models.ts";
-import { getAuthSession, unauthorizedResponse } from "../services/auth.ts";
+import { oauth } from "../routes/oauth.ts";
 // No database imports needed - all data read from PDS
-import type { OAuthSessionsInterface } from "jsr:@tijs/atproto-oauth-hono@2.0.11";
+import type { OAuthSessionsInterface } from "jsr:@tijs/hono-oauth-sessions@2.1.1";
 
 // Global service instance for address enhancement
 const overpassService = new OverpassService();
@@ -170,16 +170,24 @@ interface PlaceInput {
   icon?: string;
 }
 
-// Authentication is now handled by getAuthSession() from ../services/auth.ts
-// which automatically refreshes expired tokens and supports both cookie and Bearer auth
-
 // Create a checkin with address using StrongRef architecture
 export async function createCheckin(c: Context): Promise<Response> {
   try {
     // Authenticate user with Iron Session (automatically refreshes tokens)
-    const oauthSession = await getAuthSession(c.req.raw);
+    const oauthSession = await oauth.sessions.getOAuthSessionFromRequest(
+      c.req.raw,
+    );
     if (!oauthSession) {
-      return unauthorizedResponse(c);
+      const response = c.json(
+        {
+          error: "Authentication required",
+          message: "Please log in again",
+          code: "SESSION_EXPIRED",
+        },
+        401,
+      );
+      response.headers.set("Set-Cookie", oauth.sessions.getClearCookieHeader());
+      return response;
     }
 
     const did = oauthSession.did;
@@ -591,9 +599,20 @@ async function createAddressAndCheckin(
 export async function deleteCheckin(c: Context): Promise<Response> {
   try {
     // Authenticate user with Iron Session (automatically refreshes tokens)
-    const oauthSession = await getAuthSession(c.req.raw);
+    const oauthSession = await oauth.sessions.getOAuthSessionFromRequest(
+      c.req.raw,
+    );
     if (!oauthSession) {
-      return unauthorizedResponse(c);
+      const response = c.json(
+        {
+          error: "Authentication required",
+          message: "Please log in again",
+          code: "SESSION_EXPIRED",
+        },
+        401,
+      );
+      response.headers.set("Set-Cookie", oauth.sessions.getClearCookieHeader());
+      return response;
     }
 
     const did = oauthSession.did;
