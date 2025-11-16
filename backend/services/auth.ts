@@ -1,6 +1,14 @@
 import { oauth } from "../routes/oauth.ts";
 import type { Context } from "jsr:@hono/hono@4.9.6";
 import type { SessionInterface } from "jsr:@tijs/hono-oauth-sessions@2.1.1";
+import {
+  NetworkError,
+  RefreshTokenExpiredError,
+  RefreshTokenRevokedError,
+  SessionError,
+  SessionNotFoundError,
+  TokenExchangeError,
+} from "jsr:@tijs/oauth-client-deno@4.0.1";
 
 /**
  * Get authenticated user session from OAuth with automatic token refresh.
@@ -75,11 +83,34 @@ export async function getAuthSession(
 
       return oauthSession;
     } catch (error) {
-      // Session restoration failed - could be expired, revoked, or network error
-      console.error(
-        `Failed to restore OAuth session for DID ${userDid}:`,
-        error,
-      );
+      // Handle typed errors that bubble through from oauth-client-deno
+      if (error instanceof SessionNotFoundError) {
+        console.log(
+          `Session not found for DID ${userDid} - user needs to re-authenticate`,
+        );
+      } else if (error instanceof RefreshTokenExpiredError) {
+        console.log(
+          `Refresh token expired for DID ${userDid} - re-authentication required`,
+        );
+      } else if (error instanceof RefreshTokenRevokedError) {
+        console.log(
+          `Refresh token revoked for DID ${userDid} - access has been revoked`,
+        );
+      } else if (error instanceof NetworkError) {
+        console.error(
+          `Network error during session restoration for DID ${userDid}:`,
+          error,
+        );
+      } else if (error instanceof TokenExchangeError) {
+        console.error(`Token exchange failed for DID ${userDid}:`, error);
+      } else if (error instanceof SessionError) {
+        console.error(`Session error for DID ${userDid}:`, error);
+      } else {
+        console.error(
+          `Unexpected error restoring session for DID ${userDid}:`,
+          error,
+        );
+      }
       return null;
     }
   } catch (error) {
