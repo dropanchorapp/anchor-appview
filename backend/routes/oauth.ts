@@ -5,8 +5,8 @@
 import {
   createATProtoOAuth,
   SQLiteStorage,
-} from "jsr:@tijs/atproto-oauth-hono@2.1.0";
-import type { ATProtoOAuthInstance } from "jsr:@tijs/atproto-oauth-hono@2.1.0";
+} from "jsr:@tijs/atproto-oauth-hono@2.2.0";
+import type { ATProtoOAuthInstance } from "jsr:@tijs/atproto-oauth-hono@2.2.0";
 import { rawDb } from "../database/db.ts";
 
 const COOKIE_SECRET = Deno.env.get("COOKIE_SECRET") ||
@@ -20,7 +20,8 @@ const oauth: ATProtoOAuthInstance = createATProtoOAuth({
   cookieSecret: COOKIE_SECRET,
   mobileScheme: "anchor-app://auth-callback",
   appName: "Anchor Location Feed",
-  logoUri: `${BASE_URL}/static/anchor-logo-transparent.png`,
+  logoUri:
+    "https://res.cloudinary.com/dru3aznlk/image/upload/v1754747200/anchor-logo-transparent_nrw70y.png",
   policyUri: `${BASE_URL}/privacy-policy`,
   sessionTtl: 60 * 60 * 24 * 30, // 30 days for mobile compatibility
   storage: new SQLiteStorage(rawDb),
