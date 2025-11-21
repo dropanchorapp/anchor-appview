@@ -5,8 +5,8 @@
 import {
   createATProtoOAuth,
   SQLiteStorage,
-} from "jsr:@tijs/atproto-oauth-hono@2.2.1";
-import type { ATProtoOAuthInstance } from "jsr:@tijs/atproto-oauth-hono@2.2.1";
+} from "jsr:@tijs/atproto-oauth-hono@2.3.0";
+import type { ATProtoOAuthInstance } from "jsr:@tijs/atproto-oauth-hono@2.3.0";
 import { rawDb } from "../database/db.ts";
 
 const COOKIE_SECRET = Deno.env.get("COOKIE_SECRET") ||
