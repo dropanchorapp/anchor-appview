@@ -176,13 +176,17 @@ samples, see:
 
 For developers integrating with Anchor's authentication system:
 
-**[🔐 Authentication Guide](docs/authentication.md)** - Anchor-specific setup guide:
+**[🔐 Authentication Guide](docs/authentication.md)** - Anchor-specific setup
+guide:
+
 - Quick configuration example
 - Anchor-specific settings (URL scheme, session TTL)
 - Authenticated endpoint examples
 - Links to complete OAuth documentation
 
-**[📱 Mobile OAuth Guide](https://jsr.io/@tijs/atproto-oauth-hono/doc/docs/MOBILE_OAUTH)** - Complete OAuth implementation (in package docs):
+**[📱 Mobile OAuth Guide](https://jsr.io/@tijs/atproto-oauth-hono/doc/docs/MOBILE_OAUTH)** -
+Complete OAuth implementation (in package docs):
+
 - API endpoint contracts with request/response schemas
 - OAuth flow sequence diagrams
 - Session validation and token refresh

@@ -20,7 +20,8 @@ from frontend routes.
 
 ### Authentication Methods
 
-All authenticated endpoints support **cookie-based authentication** (recommended):
+All authenticated endpoints support **cookie-based authentication**
+(recommended):
 
 ```http
 Cookie: sid=Fe26.2**...sealed-session-token...**
@@ -32,17 +33,24 @@ Alternatively, Bearer token authentication is supported for compatibility:
 Authorization: Bearer Fe26.2**...sealed-session-token...**
 ```
 
-> **Recommendation**: Use cookie-based authentication. After completing OAuth, create an HTTPCookie and add it to HTTPCookieStorage (iOS) or document.cookie (web). URLSession/fetch will automatically include cookies in requests.
+> **Recommendation**: Use cookie-based authentication. After completing OAuth,
+> create an HTTPCookie and add it to HTTPCookieStorage (iOS) or document.cookie
+> (web). URLSession/fetch will automatically include cookies in requests.
 
 ### Getting Authenticated
 
 To obtain authentication credentials:
 
-1. **Mobile Apps**: See **[Authentication Guide](authentication.md)** for Anchor-specific setup and complete OAuth flow documentation
-2. **Web Apps**: Use the web OAuth flow at `/login` (returns session cookies automatically)
-3. **Package Documentation**: See [@tijs/atproto-oauth-hono Mobile OAuth Guide](https://jsr.io/@tijs/atproto-oauth-hono/doc/docs/MOBILE_OAUTH) for complete implementation details
+1. **Mobile Apps**: See **[Authentication Guide](authentication.md)** for
+   Anchor-specific setup and complete OAuth flow documentation
+2. **Web Apps**: Use the web OAuth flow at `/login` (returns session cookies
+   automatically)
+3. **Package Documentation**: See
+   [@tijs/atproto-oauth-hono Mobile OAuth Guide](https://jsr.io/@tijs/atproto-oauth-hono/doc/docs/MOBILE_OAUTH)
+   for complete implementation details
 
-See [Creating Check-ins](#7-create-check-in) for authenticated endpoint examples.
+See [Creating Check-ins](#7-create-check-in) for authenticated endpoint
+examples.
 
 ## Response Format
 
@@ -499,7 +507,10 @@ curl -X POST "https://dropanchor.app/api/checkins" \
   -F "imageAlt=Latte art at Blue Bottle"
 ```
 
-> **Note**: `YOUR_SESSION_TOKEN` is obtained from the OAuth flow. See [Authentication Guide](authentication.md) for Anchor setup details, or the [@tijs/atproto-oauth-hono Mobile OAuth Guide](https://jsr.io/@tijs/atproto-oauth-hono/doc/docs/MOBILE_OAUTH) for complete implementation details.
+> **Note**: `YOUR_SESSION_TOKEN` is obtained from the OAuth flow. See
+> [Authentication Guide](authentication.md) for Anchor setup details, or the
+> [@tijs/atproto-oauth-hono Mobile OAuth Guide](https://jsr.io/@tijs/atproto-oauth-hono/doc/docs/MOBILE_OAUTH)
+> for complete implementation details.
 
 **Example Request (Swift/iOS with cookie - Recommended)**:
 

@@ -1,18 +1,23 @@
 # Authentication
 
-Anchor uses [@tijs/atproto-oauth-hono](https://jsr.io/@tijs/atproto-oauth-hono) for OAuth authentication with AT Protocol.
+Anchor uses [@tijs/atproto-oauth-hono](https://jsr.io/@tijs/atproto-oauth-hono)
+for OAuth authentication with AT Protocol.
 
 ## Quick Setup
 
 ```typescript
-import { createATProtoOAuth, SQLiteStorage } from "jsr:@tijs/atproto-oauth-hono";
+import {
+  createATProtoOAuth,
+  SQLiteStorage,
+} from "jsr:@tijs/atproto-oauth-hono";
 
 const oauth = createATProtoOAuth({
   baseUrl: "https://dropanchor.app",
   cookieSecret: Deno.env.get("COOKIE_SECRET"),
   mobileScheme: "anchor-app://auth-callback",
   appName: "Anchor Location Feed",
-  logoUri: "https://res.cloudinary.com/dru3aznlk/image/upload/v1754747200/anchor-logo-transparent_nrw70y.png",
+  logoUri:
+    "https://res.cloudinary.com/dru3aznlk/image/upload/v1754747200/anchor-logo-transparent_nrw70y.png",
   policyUri: "https://dropanchor.app/privacy-policy",
   sessionTtl: 60 * 60 * 24 * 30, // 30 days for mobile
   storage: new SQLiteStorage(rawDb),
@@ -27,15 +32,16 @@ app.route("/", oauth.routes);
 
 ### Anchor-Specific Settings
 
-| Setting | Value | Purpose |
-|---------|-------|---------|
-| **Base URL** | `https://dropanchor.app` | Production backend URL |
-| **Mobile Scheme** | `anchor-app://auth-callback` | iOS app custom URL scheme |
-| **Session TTL** | 30 days | Extended for mobile app UX |
+| Setting           | Value                        | Purpose                    |
+| ----------------- | ---------------------------- | -------------------------- |
+| **Base URL**      | `https://dropanchor.app`     | Production backend URL     |
+| **Mobile Scheme** | `anchor-app://auth-callback` | iOS app custom URL scheme  |
+| **Session TTL**   | 30 days                      | Extended for mobile app UX |
 
 ### Environment Variables
 
-- `COOKIE_SECRET` - Session encryption key (32+ characters, cryptographically random)
+- `COOKIE_SECRET` - Session encryption key (32+ characters, cryptographically
+  random)
 - `ANCHOR_BASE_URL` - Override base URL for development
 
 ## Authentication Methods
@@ -52,15 +58,20 @@ Alternative Bearer token authentication (for compatibility):
 Authorization: Bearer <session-token>
 ```
 
-> **Recommended**: Use cookie-based authentication. After OAuth, create an HTTPCookie and add it to HTTPCookieStorage (iOS) or document.cookie (web).
+> **Recommended**: Use cookie-based authentication. After OAuth, create an
+> HTTPCookie and add it to HTTPCookieStorage (iOS) or document.cookie (web).
 
 ## Complete OAuth Documentation
 
-For complete OAuth flow details, mobile integration, security considerations, and implementation examples:
+For complete OAuth flow details, mobile integration, security considerations,
+and implementation examples:
 
-**📱 [Mobile OAuth Guide](https://jsr.io/@tijs/atproto-oauth-hono/doc/docs/MOBILE_OAUTH)** (Package documentation)
+**📱
+[Mobile OAuth Guide](https://jsr.io/@tijs/atproto-oauth-hono/doc/docs/MOBILE_OAUTH)**
+(Package documentation)
 
 This guide includes:
+
 - Complete OAuth flow with sequence diagrams
 - All API endpoints with request/response schemas
 - PKCE implementation details
@@ -101,7 +112,9 @@ The Anchor iOS app uses ASWebAuthenticationSession for OAuth:
 4. **Create cookie**: Add to HTTPCookieStorage for URLSession
 5. **Make requests**: All API calls automatically include cookie
 
-See the [Mobile OAuth Guide](https://jsr.io/@tijs/atproto-oauth-hono/doc/docs/MOBILE_OAUTH) for implementation details.
+See the
+[Mobile OAuth Guide](https://jsr.io/@tijs/atproto-oauth-hono/doc/docs/MOBILE_OAUTH)
+for implementation details.
 
 ## Session Management
 
@@ -165,7 +178,9 @@ export ANCHOR_BASE_URL=http://localhost:8000
 - **DPoP tokens** managed entirely on backend
 - **No token exposure** in mobile app (only sealed session token)
 
-See [Security Considerations](https://jsr.io/@tijs/atproto-oauth-hono/doc/docs/MOBILE_OAUTH#security-considerations) in the Mobile OAuth Guide.
+See
+[Security Considerations](https://jsr.io/@tijs/atproto-oauth-hono/doc/docs/MOBILE_OAUTH#security-considerations)
+in the Mobile OAuth Guide.
 
 ## Additional Resources
 
