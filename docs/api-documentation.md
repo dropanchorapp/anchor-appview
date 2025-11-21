@@ -16,12 +16,32 @@ from frontend routes.
 
 **Read Endpoints**: No authentication required (public feeds)
 
-**Write Endpoints**: Require OAuth authentication via:
+**Write Endpoints**: Require OAuth authentication
 
-- **Web**: Secure cookies (Iron Session)
-- **Mobile**: Bearer token in `Authorization` header
+### Authentication Methods
 
-See [Creating Check-ins](#7-create-check-in) for authenticated endpoint details.
+All authenticated endpoints support **cookie-based authentication** (recommended):
+
+```http
+Cookie: sid=Fe26.2**...sealed-session-token...**
+```
+
+Alternatively, Bearer token authentication is supported for compatibility:
+
+```http
+Authorization: Bearer Fe26.2**...sealed-session-token...**
+```
+
+> **Recommendation**: Use cookie-based authentication. After completing OAuth, create an HTTPCookie and add it to HTTPCookieStorage (iOS) or document.cookie (web). URLSession/fetch will automatically include cookies in requests.
+
+### Getting Authenticated
+
+To obtain authentication credentials:
+
+1. **Mobile Apps**: See **[Mobile OAuth API](MOBILE_OAUTH_API.md)** for complete OAuth flow documentation
+2. **Web Apps**: Use the web OAuth flow at `/login` (returns session cookies automatically)
+
+See [Creating Check-ins](#7-create-check-in) for authenticated endpoint examples.
 
 ## Response Format
 
@@ -456,23 +476,38 @@ formData.append("imageAlt", "Latte art at Blue Bottle");
 - **Privacy**: EXIF data stripped (including GPS)
 - **Processing**: Creates thumbnail (300KB max) and fullsize (2MB max) versions
 
-**Example Request (cURL with image)**:
+**Example Request (cURL with cookie - Recommended)**:
 
 ```bash
 curl -X POST "https://dropanchor.app/api/checkins" \
-  -H "Authorization: Bearer YOUR_SESSION_ID" \
+  -b "sid=YOUR_SESSION_TOKEN" \
   -F "place={\"latitude\":37.7749,\"longitude\":-122.4194,\"name\":\"Blue Bottle Coffee\"}" \
   -F "message=Great coffee here!" \
   -F "image=@photo.jpg" \
   -F "imageAlt=Latte art at Blue Bottle"
 ```
 
-**Example Request (Swift/iOS)**:
+**Alternative with Bearer token**:
+
+```bash
+curl -X POST "https://dropanchor.app/api/checkins" \
+  -H "Authorization: Bearer YOUR_SESSION_TOKEN" \
+  -F "place={\"latitude\":37.7749,\"longitude\":-122.4194,\"name\":\"Blue Bottle Coffee\"}" \
+  -F "message=Great coffee here!" \
+  -F "image=@photo.jpg" \
+  -F "imageAlt=Latte art at Blue Bottle"
+```
+
+> **Note**: `YOUR_SESSION_TOKEN` is obtained from the OAuth flow. See [Mobile OAuth API](MOBILE_OAUTH_API.md) for details.
+
+**Example Request (Swift/iOS with cookie - Recommended)**:
 
 ```swift
+// Assumes session cookie is already set in HTTPCookieStorage from OAuth flow
+// See Mobile OAuth API documentation for complete authentication setup
+
 var request = URLRequest(url: URL(string: "https://dropanchor.app/api/checkins")!)
 request.httpMethod = "POST"
-request.setValue("Bearer \(sessionId)", forHTTPHeaderField: "Authorization")
 
 let boundary = UUID().uuidString
 request.setValue("multipart/form-data; boundary=\(boundary)", forHTTPHeaderField: "Content-Type")
@@ -483,15 +518,26 @@ body.append("--\(boundary)\r\n".data(using: .utf8)!)
 body.append("Content-Disposition: form-data; name=\"place\"\r\n\r\n".data(using: .utf8)!)
 body.append(placeJSON.data(using: .utf8)!)
 
+// Add message
+body.append("\r\n--\(boundary)\r\n".data(using: .utf8)!)
+body.append("Content-Disposition: form-data; name=\"message\"\r\n\r\n".data(using: .utf8)!)
+body.append("Great coffee here!".data(using: .utf8)!)
+
 // Add image
 body.append("\r\n--\(boundary)\r\n".data(using: .utf8)!)
 body.append("Content-Disposition: form-data; name=\"image\"; filename=\"photo.jpg\"\r\n".data(using: .utf8)!)
 body.append("Content-Type: image/jpeg\r\n\r\n".data(using: .utf8)!)
 body.append(imageData)
 
+// Add image alt text
+body.append("\r\n--\(boundary)\r\n".data(using: .utf8)!)
+body.append("Content-Disposition: form-data; name=\"imageAlt\"\r\n\r\n".data(using: .utf8)!)
+body.append("Latte art at Blue Bottle".data(using: .utf8)!)
+
 body.append("\r\n--\(boundary)--\r\n".data(using: .utf8)!)
 request.httpBody = body
 
+// Cookie is automatically included by URLSession from HTTPCookieStorage
 let (data, _) = try await URLSession.shared.data(for: request)
 ```
 
@@ -541,11 +587,18 @@ Delete a check-in (only the author can delete their own check-ins).
 
 **Authentication Required**: Yes (must be the check-in author)
 
-**Example Request**:
+**Example Request (with cookie - Recommended)**:
 
 ```bash
 curl -X DELETE "https://dropanchor.app/api/checkins/did:plc:wxex3wx5k4ctciupsv5m5stb/3lbmo5gsjgv2f" \
-  -H "Authorization: Bearer YOUR_SESSION_ID"
+  -b "sid=YOUR_SESSION_TOKEN"
+```
+
+**Alternative with Bearer token**:
+
+```bash
+curl -X DELETE "https://dropanchor.app/api/checkins/did:plc:wxex3wx5k4ctciupsv5m5stb/3lbmo5gsjgv2f" \
+  -H "Authorization: Bearer YOUR_SESSION_TOKEN"
 ```
 
 **Success Response** (200 OK):
