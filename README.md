@@ -172,6 +172,19 @@ samples, see:
 
 **[📖 API Documentation](docs/api-documentation.md)**
 
+### Mobile OAuth API
+
+For mobile app developers integrating with Anchor's OAuth system:
+
+**[📱 Mobile OAuth API Contract](docs/MOBILE_OAUTH_API.md)** - Complete
+specification for mobile OAuth flow including:
+
+- API endpoint contracts with request/response schemas
+- OAuth callback URL format and parameters
+- Session validation and token refresh
+- Security considerations and best practices
+- Swift integration examples
+
 ## 📊 Data Architecture
 
 **PDS-Only Design**: No local checkin storage. All checkin data lives in users'
