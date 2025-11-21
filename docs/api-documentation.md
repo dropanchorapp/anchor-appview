@@ -38,8 +38,9 @@ Authorization: Bearer Fe26.2**...sealed-session-token...**
 
 To obtain authentication credentials:
 
-1. **Mobile Apps**: See **[Mobile OAuth API](MOBILE_OAUTH_API.md)** for complete OAuth flow documentation
+1. **Mobile Apps**: See **[Authentication Guide](authentication.md)** for Anchor-specific setup and complete OAuth flow documentation
 2. **Web Apps**: Use the web OAuth flow at `/login` (returns session cookies automatically)
+3. **Package Documentation**: See [@tijs/atproto-oauth-hono Mobile OAuth Guide](https://jsr.io/@tijs/atproto-oauth-hono/doc/docs/MOBILE_OAUTH) for complete implementation details
 
 See [Creating Check-ins](#7-create-check-in) for authenticated endpoint examples.
 
@@ -498,7 +499,7 @@ curl -X POST "https://dropanchor.app/api/checkins" \
   -F "imageAlt=Latte art at Blue Bottle"
 ```
 
-> **Note**: `YOUR_SESSION_TOKEN` is obtained from the OAuth flow. See [Mobile OAuth API](MOBILE_OAUTH_API.md) for details.
+> **Note**: `YOUR_SESSION_TOKEN` is obtained from the OAuth flow. See [Authentication Guide](authentication.md) for Anchor setup details, or the [@tijs/atproto-oauth-hono Mobile OAuth Guide](https://jsr.io/@tijs/atproto-oauth-hono/doc/docs/MOBILE_OAUTH) for complete implementation details.
 
 **Example Request (Swift/iOS with cookie - Recommended)**:
 

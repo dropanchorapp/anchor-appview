@@ -172,18 +172,22 @@ samples, see:
 
 **[📖 API Documentation](docs/api-documentation.md)**
 
-### Mobile OAuth API
+### Authentication
 
-For mobile app developers integrating with Anchor's OAuth system:
+For developers integrating with Anchor's authentication system:
 
-**[📱 Mobile OAuth API Contract](docs/MOBILE_OAUTH_API.md)** - Complete
-specification for mobile OAuth flow including:
+**[🔐 Authentication Guide](docs/authentication.md)** - Anchor-specific setup guide:
+- Quick configuration example
+- Anchor-specific settings (URL scheme, session TTL)
+- Authenticated endpoint examples
+- Links to complete OAuth documentation
 
+**[📱 Mobile OAuth Guide](https://jsr.io/@tijs/atproto-oauth-hono/doc/docs/MOBILE_OAUTH)** - Complete OAuth implementation (in package docs):
 - API endpoint contracts with request/response schemas
-- OAuth callback URL format and parameters
+- OAuth flow sequence diagrams
 - Session validation and token refresh
 - Security considerations and best practices
-- Swift integration examples
+- iOS Swift and Android Kotlin examples
 
 ## 📊 Data Architecture
 
