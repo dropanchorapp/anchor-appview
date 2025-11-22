@@ -94,19 +94,19 @@ Deno.test({
     // Search for Empire State Building
     const places = await service.findNearbyPlaces(
       { latitude: 40.748817, longitude: -73.985428 },
-      100
+      100,
     );
 
     console.log(
       "Found places:",
-      places.map((p) => p.name)
+      places.map((p) => p.name),
     );
 
     // Find any place that has street address info
     // This is more robust than looking for a specific venue which might change categories/tags
     const placeWithAddress = places.find(
       (p) =>
-        p.address.street !== undefined || p.address.postalCode !== undefined
+        p.address.street !== undefined || p.address.postalCode !== undefined,
     );
 
     if (placeWithAddress) {
@@ -116,7 +116,7 @@ Deno.test({
 
     assertExists(
       placeWithAddress,
-      "Should find at least one place with street address in this dense area"
+      "Should find at least one place with street address in this dense area",
     );
   },
 });
