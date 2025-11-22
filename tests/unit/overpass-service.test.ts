@@ -9,7 +9,7 @@ Deno.test("OverpassService - filters religious boundaries", async () => {
   try {
     globalThis.fetch = async (
       _input: Request | URL | string,
-      _init?: RequestInit
+      _init?: RequestInit,
     ) => {
       let query = "";
 
@@ -84,7 +84,7 @@ Deno.test("OverpassService - filters religious boundaries", async () => {
               },
             ],
           }),
-          { status: 200 }
+          { status: 200 },
         );
       }
 
@@ -129,53 +129,55 @@ Deno.test(
     const originalFetch = globalThis.fetch;
 
     try {
-      globalThis.fetch = async (
-        input: Request | URL | string,
-        init?: RequestInit
+      globalThis.fetch = (
+        _input: Request | URL | string,
+        _init?: RequestInit,
       ) => {
-        return new Response(
-          JSON.stringify({
-            elements: [
-              {
-                type: "area",
-                id: 1,
-                tags: {
-                  admin_level: "2",
-                  boundary: "administrative",
-                  name: "United Kingdom",
-                  "ISO3166-1": "GB",
+        return Promise.resolve(
+          new Response(
+            JSON.stringify({
+              elements: [
+                {
+                  type: "area",
+                  id: 1,
+                  tags: {
+                    admin_level: "2",
+                    boundary: "administrative",
+                    name: "United Kingdom",
+                    "ISO3166-1": "GB",
+                  },
                 },
-              },
-              {
-                type: "area",
-                id: 2,
-                tags: {
-                  admin_level: "4",
-                  boundary: "administrative",
-                  name: "Scotland", // Constituent country, not the region we want usually
+                {
+                  type: "area",
+                  id: 2,
+                  tags: {
+                    admin_level: "4",
+                    boundary: "administrative",
+                    name: "Scotland", // Constituent country, not the region we want usually
+                  },
                 },
-              },
-              {
-                type: "area",
-                id: 3,
-                tags: {
-                  admin_level: "6",
-                  boundary: "administrative",
-                  name: "Highland", // The actual region/council area
+                {
+                  type: "area",
+                  id: 3,
+                  tags: {
+                    admin_level: "6",
+                    boundary: "administrative",
+                    name: "Highland", // The actual region/council area
+                  },
                 },
-              },
-              {
-                type: "area",
-                id: 4,
-                tags: {
-                  admin_level: "8",
-                  boundary: "administrative",
-                  name: "Inverness",
+                {
+                  type: "area",
+                  id: 4,
+                  tags: {
+                    admin_level: "8",
+                    boundary: "administrative",
+                    name: "Inverness",
+                  },
                 },
-              },
-            ],
-          }),
-          { status: 200 }
+              ],
+            }),
+            { status: 200 },
+          ),
         );
       };
 
@@ -203,5 +205,5 @@ Deno.test(
     } finally {
       globalThis.fetch = originalFetch;
     }
-  }
+  },
 );
