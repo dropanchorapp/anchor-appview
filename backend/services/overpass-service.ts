@@ -48,7 +48,7 @@ export class OverpassService {
   async findNearbyPlaces(
     coordinate: { latitude: number; longitude: number },
     radiusMeters: number = this.config.defaultRadius,
-    categories: string[] = [],
+    categories: string[] = []
   ): Promise<Place[]> {
     // Cleanup expired cache entries
     this.cleanupExpiredCache();
@@ -60,16 +60,16 @@ export class OverpassService {
     const cached = this.placesCache.get(cacheKey);
     if (cached && this.isCacheValid(cached, coordinate)) {
       const cacheAge = Math.floor(
-        (Date.now() - cached.timestamp.getTime()) / 1000,
+        (Date.now() - cached.timestamp.getTime()) / 1000
       );
       console.log(
-        `📍 Using cached places for location (${cached.places.length} places, age: ${cacheAge}s)`,
+        `📍 Using cached places for location (${cached.places.length} places, age: ${cacheAge}s)`
       );
       return cached.places;
     }
 
     console.log(
-      `📍 Cache miss - fetching fresh places from Overpass API (key: ${cacheKey})`,
+      `📍 Cache miss - fetching fresh places from Overpass API (key: ${cacheKey})`
     );
 
     // Build Overpass query
@@ -82,7 +82,7 @@ export class OverpassService {
       const controller = new AbortController();
       const timeoutId = setTimeout(
         () => controller.abort(),
-        this.config.timeout,
+        this.config.timeout
       );
 
       const response = await fetch(request, { signal: controller.signal });
@@ -105,9 +105,8 @@ export class OverpassService {
         places: places,
         coordinate,
         radiusMeters,
-        categories: categories.length > 0
-          ? categories
-          : this.getDefaultCategories(),
+        categories:
+          categories.length > 0 ? categories : this.getDefaultCategories(),
         timestamp: new Date(),
       };
       this.placesCache.set(cacheKey, cachedPlaces);
@@ -131,12 +130,12 @@ export class OverpassService {
   async findNearbyPlacesWithDistance(
     coordinate: { latitude: number; longitude: number },
     radiusMeters: number = this.config.defaultRadius,
-    categories: string[] = [],
+    categories: string[] = []
   ): Promise<PlaceWithDistance[]> {
     const places = await this.findNearbyPlaces(
       coordinate,
       radiusMeters,
-      categories,
+      categories
     );
 
     // Calculate distances and create PlaceWithDistance objects
@@ -145,7 +144,7 @@ export class OverpassService {
         coordinate.latitude,
         coordinate.longitude,
         place.latitude,
-        place.longitude,
+        place.longitude
       );
 
       return {
@@ -156,8 +155,8 @@ export class OverpassService {
     });
 
     // Sort by distance (closest first)
-    return placesWithDistance.sort((a, b) =>
-      a.distanceMeters - b.distanceMeters
+    return placesWithDistance.sort(
+      (a, b) => a.distanceMeters - b.distanceMeters
     );
   }
 
@@ -184,7 +183,7 @@ export class OverpassService {
       } catch (error) {
         console.warn(
           `Nominatim failed for ${place.name}, falling back to OSM admin boundaries:`,
-          error,
+          error
         );
         // Fall through to admin boundary fallback
       }
@@ -201,7 +200,7 @@ export class OverpassService {
 
     // Enhance with administrative boundary data
     console.log(
-      `🏛️ Enhancing address with admin boundaries for: ${place.name}`,
+      `🏛️ Enhancing address with admin boundaries for: ${place.name}`
     );
     const adminData = await this.resolveAdministrativeBoundaries({
       latitude: place.latitude,
@@ -260,12 +259,14 @@ export class OverpassService {
     // Check if this category type should use venue address strategy
     if (!place.category) return false;
 
-    const shouldUseVenueStrategy = CategoryService
-      .shouldUseVenueAddressStrategy(place.category);
+    const shouldUseVenueStrategy =
+      CategoryService.shouldUseVenueAddressStrategy(place.category);
 
     // Must have both venue category type AND some address data
-    return !!(shouldUseVenueStrategy &&
-      (place.address?.street || place.address?.locality));
+    return !!(
+      shouldUseVenueStrategy &&
+      (place.address?.street || place.address?.locality)
+    );
   }
 
   /**
@@ -303,15 +304,14 @@ export class OverpassService {
   private createCacheKey(
     coordinate: { latitude: number; longitude: number },
     radiusMeters: number,
-    categories: string[],
+    categories: string[]
   ): string {
     // Round to 3 decimal places for ~100 meter precision
     const roundedLat = Math.round(coordinate.latitude * 1000) / 1000;
     const roundedLon = Math.round(coordinate.longitude * 1000) / 1000;
 
-    const actualCategories = categories.length > 0
-      ? categories
-      : this.getDefaultCategories();
+    const actualCategories =
+      categories.length > 0 ? categories : this.getDefaultCategories();
     const categoriesKey = actualCategories.sort().join(",");
 
     return `${roundedLat},${roundedLon},${radiusMeters},${categoriesKey}`;
@@ -319,7 +319,7 @@ export class OverpassService {
 
   private isCacheValid(
     cached: CachedPlaces,
-    coordinate: { latitude: number; longitude: number },
+    coordinate: { latitude: number; longitude: number }
   ): boolean {
     // Check time-based expiration
     const timeSinceCache = Date.now() - cached.timestamp.getTime();
@@ -332,7 +332,7 @@ export class OverpassService {
       cached.coordinate.latitude,
       cached.coordinate.longitude,
       coordinate.latitude,
-      coordinate.longitude,
+      coordinate.longitude
     );
     return distance <= this.config.locationToleranceMeters;
   }
@@ -363,27 +363,28 @@ export class OverpassService {
   private buildOverpassQuery(
     coordinate: { latitude: number; longitude: number },
     radiusMeters: number,
-    categories: string[],
+    categories: string[]
   ): string {
     const { latitude: lat, longitude: lon } = coordinate;
 
-    const actualCategories = categories.length > 0
-      ? categories
-      : this.getDefaultCategories();
+    const actualCategories =
+      categories.length > 0 ? categories : this.getDefaultCategories();
 
     // Build query parts for each category - nodes only for speed
     // Use compact union syntax without newlines
     const queryParts: string[] = [];
     for (const category of actualCategories) {
+      // Query nodes, ways, and relations (nwr) to find all place types
+      // This is important for large landmarks (ways) and complex areas (relations)
       queryParts.push(
-        `node[${category}]["name"](around:${radiusMeters},${lat},${lon});`,
+        `nwr[${category}]["name"](around:${radiusMeters},${lat},${lon});`
       );
     }
 
     // Ultra-compact query format
-    const query = `[out:json][timeout:${
-      Math.floor(this.config.timeout / 1000)
-    }];(${queryParts.join("")});out qt;`;
+    const query = `[out:json][timeout:${Math.floor(
+      this.config.timeout / 1000
+    )}];(${queryParts.join("")});out qt;`;
 
     return query;
   }
@@ -447,7 +448,7 @@ export class OverpassService {
    * Extract address components from OSM tags with comprehensive field mapping
    */
   private extractAddressFromTags(
-    tags: Record<string, string>,
+    tags: Record<string, string>
   ): CommunityAddressRecord {
     // Extract street address with full house number + street combination
     let street: string | undefined;
@@ -460,7 +461,8 @@ export class OverpassService {
     }
 
     // Extract locality with comprehensive fallback chain
-    const locality = tags["addr:city"] ||
+    const locality =
+      tags["addr:city"] ||
       tags["addr:locality"] ||
       tags["place"] ||
       tags["addr:municipality"] ||
@@ -468,22 +470,23 @@ export class OverpassService {
       tags["addr:village"];
 
     // Extract region with comprehensive state/province/region mapping
-    const region = tags["addr:state"] ||
+    const region =
+      tags["addr:state"] ||
       tags["addr:region"] ||
       tags["addr:province"] ||
       tags["is_in:state"] ||
       tags["is_in:state_code"];
 
     // Extract country (OSM uses ISO 3166-1 alpha-2 codes)
-    const country = tags["addr:country"] ||
+    const country =
+      tags["addr:country"] ||
       tags["addr:country_code"] ||
       tags["is_in:country"] ||
       tags["is_in:country_code"];
 
     // Extract postal code with various field name variants
-    const postalCode = tags["addr:postcode"] ||
-      tags["addr:postal_code"] ||
-      tags["postal_code"];
+    const postalCode =
+      tags["addr:postcode"] || tags["addr:postal_code"] || tags["postal_code"];
 
     return {
       $type: "community.lexicon.location.address",
@@ -500,11 +503,11 @@ export class OverpassService {
    * Enhance places that lack locality/country with administrative boundary data
    */
   private async enhancePlacesWithAdministrativeData(
-    places: Place[],
+    places: Place[]
   ): Promise<Place[]> {
     // Group places by missing data and coordinates for efficient batch processing
-    const placesNeedingEnhancement = places.filter((place) =>
-      !place.address?.locality || !place.address?.country
+    const placesNeedingEnhancement = places.filter(
+      (place) => !place.address?.locality || !place.address?.country
     );
 
     if (placesNeedingEnhancement.length === 0) {
@@ -542,14 +545,15 @@ export class OverpassService {
    * This helps get locality/country for parks, monuments, and other POIs
    * Ultra-simplified version to avoid timeouts
    */
-  private async resolveAdministrativeBoundaries(
-    coordinate: { latitude: number; longitude: number },
-  ): Promise<{ locality?: string; region?: string; country?: string }> {
-    // Ultra-minimal query: only request essential admin levels (8, 4, 2)
-    // Skip level 10 and 6 which add processing time
-    // Use regex to filter admin levels server-side before returning data
-    const query =
-      `[out:json][timeout:10];is_in(${coordinate.latitude},${coordinate.longitude});area._[admin_level~"^(2|4|8)$"];out tags qt;`;
+  private async resolveAdministrativeBoundaries(coordinate: {
+    latitude: number;
+    longitude: number;
+  }): Promise<{ locality?: string; region?: string; country?: string }> {
+    // Query for all relevant administrative levels (2-8)
+    // Level 2: Country
+    // Level 3-6: Region/State/Province/County
+    // Level 7-8: Municipality/City/Town
+    const query = `[out:json][timeout:10];is_in(${coordinate.latitude},${coordinate.longitude});area._[admin_level~"^[2-8]$"];out tags qt;`;
 
     try {
       const request = this.buildRequest(query);
@@ -566,40 +570,130 @@ export class OverpassService {
       const overpassResponse: OverpassResponse = await response.json();
       const elements = overpassResponse.elements;
 
-      let locality: string | undefined;
-      let region: string | undefined;
-      let country: string | undefined;
+      // Store all found admin boundaries by level
+      const adminBoundaries = new Map<string, string>();
+      let countryCode = "";
 
-      // Simplified: only look at the admin levels we requested
       for (const element of elements) {
-        const adminLevel = element.tags?.["admin_level"];
         const name = element.tags?.["name"];
-
         if (!name) continue;
 
-        if (adminLevel === "8" && !locality) {
-          locality = name;
-        } else if (adminLevel === "4" && !region) {
-          region = name;
-        } else if (adminLevel === "2" && !country) {
-          country = element.tags?.["ISO3166-1"] ||
-            element.tags?.["ISO3166-1:alpha2"] ||
-            element.tags?.["name:en"] ||
-            name;
+        // Strictly allow only administrative boundaries
+        const boundaryType = element.tags?.["boundary"];
+        if (boundaryType !== "administrative") {
+          continue;
         }
 
-        // Early exit if we have everything
-        if (locality && region && country) break;
+        const level = element.tags?.["admin_level"];
+        if (level) {
+          let value = name;
+
+          // For country (Level 2), prefer ISO code or English name
+          if (level === "2") {
+            value =
+              element.tags?.["ISO3166-1"] ||
+              element.tags?.["ISO3166-1:alpha2"] ||
+              element.tags?.["name:en"] ||
+              name;
+
+            countryCode =
+              element.tags?.["ISO3166-1"] ||
+              element.tags?.["ISO3166-1:alpha2"] ||
+              "";
+          }
+
+          adminBoundaries.set(level, value);
+        }
+      }
+
+      // Country-specific admin level configuration
+      // Maps ISO 3166-1 alpha-2 code to { region: level, locality: level }
+      const countryConfig: Record<
+        string,
+        { region: string; locality: string }
+      > = {
+        // Default fallback
+        default: { region: "4", locality: "8" },
+
+        // North America
+        US: { region: "4", locality: "8" }, // State, City/Town
+        CA: { region: "4", locality: "8" }, // Province, Municipality
+        MX: { region: "4", locality: "8" }, // Estado, Municipio
+
+        // Europe
+        GB: { region: "6", locality: "8" }, // County/Unitary, District
+        DE: { region: "4", locality: "8" }, // Bundesland, Gemeinde
+        FR: { region: "4", locality: "8" }, // Région, Commune
+        ES: { region: "4", locality: "8" }, // Comunidad Autónoma, Municipio
+        IT: { region: "4", locality: "8" }, // Regione, Comune
+        NL: { region: "4", locality: "8" }, // Provincie, Gemeente
+        BE: { region: "4", locality: "8" }, // Gewest/Région, Gemeente/Commune
+        CH: { region: "4", locality: "8" }, // Kanton, Gemeinde
+        AT: { region: "4", locality: "8" }, // Bundesland, Gemeinde
+        PL: { region: "4", locality: "8" }, // Województwo, Gmina
+        SE: { region: "4", locality: "7" }, // Län, Kommun
+        NO: { region: "4", locality: "7" }, // Fylke, Kommune
+        DK: { region: "4", locality: "7" }, // Region, Kommune
+        FI: { region: "4", locality: "8" }, // Maakunta, Kunta
+        IE: { region: "6", locality: "8" }, // County (Level 6), Local Area
+
+        // Asia / Pacific
+        JP: { region: "4", locality: "7" }, // Prefecture, Municipality/Ward
+        CN: { region: "4", locality: "6" }, // Province, Prefecture-level city
+        IN: { region: "4", locality: "8" }, // State, District/City
+        AU: { region: "4", locality: "7" }, // State, LGA
+        NZ: { region: "4", locality: "8" }, // Region, Territorial Authority
+        KR: { region: "4", locality: "7" }, // Province, City/County
+
+        // South America
+        BR: { region: "4", locality: "8" }, // Estado, Município
+        AR: { region: "4", locality: "8" }, // Provincia, Municipio
+        CL: { region: "4", locality: "8" }, // Región, Comuna
+
+        // Africa
+        ZA: { region: "4", locality: "8" }, // Province, Municipality
+        EG: { region: "4", locality: "8" }, // Governorate, City
+      };
+
+      const config = countryConfig[countryCode] || countryConfig["default"];
+      const regionLevel = config.region;
+      const localityLevel = config.locality;
+
+      const country = adminBoundaries.get("2");
+
+      // Resolve Region
+      // Try target level, then fallback to adjacent levels if missing
+      let region = adminBoundaries.get(regionLevel);
+      if (!region) {
+        // Fallback heuristics for region
+        region =
+          adminBoundaries.get("3") ||
+          adminBoundaries.get("5") ||
+          adminBoundaries.get("6");
+      }
+
+      // Resolve Locality
+      // Try target level, then fallback
+      let locality = adminBoundaries.get(localityLevel);
+      if (!locality) {
+        // Fallback heuristics for locality
+        locality =
+          adminBoundaries.get("7") ||
+          adminBoundaries.get("9") ||
+          adminBoundaries.get("10");
       }
 
       console.log(
-        `🏛️ Admin boundary result for ${coordinate.latitude},${coordinate.longitude}:`,
+        `🏛️ Admin boundary result for ${coordinate.latitude},${
+          coordinate.longitude
+        } (${countryCode || "unknown"}):`,
         {
           locality: locality || "not found",
           region: region || "not found",
           country: country || "not found",
           elementsFound: elements.length,
-        },
+          levelsFound: Array.from(adminBoundaries.keys()).sort(),
+        }
       );
 
       return { locality, region, country };
@@ -645,17 +739,17 @@ export class OverpassService {
     lat1: number,
     lon1: number,
     lat2: number,
-    lon2: number,
+    lon2: number
   ): number {
     const R = 6371000; // Earth's radius in meters
-    const φ1 = lat1 * Math.PI / 180;
-    const φ2 = lat2 * Math.PI / 180;
-    const Δφ = (lat2 - lat1) * Math.PI / 180;
-    const Δλ = (lon2 - lon1) * Math.PI / 180;
+    const φ1 = (lat1 * Math.PI) / 180;
+    const φ2 = (lat2 * Math.PI) / 180;
+    const Δφ = ((lat2 - lat1) * Math.PI) / 180;
+    const Δλ = ((lon2 - lon1) * Math.PI) / 180;
 
-    const a = Math.sin(Δφ / 2) * Math.sin(Δφ / 2) +
-      Math.cos(φ1) * Math.cos(φ2) *
-        Math.sin(Δλ / 2) * Math.sin(Δλ / 2);
+    const a =
+      Math.sin(Δφ / 2) * Math.sin(Δφ / 2) +
+      Math.cos(φ1) * Math.cos(φ2) * Math.sin(Δλ / 2) * Math.sin(Δλ / 2);
     const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
 
     return R * c;
