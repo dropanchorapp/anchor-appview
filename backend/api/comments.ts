@@ -13,8 +13,24 @@ import {
   checkinInteractionsTable,
 } from "../database/schema.ts";
 import { and, desc, eq, sql } from "https://esm.sh/drizzle-orm@0.44.5";
-import { getAuthenticatedUserDid } from "../utils/auth-helpers.ts";
+import {
+  getAuthenticatedUserDid,
+  getClearSessionCookie,
+} from "../utils/auth-helpers.ts";
 import { resolveHandleToDid } from "../utils/atproto-resolver.ts";
+
+/**
+ * Helper to set session refresh cookie on response
+ */
+function setSessionCookie(
+  response: Response,
+  setCookieHeader: string | undefined,
+): Response {
+  if (setCookieHeader) {
+    response.headers.set("Set-Cookie", setCookieHeader);
+  }
+  return response;
+}
 
 export interface CorsHeaders {
   "Access-Control-Allow-Origin": string;
@@ -417,18 +433,21 @@ export async function createCommentHandler(
   corsHeaders: CorsHeaders,
 ): Promise<Response> {
   try {
-    // Get authentication
+    // Get authentication with session refresh support
     const authResult = await getAuthenticatedUserDid(req);
     if (!authResult.success || !authResult.oauthSession) {
-      return new Response(
+      const response = new Response(
         JSON.stringify({
           error: authResult.error || "Authentication required",
+          code: authResult.errorCode || "SESSION_EXPIRED",
         }),
         {
           status: 401,
           headers: corsHeaders,
         },
       );
+      response.headers.set("Set-Cookie", getClearSessionCookie());
+      return response;
     }
 
     // Resolve identifier to DID
@@ -470,12 +489,15 @@ export async function createCommentHandler(
       authResult.oauthSession,
     );
 
-    return new Response(
-      JSON.stringify(result),
-      {
-        status: 201,
-        headers: corsHeaders,
-      },
+    return setSessionCookie(
+      new Response(
+        JSON.stringify(result),
+        {
+          status: 201,
+          headers: corsHeaders,
+        },
+      ),
+      authResult.setCookieHeader,
     );
   } catch (error) {
     console.error("Create comment HTTP handler error:", error);
@@ -503,18 +525,21 @@ export async function removeCommentHandler(
   corsHeaders: CorsHeaders,
 ): Promise<Response> {
   try {
-    // Get authentication
+    // Get authentication with session refresh support
     const authResult = await getAuthenticatedUserDid(req);
     if (!authResult.success || !authResult.oauthSession) {
-      return new Response(
+      const response = new Response(
         JSON.stringify({
           error: authResult.error || "Authentication required",
+          code: authResult.errorCode || "SESSION_EXPIRED",
         }),
         {
           status: 401,
           headers: corsHeaders,
         },
       );
+      response.headers.set("Set-Cookie", getClearSessionCookie());
+      return response;
     }
 
     // Resolve identifier to DID
@@ -556,12 +581,15 @@ export async function removeCommentHandler(
       authResult.oauthSession,
     );
 
-    return new Response(
-      JSON.stringify({ success: true }),
-      {
-        status: 200,
-        headers: corsHeaders,
-      },
+    return setSessionCookie(
+      new Response(
+        JSON.stringify({ success: true }),
+        {
+          status: 200,
+          headers: corsHeaders,
+        },
+      ),
+      authResult.setCookieHeader,
     );
   } catch (error) {
     console.error("Remove comment HTTP handler error:", error);

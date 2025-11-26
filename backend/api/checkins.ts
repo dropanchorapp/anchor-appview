@@ -2,9 +2,12 @@
 import type { Context } from "jsr:@hono/hono@4.9.6";
 import { OverpassService } from "../services/overpass-service.ts";
 import type { Place } from "../models/place-models.ts";
-import { oauth } from "../routes/oauth.ts";
+import {
+  getClearSessionCookie,
+  getSessionFromRequest,
+} from "../utils/session.ts";
 // No database imports needed - all data read from PDS
-import type { OAuthSessionsInterface } from "jsr:@tijs/hono-oauth-sessions@2.1.1";
+import type { OAuthSessionsInterface } from "jsr:@tijs/hono-oauth-sessions@2.2.0";
 
 // Global service instance for address enhancement
 const overpassService = new OverpassService();
@@ -170,23 +173,35 @@ interface PlaceInput {
   icon?: string;
 }
 
+/**
+ * Helper to set session refresh cookie on response
+ */
+function setSessionCookie(
+  response: Response,
+  setCookieHeader: string | undefined,
+): Response {
+  if (setCookieHeader) {
+    response.headers.set("Set-Cookie", setCookieHeader);
+  }
+  return response;
+}
+
 // Create a checkin with address using StrongRef architecture
 export async function createCheckin(c: Context): Promise<Response> {
   try {
-    // Authenticate user with Iron Session (automatically refreshes tokens)
-    const oauthSession = await oauth.sessions.getOAuthSessionFromRequest(
-      c.req.raw,
-    );
+    // Authenticate user with session refresh support
+    const { session: oauthSession, setCookieHeader, error } =
+      await getSessionFromRequest(c.req.raw);
     if (!oauthSession) {
       const response = c.json(
         {
           error: "Authentication required",
-          message: "Please log in again",
-          code: "SESSION_EXPIRED",
+          message: error?.message || "Please log in again",
+          code: error?.type || "SESSION_EXPIRED",
         },
         401,
       );
-      response.headers.set("Set-Cookie", oauth.sessions.getClearCookieHeader());
+      response.headers.set("Set-Cookie", getClearSessionCookie());
       return response;
     }
 
@@ -320,14 +335,17 @@ export async function createCheckin(c: Context): Promise<Response> {
     const rkey = createResult.checkinUri.split("/").pop();
     const shareableId = rkey;
 
-    return c.json({
-      success: true,
-      checkinUri: createResult.checkinUri,
-      addressUri: createResult.addressUri,
-      shareableId: shareableId,
-      shareableUrl: `https://dropanchor.app/checkin/${shareableId}`,
-      imageUploaded: !!processedImage,
-    });
+    return setSessionCookie(
+      c.json({
+        success: true,
+        checkinUri: createResult.checkinUri,
+        addressUri: createResult.addressUri,
+        shareableId: shareableId,
+        shareableUrl: `https://dropanchor.app/checkin/${shareableId}`,
+        imageUploaded: !!processedImage,
+      }),
+      setCookieHeader,
+    );
   } catch (err) {
     console.error("❌ Checkin creation failed:", err);
     return c.json({
@@ -598,20 +616,19 @@ async function createAddressAndCheckin(
 // Delete a checkin and its associated address record
 export async function deleteCheckin(c: Context): Promise<Response> {
   try {
-    // Authenticate user with Iron Session (automatically refreshes tokens)
-    const oauthSession = await oauth.sessions.getOAuthSessionFromRequest(
-      c.req.raw,
-    );
+    // Authenticate user with session refresh support
+    const { session: oauthSession, setCookieHeader, error } =
+      await getSessionFromRequest(c.req.raw);
     if (!oauthSession) {
       const response = c.json(
         {
           error: "Authentication required",
-          message: "Please log in again",
-          code: "SESSION_EXPIRED",
+          message: error?.message || "Please log in again",
+          code: error?.type || "SESSION_EXPIRED",
         },
         401,
       );
-      response.headers.set("Set-Cookie", oauth.sessions.getClearCookieHeader());
+      response.headers.set("Set-Cookie", getClearSessionCookie());
       return response;
     }
 
@@ -657,9 +674,12 @@ export async function deleteCheckin(c: Context): Promise<Response> {
 
     console.log("✅ Checkin deleted successfully");
 
-    return c.json({
-      success: true,
-    });
+    return setSessionCookie(
+      c.json({
+        success: true,
+      }),
+      setCookieHeader,
+    );
   } catch (err) {
     console.error("❌ Checkin deletion failed:", err);
     return c.json({
