@@ -5,9 +5,10 @@ import type { Place } from "../models/place-models.ts";
 import {
   getClearSessionCookie,
   getSessionFromRequest,
+  setSessionCookie,
 } from "../utils/session.ts";
 // No database imports needed - all data read from PDS
-import type { OAuthSessionsInterface } from "jsr:@tijs/atproto-oauth@0.1.1";
+import type { OAuthSessionsInterface } from "jsr:@tijs/atproto-oauth@1.0.0";
 
 // Global service instance for address enhancement
 const overpassService = new OverpassService();
@@ -171,19 +172,6 @@ interface PlaceInput {
   category?: string;
   categoryGroup?: any;
   icon?: string;
-}
-
-/**
- * Helper to set session refresh cookie on response
- */
-function setSessionCookie(
-  response: Response,
-  setCookieHeader: string | undefined,
-): Response {
-  if (setCookieHeader) {
-    response.headers.set("Set-Cookie", setCookieHeader);
-  }
-  return response;
 }
 
 // Create a checkin with address using StrongRef architecture

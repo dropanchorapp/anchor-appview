@@ -7,8 +7,6 @@ import { isValidHandle } from "npm:@atproto/syntax@0.3.0";
 import { oauth } from "./oauth.ts";
 import { getSessionFromRequest } from "../utils/session.ts";
 
-const _MOBILE_SCHEME = "anchor-app://auth-callback";
-
 const app = new Hono();
 
 // === Core OAuth routes (from library) ===
@@ -176,8 +174,8 @@ app.get("/mobile/refresh-token", async (c) => {
       );
     }
 
-    // Use the session getter which handles Bearer tokens
-    const result = await oauth.getSessionFromRequest(c.req.raw);
+    // Use the session wrapper which handles both cookie and Bearer tokens
+    const result = await getSessionFromRequest(c.req.raw);
 
     if (!result.session) {
       return c.json(

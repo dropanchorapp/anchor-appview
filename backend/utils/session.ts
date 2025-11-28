@@ -6,7 +6,7 @@
 import type {
   OAuthSessionFromRequestResult,
   SessionInterface,
-} from "jsr:@tijs/atproto-oauth@0.1.1";
+} from "jsr:@tijs/atproto-oauth@1.0.0";
 import { email } from "https://esm.town/v/std/email";
 import { oauth } from "../routes/oauth.ts";
 
@@ -213,4 +213,24 @@ export async function getSessionFromRequest(
  */
 export function getClearSessionCookie(): string {
   return oauth.getClearCookieHeader();
+}
+
+/**
+ * Helper to set session refresh cookie on response.
+ *
+ * Use this after making authenticated API calls to keep the session alive.
+ * The setCookieHeader is returned from getSessionFromRequest() when valid.
+ *
+ * @param response - The response to add the Set-Cookie header to
+ * @param setCookieHeader - The Set-Cookie header value (may be undefined)
+ * @returns The response (for chaining)
+ */
+export function setSessionCookie(
+  response: Response,
+  setCookieHeader: string | undefined,
+): Response {
+  if (setCookieHeader) {
+    response.headers.set("Set-Cookie", setCookieHeader);
+  }
+  return response;
 }

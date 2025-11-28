@@ -17,20 +17,8 @@ import {
   getAuthenticatedUserDid,
   getClearSessionCookie,
 } from "../utils/auth-helpers.ts";
+import { setSessionCookie } from "../utils/session.ts";
 import { resolveHandleToDid } from "../utils/atproto-resolver.ts";
-
-/**
- * Helper to set session refresh cookie on response
- */
-function setSessionCookie(
-  response: Response,
-  setCookieHeader: string | undefined,
-): Response {
-  if (setCookieHeader) {
-    response.headers.set("Set-Cookie", setCookieHeader);
-  }
-  return response;
-}
 
 export interface CorsHeaders {
   "Access-Control-Allow-Origin": string;
