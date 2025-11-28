@@ -465,6 +465,27 @@ const MIGRATIONS = [
       ON checkin_counts(updated_at DESC);
     `,
   },
+  {
+    version: "015_add_oauth_storage",
+    description:
+      "Create oauth_storage table for atproto-storage library (separate from iron_session_storage)",
+    sql: `
+      -- Create oauth_storage table for the @tijs/atproto-storage library
+      -- This table stores OAuth state, PKCE verifiers, and session data
+      -- Uses TEXT columns for timestamps (as expected by the library)
+      CREATE TABLE IF NOT EXISTS oauth_storage (
+        key TEXT PRIMARY KEY,
+        value TEXT NOT NULL,
+        expires_at TEXT,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      );
+
+      -- Create index for efficient cleanup of expired entries
+      CREATE INDEX IF NOT EXISTS idx_oauth_storage_expires_at
+      ON oauth_storage(expires_at);
+    `,
+  },
 ];
 
 export async function runMigrations() {
