@@ -486,6 +486,30 @@ const MIGRATIONS = [
       ON oauth_storage(expires_at);
     `,
   },
+  {
+    version: "016_fix_oauth_storage_schema",
+    description:
+      "Fix oauth_storage table by recreating with correct schema (expires_at column)",
+    sql: `
+      -- The previous migration might have created a table without expires_at
+      -- or the table existed from a previous library version with wrong schema
+      -- Drop and recreate to ensure correct schema
+      DROP TABLE IF EXISTS oauth_storage;
+
+      -- Create oauth_storage table with correct schema
+      CREATE TABLE oauth_storage (
+        key TEXT PRIMARY KEY,
+        value TEXT NOT NULL,
+        expires_at TEXT,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      );
+
+      -- Create index for efficient cleanup of expired entries
+      CREATE INDEX IF NOT EXISTS idx_oauth_storage_expires_at
+      ON oauth_storage(expires_at);
+    `,
+  },
 ];
 
 export async function runMigrations() {
