@@ -5,8 +5,8 @@
 
 import type {
   OAuthSessionFromRequestResult,
-} from "jsr:@tijs/atproto-oauth-hono@2.4.0";
-import type { SessionInterface } from "jsr:@tijs/hono-oauth-sessions@2.2.0";
+  SessionInterface,
+} from "jsr:@tijs/atproto-oauth@0.1.1";
 import { email } from "https://esm.town/v/std/email";
 import { oauth } from "../routes/oauth.ts";
 
@@ -85,8 +85,8 @@ export async function getSessionFromRequest(
 ): Promise<SessionResult> {
   try {
     // Use the new method that returns Set-Cookie header for session refresh
-    const result: OAuthSessionFromRequestResult = await oauth.sessions
-      .getOAuthSessionFromRequestWithCookie(request);
+    const result: OAuthSessionFromRequestResult = await oauth
+      .getSessionFromRequest(request);
 
     if (!result.session) {
       const errorType = result.error?.type || "NO_SESSION";
@@ -212,5 +212,5 @@ export async function getSessionFromRequest(
  * Get clear cookie header for session cleanup.
  */
 export function getClearSessionCookie(): string {
-  return oauth.sessions.getClearCookieHeader();
+  return oauth.getClearCookieHeader();
 }

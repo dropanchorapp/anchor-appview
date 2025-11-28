@@ -2,7 +2,7 @@
 // Main HTTP entry point for Anchor AppView - organized route groups
 import { Hono } from "jsr:@hono/hono@4.9.6";
 import { initializeTables } from "./backend/database/db.ts";
-import { oauthRoutes } from "./backend/routes/oauth.ts";
+import { authRoutes } from "./backend/routes/auth.ts";
 import { createFrontendRoutes } from "./backend/routes/frontend.ts";
 import anchorApiHandler from "./backend/api/anchor-api.ts";
 import { createCheckin, deleteCheckin } from "./backend/api/checkins.ts";
@@ -12,8 +12,8 @@ const app = new Hono();
 // Initialize database on startup
 await initializeTables();
 
-// Mount OAuth routes FIRST - provides /login, /oauth/callback, /api/auth/session, etc.
-app.route("/", oauthRoutes);
+// Mount auth routes FIRST - provides /login, /oauth/callback, /api/auth/session, etc.
+app.route("/", authRoutes);
 
 // Mount API routes (before catch-all frontend routes)
 app.get("/api/nearby", async (c) => {
@@ -164,17 +164,6 @@ app.get("/api/debug/oauth-sessions", async (c) => {
           did: oauthSession.did,
           handle: oauthSession.handle,
           pdsUrl: oauthSession.pdsUrl,
-        }
-        : { found: false };
-
-      // Also try getStoredOAuthData to see raw session data
-      const storedData = await sessions.getStoredOAuthData(FAILING_DID);
-      apiResult.storedData = storedData
-        ? {
-          found: true,
-          did: storedData.did,
-          handle: storedData.handle,
-          hasTokens: !!(storedData.accessToken && storedData.refreshToken),
         }
         : { found: false };
     } catch (error) {

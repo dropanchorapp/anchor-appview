@@ -7,7 +7,7 @@ import {
   getSessionFromRequest,
 } from "../utils/session.ts";
 // No database imports needed - all data read from PDS
-import type { OAuthSessionsInterface } from "jsr:@tijs/hono-oauth-sessions@2.2.0";
+import type { OAuthSessionsInterface } from "jsr:@tijs/atproto-oauth@0.1.1";
 
 // Global service instance for address enhancement
 const overpassService = new OverpassService();
