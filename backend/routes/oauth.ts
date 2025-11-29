@@ -2,8 +2,8 @@
  * OAuth authentication using @tijs/atproto-oauth package
  */
 
-import { createATProtoOAuth } from "jsr:@tijs/atproto-oauth@1.0.0";
-import type { ATProtoOAuthInstance } from "jsr:@tijs/atproto-oauth@1.0.0";
+import { createATProtoOAuth } from "jsr:@tijs/atproto-oauth@1.1.1";
+import type { ATProtoOAuthInstance } from "jsr:@tijs/atproto-oauth@1.1.1";
 import { SQLiteStorage, valTownAdapter } from "jsr:@tijs/atproto-storage@0.1.1";
 import { rawDb } from "../database/db.ts";
 

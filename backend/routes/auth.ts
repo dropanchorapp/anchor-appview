@@ -85,36 +85,11 @@ app.post("/api/auth/mobile-start", async (c) => {
 
     console.log(`Starting mobile OAuth for handle: ${handle}`);
 
-    // Build login URL with mobile state
-    // The state will be parsed by handleCallback to detect mobile flow
+    // Build login URL with mobile=true to trigger mobile callback flow
     const loginUrl = new URL("/login", c.req.url);
     loginUrl.searchParams.set("handle", handle);
-    // Note: We pass mobile info via a custom header or state encoding
-    // For now, we'll use a workaround - store mobile state in storage keyed by handle
+    loginUrl.searchParams.set("mobile", "true");
 
-    // Store the PKCE challenge for this login attempt
-    // The OAuth callback will use this to redirect to mobile scheme
-    await oauth.sessions.saveOAuthSession({
-      did: `pending:${handle}`,
-      handle,
-      pdsUrl: "",
-      accessToken: "",
-      refreshToken: "",
-      // Store mobile context
-      toJSON: () => ({
-        mobile: true,
-        codeChallenge: code_challenge,
-        handle,
-        timestamp: Date.now(),
-      }),
-      makeRequest: () => new Response("Not ready", { status: 503 }),
-    } as any);
-
-    // Actually, the proper way is to use the login URL with special params
-    // The new library's handleLogin doesn't support mobile, so we redirect
-    // to login and hope the callback detects mobile somehow.
-
-    // For now, return the login URL - mobile client will open this in a browser
     const authUrl = loginUrl.toString();
 
     console.log(`Mobile auth URL generated: ${authUrl}`);
