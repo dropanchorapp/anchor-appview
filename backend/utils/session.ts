@@ -6,7 +6,7 @@
 import type {
   OAuthSessionFromRequestResult,
   SessionInterface,
-} from "jsr:@tijs/atproto-oauth@1.1.1";
+} from "jsr:@tijs/atproto-oauth@2.0.0";
 import { email } from "https://esm.town/v/std/email";
 import { oauth } from "../routes/oauth.ts";
 
