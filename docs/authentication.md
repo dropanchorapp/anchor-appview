@@ -1,15 +1,13 @@
 # Authentication
 
-Anchor uses [@tijs/atproto-oauth-hono](https://jsr.io/@tijs/atproto-oauth-hono)
-for OAuth authentication with AT Protocol.
+Anchor uses [@tijs/atproto-oauth](https://jsr.io/@tijs/atproto-oauth) for OAuth
+authentication with AT Protocol.
 
 ## Quick Setup
 
 ```typescript
-import {
-  createATProtoOAuth,
-  SQLiteStorage,
-} from "jsr:@tijs/atproto-oauth-hono";
+import { createATProtoOAuth } from "jsr:@tijs/atproto-oauth";
+import { SQLiteStorage } from "jsr:@tijs/atproto-storage";
 
 const oauth = createATProtoOAuth({
   baseUrl: "https://dropanchor.app",
@@ -67,7 +65,7 @@ For complete OAuth flow details, mobile integration, security considerations,
 and implementation examples:
 
 **📱
-[Mobile OAuth Guide](https://jsr.io/@tijs/atproto-oauth-hono/doc/docs/MOBILE_OAUTH)**
+[Mobile OAuth Guide](https://jsr.io/@tijs/atproto-oauth/doc/docs/MOBILE_OAUTH)**
 (Package documentation)
 
 This guide includes:
@@ -113,7 +111,7 @@ The Anchor iOS app uses ASWebAuthenticationSession for OAuth:
 5. **Make requests**: All API calls automatically include cookie
 
 See the
-[Mobile OAuth Guide](https://jsr.io/@tijs/atproto-oauth-hono/doc/docs/MOBILE_OAUTH)
+[Mobile OAuth Guide](https://jsr.io/@tijs/atproto-oauth/doc/docs/MOBILE_OAUTH)
 for implementation details.
 
 ## Session Management
@@ -179,12 +177,12 @@ export ANCHOR_BASE_URL=http://localhost:8000
 - **No token exposure** in mobile app (only sealed session token)
 
 See
-[Security Considerations](https://jsr.io/@tijs/atproto-oauth-hono/doc/docs/MOBILE_OAUTH#security-considerations)
+[Security Considerations](https://jsr.io/@tijs/atproto-oauth/doc/docs/MOBILE_OAUTH#security-considerations)
 in the Mobile OAuth Guide.
 
 ## Additional Resources
 
-- [@tijs/atproto-oauth-hono Package](https://jsr.io/@tijs/atproto-oauth-hono)
-- [Mobile OAuth Guide](https://jsr.io/@tijs/atproto-oauth-hono/doc/docs/MOBILE_OAUTH)
+- [@tijs/atproto-oauth Package](https://jsr.io/@tijs/atproto-oauth)
+- [Mobile OAuth Guide](https://jsr.io/@tijs/atproto-oauth/doc/docs/MOBILE_OAUTH)
 - [AT Protocol OAuth](https://atproto.com/specs/oauth)
 - [Anchor iOS App Source](https://github.com/dropanchorapp/Anchor)

@@ -8,7 +8,7 @@ import {
   setSessionCookie,
 } from "../utils/session.ts";
 // No database imports needed - all data read from PDS
-import type { OAuthSessionsInterface } from "jsr:@tijs/atproto-oauth@2.0.0";
+import type { OAuthSessionsInterface } from "jsr:@tijs/atproto-oauth@2.3.0";
 
 // Global service instance for address enhancement
 const overpassService = new OverpassService();

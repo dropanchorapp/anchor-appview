@@ -184,7 +184,7 @@ guide:
 - Authenticated endpoint examples
 - Links to complete OAuth documentation
 
-**[📱 Mobile OAuth Guide](https://jsr.io/@tijs/atproto-oauth-hono/doc/docs/MOBILE_OAUTH)** -
+**[📱 Mobile OAuth Guide](https://jsr.io/@tijs/atproto-oauth/doc/docs/MOBILE_OAUTH)** -
 Complete OAuth implementation (in package docs):
 
 - API endpoint contracts with request/response schemas
@@ -217,7 +217,7 @@ management (encrypted with Iron Session).
 - **PDS-First Architecture**: All checkin data stored in users' PDS
   (decentralized, user-controlled)
 - **OAuth Authentication**: Secure authentication with automatic token refresh
-  and DPoP handling via `@tijs/atproto-oauth-hono`
+  and DPoP handling via `@tijs/atproto-oauth`
 - **Image Attachments**: Optional image uploads with:
   - Security validation via magic number detection (not just MIME types)
   - Client-side compression to <5MB target (server enforces <10MB hard limit)
@@ -325,7 +325,7 @@ The AppView is fully compatible with the AT Protocol ecosystem:
 - **Lexicon Definitions**: `app.dropanchor.checkin` and
   `community.lexicon.location.address`
 - **PDS Integration**: Direct reads/writes to user PDS (no local caching)
-- **OAuth Client**: Uses `@tijs/atproto-oauth-hono` with PKCE flow and DPoP
+- **OAuth Client**: Uses `@tijs/atproto-oauth` with PKCE flow and DPoP
 - **DID Resolution**: PLC directory and personal PDS servers
 - **StrongRef Pattern**: Address records referenced via CID-based StrongRefs
 - **Blob Storage**: Images stored as AT Protocol blobs in user's PDS

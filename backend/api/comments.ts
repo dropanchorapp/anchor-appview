@@ -62,7 +62,7 @@ export async function createComment(
   checkinRkey: string,
   authorDid: string,
   commentText: string,
-  oauthSession: any, // OAuthSession from @tijs/atproto-oauth-hono
+  oauthSession: any, // OAuthSession from @tijs/atproto-oauth
 ): Promise<{ uri: string; cid: string }> {
   try {
     // Validate comment text
@@ -322,7 +322,7 @@ export async function removeComment(
   checkinRkey: string,
   commentRkey: string,
   authorDid: string, // The person who created the comment (the commenter)
-  oauthSession: any, // OAuthSession from @tijs/atproto-oauth-hono
+  oauthSession: any, // OAuthSession from @tijs/atproto-oauth
 ): Promise<void> {
   try {
     const pdsUrl = oauthSession.pdsUrl;

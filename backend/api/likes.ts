@@ -59,7 +59,7 @@ export async function createLike(
   checkinDid: string,
   checkinRkey: string,
   authorDid: string,
-  oauthSession: any, // OAuthSession from @tijs/atproto-oauth-hono
+  oauthSession: any, // OAuthSession from @tijs/atproto-oauth
 ): Promise<{ uri: string; cid: string }> {
   try {
     const likerPdsUrl = oauthSession.pdsUrl;
@@ -309,7 +309,7 @@ export async function removeLike(
   checkinDid: string,
   checkinRkey: string,
   authorDid: string, // The person who created the like (the liker)
-  oauthSession: any, // OAuthSession from @tijs/atproto-oauth-hono
+  oauthSession: any, // OAuthSession from @tijs/atproto-oauth
 ): Promise<void> {
   try {
     const pdsUrl = oauthSession.pdsUrl;

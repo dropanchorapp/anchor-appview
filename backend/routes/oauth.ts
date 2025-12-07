@@ -2,9 +2,9 @@
  * OAuth authentication using @tijs/atproto-oauth package
  */
 
-import { createATProtoOAuth } from "jsr:@tijs/atproto-oauth@2.1.0";
-import type { ATProtoOAuthInstance } from "jsr:@tijs/atproto-oauth@2.1.0";
-import { SQLiteStorage, valTownAdapter } from "jsr:@tijs/atproto-storage@0.1.1";
+import { createATProtoOAuth } from "jsr:@tijs/atproto-oauth@2.3.0";
+import type { ATProtoOAuthInstance } from "jsr:@tijs/atproto-oauth@2.3.0";
+import { SQLiteStorage, valTownAdapter } from "jsr:@tijs/atproto-storage@1.0.0";
 import { rawDb } from "../database/db.ts";
 
 const COOKIE_SECRET = Deno.env.get("COOKIE_SECRET") ||

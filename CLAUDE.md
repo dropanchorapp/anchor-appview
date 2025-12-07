@@ -52,7 +52,7 @@ Local database storage:
 
 **OAuth Authentication** (`backend/routes/oauth.ts`, `backend/oauth/`):
 
-- Uses custom package `jsr:@tijs/atproto-oauth-hono@2.3.0`
+- Uses custom package `jsr:@tijs/atproto-oauth@2.3.0`
 - Provides web and mobile (iOS) authentication flows
 - Mobile: Custom URL scheme `anchor-app://auth-callback`
 - Session storage via Drizzle ORM with SQLite
@@ -188,12 +188,12 @@ const baseUrl = Deno.env.get("ANCHOR_BASE_URL") || "https://dropanchor.app";
 ### External Dependencies
 
 - Use `https://esm.sh` for npm packages
-- Use `jsr:` for JSR packages (Hono, atproto-oauth-hono)
+- Use `jsr:` for JSR packages (Hono, atproto-oauth)
 - Use `https://esm.town/v/std/` for Val Town utilities
 
 ## OAuth Authentication Flow
 
-### Package: @tijs/atproto-oauth-hono
+### Package: @tijs/atproto-oauth
 
 The OAuth system uses a custom package that handles:
 
@@ -206,7 +206,7 @@ The OAuth system uses a custom package that handles:
 ### Usage Pattern
 
 ```typescript
-import { createATProtoOAuth } from "jsr:@tijs/atproto-oauth-hono@2.3.0";
+import { createATProtoOAuth } from "jsr:@tijs/atproto-oauth@2.3.0";
 
 const oauth = createATProtoOAuth({
   baseUrl: BASE_URL,
