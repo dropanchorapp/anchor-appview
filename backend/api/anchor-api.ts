@@ -68,7 +68,10 @@ async function handleMigrateCheckins(
     return new Response(
       JSON.stringify({
         success: true,
-        migrated: result.migrated,
+        migrated: result.formatMigrated + result.coordinateMigrated,
+        formatMigrated: result.formatMigrated,
+        coordinateMigrated: result.coordinateMigrated,
+        addressesDeleted: result.addressesDeleted,
         failed: result.failed,
         errors: result.errors,
       }),
