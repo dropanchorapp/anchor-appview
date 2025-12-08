@@ -1,10 +1,12 @@
 # Publishing Anchor Lexicons
 
-This document explains how to publish the `app.dropanchor.*` lexicons so they can be discovered by tools like `glot` and other AT Protocol applications.
+This document explains how to publish the `app.dropanchor.*` lexicons so they
+can be discovered by tools like `glot` and other AT Protocol applications.
 
 ## Current Status
 
-The Anchor lexicons are currently **local only** (not published). They work fine for the app but aren't discoverable by external tools.
+The Anchor lexicons are currently **local only** (not published). They work fine
+for the app but aren't discoverable by external tools.
 
 ```bash
 ~/go/bin/glot status lexicons/
@@ -16,6 +18,7 @@ The Anchor lexicons are currently **local only** (not published). They work fine
 ## Why Publish?
 
 Publishing lexicons enables:
+
 - Discovery by `glot` and other lexicon tools
 - Interoperability with other apps that want to read/write Anchor data
 - Validation of records against the published schema
@@ -41,19 +44,21 @@ Create a route to serve `/.well-known/did.json`:
 }
 ```
 
-This tells resolvers that lexicons for `dropanchor.app` are hosted at `/lexicons`.
+This tells resolvers that lexicons for `dropanchor.app` are hosted at
+`/lexicons`.
 
 ### 2. Serve Lexicon Files
 
 Serve the lexicon JSON files at paths matching their NSID structure:
 
-| Lexicon | URL |
-|---------|-----|
+| Lexicon                  | URL                                                           |
+| ------------------------ | ------------------------------------------------------------- |
 | `app.dropanchor.checkin` | `https://dropanchor.app/lexicons/app/dropanchor/checkin.json` |
 | `app.dropanchor.comment` | `https://dropanchor.app/lexicons/app/dropanchor/comment.json` |
-| `app.dropanchor.like` | `https://dropanchor.app/lexicons/app/dropanchor/like.json` |
+| `app.dropanchor.like`    | `https://dropanchor.app/lexicons/app/dropanchor/like.json`    |
 
 You can either:
+
 - Copy the files to a static directory
 - Serve them directly from the `lexicons/` folder in the repo
 
@@ -65,7 +70,8 @@ Add a TXT record to the `dropanchor.app` domain:
 _lexicon.dropanchor.app. IN TXT "did=did:web:dropanchor.app"
 ```
 
-This tells lexicon resolvers how to find the DID document for the `app.dropanchor` namespace.
+This tells lexicon resolvers how to find the DID document for the
+`app.dropanchor` namespace.
 
 ### 4. Verify
 
@@ -93,9 +99,9 @@ app.get("/.well-known/did.json", (c) => {
       {
         "id": "#lexicon",
         "type": "LexiconHost",
-        "serviceEndpoint": "https://dropanchor.app/lexicons"
-      }
-    ]
+        "serviceEndpoint": "https://dropanchor.app/lexicons",
+      },
+    ],
   });
 });
 
@@ -122,14 +128,18 @@ When a tool resolves `app.dropanchor.checkin`:
 3. Gets DID: `did:web:dropanchor.app`
 4. Fetches DID document: `https://dropanchor.app/.well-known/did.json`
 5. Finds lexicon service endpoint: `https://dropanchor.app/lexicons`
-6. Fetches lexicon: `https://dropanchor.app/lexicons/app/dropanchor/checkin.json`
+6. Fetches lexicon:
+   `https://dropanchor.app/lexicons/app/dropanchor/checkin.json`
 
 ## Community vs App Lexicons
 
-- **Community lexicons** (`community.lexicon.*`) are shared schemas hosted at `lexicon.community` for interoperability between apps
-- **App lexicons** (`app.dropanchor.*`) are app-specific schemas hosted on your own domain
+- **Community lexicons** (`community.lexicon.*`) are shared schemas hosted at
+  `lexicon.community` for interoperability between apps
+- **App lexicons** (`app.dropanchor.*`) are app-specific schemas hosted on your
+  own domain
 
-Anchor uses community lexicons for location data (address, geo, fsq) embedded in the app-specific checkin record.
+Anchor uses community lexicons for location data (address, geo, fsq) embedded in
+the app-specific checkin record.
 
 ## References
 

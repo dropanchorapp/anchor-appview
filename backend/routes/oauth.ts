@@ -4,7 +4,7 @@
 
 import { createATProtoOAuth } from "jsr:@tijs/atproto-oauth@2.3.0";
 import type { ATProtoOAuthInstance } from "jsr:@tijs/atproto-oauth@2.3.0";
-import { SQLiteStorage, valTownAdapter } from "jsr:@tijs/atproto-storage@1.0.0";
+import { sqliteAdapter, SQLiteStorage } from "jsr:@tijs/atproto-storage@1.0.0";
 import { rawDb } from "../database/db.ts";
 
 const COOKIE_SECRET = Deno.env.get("COOKIE_SECRET") ||
@@ -21,7 +21,7 @@ const oauth: ATProtoOAuthInstance = createATProtoOAuth({
     "https://res.cloudinary.com/dru3aznlk/image/upload/v1754747200/anchor-logo-transparent_nrw70y.png",
   policyUri: `${BASE_URL}/privacy-policy`,
   sessionTtl: 60 * 60 * 24 * 30, // 30 days
-  storage: new SQLiteStorage(valTownAdapter(rawDb)),
+  storage: new SQLiteStorage(sqliteAdapter(rawDb)),
   logger: console, // Enable logging for debugging
   mobileScheme: "anchor-app://auth-callback", // iOS app OAuth callback
 });

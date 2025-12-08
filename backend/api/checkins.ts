@@ -358,12 +358,6 @@ export async function createCheckin(c: Context): Promise<Response> {
   }
 }
 
-// Helper function to extract rkey from AT Protocol URI
-function extractRkey(uri: string): string {
-  const parts = uri.split("/");
-  return parts[parts.length - 1];
-}
-
 // OAuth session methods now handle all authentication, DPoP, and token refresh automatically
 
 // Create checkin record with embedded address via AT Protocol using OAuth sessions
