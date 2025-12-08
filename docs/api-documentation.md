@@ -336,7 +336,6 @@ curl "https://dropanchor.app/api/places/nearby?lat=37.7749&lng=-122.4194&radius=
       "latitude": 37.7749,
       "longitude": -122.4194,
       "address": {
-        "$type": "community.lexicon.location.address",
         "name": "Blue Bottle Coffee",
         "street": "315 Linden St",
         "locality": "San Francisco",
@@ -388,8 +387,6 @@ Common category filters include:
 
 - Results include complete address information extracted from OpenStreetMap data
 - Places are sorted by distance (closest first)
-- Address data follows the AT Protocol `community.lexicon.location.address`
-  format
 - Results are cached for 5 minutes per location to improve performance
 - Uses Overpass API for real-time OpenStreetMap data
 
@@ -446,7 +443,6 @@ Create a new check-in with optional image attachment.
     "longitude": -122.4194,
     "name": "Blue Bottle Coffee",
     "address": {
-      "$type": "community.lexicon.location.address",
       "name": "Blue Bottle Coffee",
       "street": "1 Ferry Building",
       "locality": "San Francisco",
@@ -826,6 +822,16 @@ For API support and feature requests, please visit:
 - AT Protocol Documentation: [atproto.com](https://atproto.com)
 
 ## Changelog
+
+### v1.2.0 (2025-12-08)
+
+- **Embedded Lexicon Format**: Check-ins now use embedded address and geo
+  objects
+  - Address and geo data stored directly in the checkin record
+  - No more separate `community.lexicon.location.address` records
+  - Simpler data model with all location data self-contained
+  - Automatic migration for existing check-ins on user login
+- **Foursquare Integration**: Optional `fsq` object for Foursquare venue data
 
 ### v1.1.0 (2025-10-03)
 

@@ -58,10 +58,8 @@ frontend/
     └── index.ts       # TypeScript type definitions
 
 lexicons/              # AT Protocol lexicon definitions
-├── app/dropanchor/
-│   └── checkin.json       # Checkin record schema with image support
-└── community/lexicon/location/
-    └── address.json       # Address record schema
+└── app/dropanchor/
+    └── checkin.json       # Checkin record schema with embedded address, geo, image
 
 docs/
 ├── api-documentation.md # Complete API reference for client development
@@ -203,9 +201,9 @@ management (encrypted with Iron Session).
 
 **AT Protocol Records**:
 
-- `app.dropanchor.checkin` - Checkin with optional image attachment
-- `community.lexicon.location.address` - Address details (referenced via
-  StrongRef)
+- `app.dropanchor.checkin` - Checkin with embedded address, geo coordinates, and
+  optional image attachment. All location data is self-contained within the
+  checkin record.
 
 **Image Storage**: Blobs uploaded to user's PDS via
 `com.atproto.repo.uploadBlob`, retrieved via `com.atproto.sync.getBlob`.
@@ -322,12 +320,13 @@ deno task quality
 
 The AppView is fully compatible with the AT Protocol ecosystem:
 
-- **Lexicon Definitions**: `app.dropanchor.checkin` and
-  `community.lexicon.location.address`
+- **Lexicon Definition**: `app.dropanchor.checkin` with embedded address and geo
+  objects
 - **PDS Integration**: Direct reads/writes to user PDS (no local caching)
 - **OAuth Client**: Uses `@tijs/atproto-oauth` with PKCE flow and DPoP
 - **DID Resolution**: PLC directory and personal PDS servers
-- **StrongRef Pattern**: Address records referenced via CID-based StrongRefs
+- **Embedded Objects**: Address and geo data stored directly in the checkin
+  record (no separate records or StrongRefs)
 - **Blob Storage**: Images stored as AT Protocol blobs in user's PDS
 
 ## ☕ Support Development
