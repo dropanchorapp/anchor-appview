@@ -6,6 +6,7 @@ import { Hono } from "jsr:@hono/hono@4.9.6";
 import { isValidHandle } from "npm:@atproto/syntax@0.3.0";
 import { oauth } from "./oauth.ts";
 import { getSessionFromRequest } from "../utils/session.ts";
+import { migrateUserCheckinsInBackground } from "../services/checkin-migration-service.ts";
 
 const app = new Hono();
 
@@ -34,6 +35,14 @@ app.get("/api/auth/session", async (c) => {
 
     return errorResponse;
   }
+
+  // Trigger background migration for old format checkins (non-blocking)
+  // This converts addressRef + coordinates to embedded address + geo
+  migrateUserCheckinsInBackground({
+    did: result.session.did,
+    pdsUrl: result.session.pdsUrl,
+    makeRequest: result.session.makeRequest.bind(result.session),
+  });
 
   // Return session info with tokens for mobile compatibility
   const response = c.json({
