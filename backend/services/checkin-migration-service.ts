@@ -105,6 +105,52 @@ async function deleteAddressRecord(
 }
 
 /**
+ * Clean up orphan address records that are no longer referenced by any checkin
+ */
+async function cleanupOrphanAddressRecords(
+  oauthSession: OAuthSession,
+): Promise<number> {
+  let deleted = 0;
+
+  try {
+    // List all address records
+    const addressResponse = await fetch(
+      `${oauthSession.pdsUrl}/xrpc/com.atproto.repo.listRecords?repo=${oauthSession.did}&collection=community.lexicon.location.address&limit=100`,
+    );
+
+    if (!addressResponse.ok) return 0;
+
+    const addressData = await addressResponse.json();
+    if (!addressData.records || addressData.records.length === 0) return 0;
+
+    console.log(
+      `🔍 Found ${addressData.records.length} address records to check for orphans`,
+    );
+
+    // Delete each address record (they're all orphans now since checkins use embedded addresses)
+    for (const record of addressData.records) {
+      const rkey = record.uri.split("/").pop();
+      if (!rkey) continue;
+
+      const success = await deleteAddressRecord(oauthSession, rkey);
+      if (success) {
+        deleted++;
+        console.log(`  🗑️ Deleted orphan address: ${rkey}`);
+      } else {
+        console.warn(`  ⚠️ Failed to delete orphan address: ${rkey}`);
+      }
+
+      // Rate limiting
+      await new Promise((r) => setTimeout(r, 100));
+    }
+  } catch (error) {
+    console.error("Error cleaning up orphan addresses:", error);
+  }
+
+  return deleted;
+}
+
+/**
  * Migrate a checkin from old format (addressRef + coordinates) to new format (address + geo embedded)
  */
 async function migrateCheckinFormat(
@@ -376,6 +422,13 @@ export async function migrateUserCheckins(
       console.log(
         `✅ All ${allRecords.length} checkins already in correct format for ${oauthSession.did}`,
       );
+    }
+
+    // Clean up any orphan address records (no longer referenced by any checkin)
+    const orphansDeleted = await cleanupOrphanAddressRecords(oauthSession);
+    if (orphansDeleted > 0) {
+      result.addressesDeleted += orphansDeleted;
+      console.log(`🧹 Cleaned up ${orphansDeleted} orphan address records`);
     }
 
     return result;
