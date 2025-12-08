@@ -47,7 +47,7 @@ function _createMockOAuthSession(did: string): MockOAuthSession {
       }
 
       if (url.includes("getRecord")) {
-        // Mock checkin record with address ref
+        // Mock checkin record with embedded address and geo
         return Promise.resolve(
           new Response(
             JSON.stringify({
@@ -58,11 +58,13 @@ function _createMockOAuthSession(did: string): MockOAuthSession {
                 $type: "app.dropanchor.checkin",
                 text: "Great coffee!",
                 createdAt: new Date().toISOString(),
-                coordinates: { latitude: "40.7128", longitude: "-74.0060" },
-                addressRef: {
-                  uri: `at://${did}/community.lexicon.location.address/3k2addr`,
-                  cid:
-                    "bafyreicv3pecq6fuua22xcoguxep76otivb33nlaofzl76fpagczo5t5jm",
+                geo: { latitude: "40.7128", longitude: "-74.0060" },
+                address: {
+                  name: "Test Cafe",
+                  street: "123 Main St",
+                  locality: "New York",
+                  region: "NY",
+                  country: "US",
                 },
               },
             }),
@@ -506,13 +508,13 @@ Deno.test("Checkin API - Bearer token takes precedence over cookie", () => {
 });
 
 Deno.test("Checkin API - Response includes shareableId and shareableUrl", () => {
-  // Mock successful creation response structure
+  // Mock successful creation response structure (no separate addressUri in new format)
   const mockResponse = {
     success: true,
     checkinUri: "at://did:plc:test/app.dropanchor.checkin/3k2xyz",
-    addressUri: "at://did:plc:test/community.lexicon.location.address/3k2abc",
     shareableId: "3k2xyz",
     shareableUrl: "https://dropanchor.app/checkin/3k2xyz",
+    imageUploaded: false,
   };
 
   assertExists(mockResponse.shareableId);
@@ -611,10 +613,10 @@ Deno.test("Checkin API - POST /api/checkins with image attachment via multipart/
 
 /**
  * CRITICAL TEST: Validate API response structure matches lexicon
- * This test caught the bug where image field was incorrectly structured
+ * Tests embedded address/geo format (no separate address records)
  */
 Deno.test("Checkin API - GET /api/checkins/:did/:rkey returns lexicon-compliant structure", async () => {
-  // Mock a checkin with all fields including image
+  // Mock a checkin with embedded address and geo (new format)
   const mockCheckin = {
     uri: "at://did:plc:test123/app.dropanchor.checkin/3k2abc",
     cid: "bafytest",
@@ -622,13 +624,17 @@ Deno.test("Checkin API - GET /api/checkins/:did/:rkey returns lexicon-compliant 
       $type: "app.dropanchor.checkin",
       text: "Coffee with photo",
       createdAt: "2024-01-15T10:30:00Z",
-      coordinates: {
+      geo: {
         latitude: "52.0808",
         longitude: "4.3629",
       },
-      addressRef: {
-        uri: "at://did:plc:test123/community.lexicon.location.address/xyz",
-        cid: "bafyaddr",
+      address: {
+        name: "De Koffiezaak",
+        street: "Kerkstraat 10",
+        locality: "Delft",
+        region: "Zuid-Holland",
+        country: "NL",
+        postalCode: "2611 GH",
       },
       category: "cafe",
       categoryGroup: "food_and_drink",

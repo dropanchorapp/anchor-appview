@@ -28,6 +28,15 @@ export interface CheckinData {
     fullsizeUrl: string;
     alt?: string;
   };
+  fsq?: {
+    fsqPlaceId: string;
+    name?: string;
+    latitude?: string;
+    longitude?: string;
+  };
+  category?: string;
+  categoryGroup?: string;
+  categoryIcon?: string;
   distance?: number;
   likesCount?: number;
 }

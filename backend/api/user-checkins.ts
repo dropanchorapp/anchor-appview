@@ -8,8 +8,6 @@ import {
   resolvePdsUrl,
   resolveProfileFromPds,
 } from "../utils/atproto-resolver.ts";
-import { migrateUserCheckins } from "../services/checkin-migration-service.ts";
-import { sessions } from "../routes/oauth.ts";
 import { db } from "../database/db.ts";
 import { checkinCountsTable } from "../database/schema.ts";
 import { and, eq } from "https://esm.sh/drizzle-orm@0.44.5";
@@ -230,20 +228,7 @@ export async function getUserCheckinsByDid(
       );
     }
 
-    // Auto-migrate numeric coordinates in background if needed
-    const needsMigration = data.records.some((r: any) =>
-      typeof r.value?.coordinates?.latitude === "number" ||
-      typeof r.value?.coordinates?.longitude === "number"
-    );
-
-    if (needsMigration) {
-      const oauthSession = await sessions.getOAuthSession(did);
-      if (oauthSession) {
-        migrateUserCheckins(oauthSession).catch(() => {}); // silent background migration
-      }
-    }
-
-    // Use all records, not just valid ones - the parsing handles both strings and numbers
+    // Use all records
     if (data.records.length === 0) {
       console.log(`✅ No checkins found for ${did}`);
       return new Response(
@@ -262,27 +247,25 @@ export async function getUserCheckinsByDid(
       data.records.map(async (record: any) => {
         const rkey = record.uri.split("/").pop(); // Extract rkey from AT URI
 
-        // Parse coordinates to numbers for API response (handles both strings and numbers)
-        const rawCoords = record.value?.coordinates;
-        if (!rawCoords || !rawCoords.latitude || !rawCoords.longitude) {
-          console.warn(`⚠️ Skipping checkin ${rkey} with missing coordinates`);
+        // Parse geo object (required)
+        const rawGeo = record.value?.geo;
+        if (!rawGeo?.latitude || !rawGeo?.longitude) {
+          console.warn(`⚠️ Skipping checkin ${rkey} with missing geo`);
           return null;
         }
 
         const coordinates = {
-          latitude: typeof rawCoords.latitude === "number"
-            ? rawCoords.latitude
-            : parseFloat(rawCoords.latitude),
-          longitude: typeof rawCoords.longitude === "number"
-            ? rawCoords.longitude
-            : parseFloat(rawCoords.longitude),
+          latitude: typeof rawGeo.latitude === "number"
+            ? rawGeo.latitude
+            : parseFloat(rawGeo.latitude),
+          longitude: typeof rawGeo.longitude === "number"
+            ? rawGeo.longitude
+            : parseFloat(rawGeo.longitude),
         };
 
         // Validate parsed coordinates
         if (isNaN(coordinates.latitude) || isNaN(coordinates.longitude)) {
-          console.warn(
-            `⚠️ Skipping checkin ${rkey} with invalid coordinates: ${rawCoords.latitude}, ${rawCoords.longitude}`,
-          );
+          console.warn(`⚠️ Skipping checkin ${rkey} with invalid coordinates`);
           return null;
         }
 
@@ -311,31 +294,26 @@ export async function getUserCheckinsByDid(
           checkin.categoryIcon = record.value.categoryIcon;
         }
 
-        // Fetch and include address record
-        if (record.value.addressRef?.uri) {
-          try {
-            const addressUri = record.value.addressRef.uri;
-            const addressRkey = addressUri.split("/").pop();
-            const addressCollection = addressUri.split("/").slice(-2, -1)[0];
+        // Get embedded address (required)
+        if (record.value.address && typeof record.value.address === "object") {
+          checkin.address = {
+            name: record.value.address.name,
+            street: record.value.address.street,
+            locality: record.value.address.locality,
+            region: record.value.address.region,
+            country: record.value.address.country,
+            postalCode: record.value.address.postalCode,
+          };
+        }
 
-            const addressResponse = await fetch(
-              `${pdsUrl}/xrpc/com.atproto.repo.getRecord?repo=${did}&collection=${addressCollection}&rkey=${addressRkey}`,
-            );
-
-            if (addressResponse.ok) {
-              const addressData = await addressResponse.json();
-              checkin.address = {
-                name: addressData.value.name,
-                street: addressData.value.street,
-                locality: addressData.value.locality,
-                region: addressData.value.region,
-                country: addressData.value.country,
-                postalCode: addressData.value.postalCode,
-              };
-            }
-          } catch (error) {
-            console.warn("Failed to fetch address for checkin:", error);
-          }
+        // Add fsq data if present
+        if (record.value.fsq && typeof record.value.fsq === "object") {
+          checkin.fsq = {
+            fsqPlaceId: record.value.fsq.fsqPlaceId,
+            name: record.value.fsq.name,
+            latitude: record.value.fsq.latitude,
+            longitude: record.value.fsq.longitude,
+          };
         }
 
         // Add image URLs if present (construct URLs from blob CIDs)
@@ -453,11 +431,25 @@ export async function getCheckinByDidAndRkey(
     const data = await response.json();
     const record = data;
 
-    // Parse coordinates
-    const rawCoords = record.value.coordinates;
+    // Parse geo object (required)
+    const rawGeo = record.value?.geo;
+    if (!rawGeo?.latitude || !rawGeo?.longitude) {
+      return new Response(
+        JSON.stringify({ error: "Checkin has invalid geo" }),
+        {
+          status: 400,
+          headers: corsHeaders,
+        },
+      );
+    }
+
     const coordinates = {
-      latitude: parseFloat(rawCoords.latitude),
-      longitude: parseFloat(rawCoords.longitude),
+      latitude: typeof rawGeo.latitude === "number"
+        ? rawGeo.latitude
+        : parseFloat(rawGeo.latitude),
+      longitude: typeof rawGeo.longitude === "number"
+        ? rawGeo.longitude
+        : parseFloat(rawGeo.longitude),
     };
 
     // Resolve profile data
@@ -488,31 +480,26 @@ export async function getCheckinByDidAndRkey(
       checkin.categoryIcon = record.value.categoryIcon;
     }
 
-    // Fetch and include address record
-    if (record.value.addressRef?.uri) {
-      try {
-        const addressUri = record.value.addressRef.uri;
-        const addressRkey = addressUri.split("/").pop();
-        const addressCollection = addressUri.split("/").slice(-2, -1)[0];
+    // Get embedded address (required)
+    if (record.value.address && typeof record.value.address === "object") {
+      checkin.address = {
+        name: record.value.address.name,
+        street: record.value.address.street,
+        locality: record.value.address.locality,
+        region: record.value.address.region,
+        country: record.value.address.country,
+        postalCode: record.value.address.postalCode,
+      };
+    }
 
-        const addressResponse = await fetch(
-          `${pdsUrl}/xrpc/com.atproto.repo.getRecord?repo=${did}&collection=${addressCollection}&rkey=${addressRkey}`,
-        );
-
-        if (addressResponse.ok) {
-          const addressData = await addressResponse.json();
-          checkin.address = {
-            name: addressData.value.name,
-            street: addressData.value.street,
-            locality: addressData.value.locality,
-            region: addressData.value.region,
-            country: addressData.value.country,
-            postalCode: addressData.value.postalCode,
-          };
-        }
-      } catch (error) {
-        console.warn("Failed to fetch address for checkin:", error);
-      }
+    // Add fsq data if present
+    if (record.value.fsq && typeof record.value.fsq === "object") {
+      checkin.fsq = {
+        fsqPlaceId: record.value.fsq.fsqPlaceId,
+        name: record.value.fsq.name,
+        latitude: record.value.fsq.latitude,
+        longitude: record.value.fsq.longitude,
+      };
     }
 
     // Add image URLs if present (construct URLs from blob CIDs)

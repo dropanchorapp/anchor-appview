@@ -1,5 +1,7 @@
 /**
  * Checkin record validation against app.dropanchor.checkin lexicon
+ *
+ * Validates embedded format: address (object), geo (object)
  */
 
 /**
@@ -27,63 +29,13 @@ export function validateCheckinRecord(record: any): boolean {
     return false;
   }
 
-  // Validate coordinates structure
-  if (!value.coordinates || typeof value.coordinates !== "object") {
-    console.warn(
-      `⚠️ Invalid checkin ${record.uri}: missing or invalid coordinates object`,
-    );
+  // Validate geo object (required)
+  if (!validateGeo(record.uri, value)) {
     return false;
   }
 
-  // Coordinates must have both latitude and longitude
-  // They should be strings (for DAG-CBOR compliance) that can be parsed as numbers
-  const { latitude, longitude } = value.coordinates;
-
-  if (!latitude || !longitude) {
-    console.warn(
-      `⚠️ Invalid checkin ${record.uri}: missing latitude or longitude`,
-    );
-    return false;
-  }
-
-  // Check if coordinates are valid numbers (whether string or number type)
-  const lat = typeof latitude === "string" ? parseFloat(latitude) : latitude;
-  const lng = typeof longitude === "string" ? parseFloat(longitude) : longitude;
-
-  if (isNaN(lat) || isNaN(lng)) {
-    console.warn(
-      `⚠️ Invalid checkin ${record.uri}: coordinates are not valid numbers (lat: ${latitude}, lng: ${longitude})`,
-    );
-    return false;
-  }
-
-  // Validate coordinate ranges
-  if (lat < -90 || lat > 90) {
-    console.warn(
-      `⚠️ Invalid checkin ${record.uri}: latitude out of range: ${lat}`,
-    );
-    return false;
-  }
-
-  if (lng < -180 || lng > 180) {
-    console.warn(
-      `⚠️ Invalid checkin ${record.uri}: longitude out of range: ${lng}`,
-    );
-    return false;
-  }
-
-  // Validate addressRef if present (required field)
-  if (!value.addressRef || typeof value.addressRef !== "object") {
-    console.warn(
-      `⚠️ Invalid checkin ${record.uri}: missing or invalid addressRef`,
-    );
-    return false;
-  }
-
-  if (!value.addressRef.uri || !value.addressRef.cid) {
-    console.warn(
-      `⚠️ Invalid checkin ${record.uri}: addressRef missing uri or cid`,
-    );
+  // Validate address object (required)
+  if (!validateAddress(record.uri, value)) {
     return false;
   }
 
@@ -113,6 +65,78 @@ export function validateCheckinRecord(record: any): boolean {
     console.warn(
       `⚠️ Invalid checkin ${record.uri}: image must be an object`,
     );
+    return false;
+  }
+
+  // Validate optional fsq field if present
+  if (value.fsq) {
+    if (typeof value.fsq !== "object") {
+      console.warn(`⚠️ Invalid checkin ${record.uri}: fsq must be an object`);
+      return false;
+    }
+    if (!value.fsq.fsqPlaceId || typeof value.fsq.fsqPlaceId !== "string") {
+      console.warn(
+        `⚠️ Invalid checkin ${record.uri}: fsq.fsqPlaceId is required`,
+      );
+      return false;
+    }
+  }
+
+  return true;
+}
+
+/**
+ * Validate geo object (required)
+ */
+function validateGeo(uri: string, value: any): boolean {
+  if (!value.geo || typeof value.geo !== "object") {
+    console.warn(`⚠️ Invalid checkin ${uri}: missing geo object`);
+    return false;
+  }
+
+  const { latitude, longitude } = value.geo;
+
+  if (!latitude || !longitude) {
+    console.warn(
+      `⚠️ Invalid checkin ${uri}: geo missing latitude or longitude`,
+    );
+    return false;
+  }
+
+  const lat = typeof latitude === "string" ? parseFloat(latitude) : latitude;
+  const lng = typeof longitude === "string" ? parseFloat(longitude) : longitude;
+
+  if (isNaN(lat) || isNaN(lng)) {
+    console.warn(
+      `⚠️ Invalid checkin ${uri}: geo coordinates are not valid numbers`,
+    );
+    return false;
+  }
+
+  if (lat < -90 || lat > 90) {
+    console.warn(`⚠️ Invalid checkin ${uri}: latitude out of range: ${lat}`);
+    return false;
+  }
+
+  if (lng < -180 || lng > 180) {
+    console.warn(`⚠️ Invalid checkin ${uri}: longitude out of range: ${lng}`);
+    return false;
+  }
+
+  return true;
+}
+
+/**
+ * Validate address object (required with country field)
+ */
+function validateAddress(uri: string, value: any): boolean {
+  if (!value.address || typeof value.address !== "object") {
+    console.warn(`⚠️ Invalid checkin ${uri}: missing address object`);
+    return false;
+  }
+
+  if (!value.address.country || typeof value.address.country !== "string") {
+    console.warn(`⚠️ Invalid checkin ${uri}: address.country is required`);
     return false;
   }
 

@@ -53,9 +53,19 @@ function _sanitizePlaceInput(input: PlaceInput): Place {
   };
 }
 
+// Helper type for address data (internal use, will be mapped to AddressObject)
+interface EnhancedAddressData {
+  name?: string;
+  street?: string;
+  locality?: string;
+  region?: string;
+  country?: string;
+  postalCode?: string;
+}
+
 async function _getEnhancedAddressRecord(
   place: Place,
-): Promise<CommunityAddressRecord> {
+): Promise<EnhancedAddressData> {
   // If place already has complete address data (from iOS app), use it directly
   if (
     place.address &&
@@ -67,11 +77,14 @@ async function _getEnhancedAddressRecord(
     );
     // Ensure no name/locality duplication
     return {
-      ...place.address,
       name: place.name,
+      street: place.address.street,
       locality: place.address.locality === place.name
         ? undefined
         : place.address.locality,
+      region: place.address.region,
+      country: place.address.country,
+      postalCode: place.address.postalCode,
     };
   }
 
@@ -81,17 +94,21 @@ async function _getEnhancedAddressRecord(
     const enhancedAddress = await overpassService.getEnhancedAddress(place);
 
     // Ensure no name/locality duplication
-    if (enhancedAddress.locality === place.name) {
-      enhancedAddress.locality = undefined;
-    }
-
-    return enhancedAddress;
+    return {
+      name: place.name,
+      street: enhancedAddress.street,
+      locality: enhancedAddress.locality === place.name
+        ? undefined
+        : enhancedAddress.locality,
+      region: enhancedAddress.region,
+      country: enhancedAddress.country,
+      postalCode: enhancedAddress.postalCode,
+    };
   } catch (error) {
     console.warn(`Address enhancement failed for ${place.name}:`, error);
 
-    // Fallback to existing address if available, with validation
-    const baseAddress = place.address || {
-      $type: "community.lexicon.location.address" as const,
+    // Fallback to OSM tags if available
+    return {
       name: place.name,
       street: place.tags["addr:street"],
       locality: place.tags["addr:city"] || place.tags["addr:locality"],
@@ -99,39 +116,49 @@ async function _getEnhancedAddressRecord(
       country: place.tags["addr:country"] || place.tags["addr:country_code"],
       postalCode: place.tags["addr:postcode"],
     };
-
-    // Ensure no name/locality duplication in fallback
-    return {
-      ...baseAddress,
-      name: place.name,
-      locality: baseAddress.locality === place.name
-        ? undefined
-        : baseAddress.locality,
-    };
   }
 }
 
-// AT Protocol record types
-interface CommunityAddressRecord {
-  $type: "community.lexicon.location.address";
+// AT Protocol record types - embedded format (no separate address record)
+
+// Embedded address object (based on community.lexicon.location.address)
+// No $type needed for embedded objects - type is known from lexicon context
+interface AddressObject {
   name?: string;
   street?: string;
   locality?: string;
   region?: string;
-  country?: string;
   postalCode?: string;
+  country: string; // Required - ISO 3166 country code
+}
+
+// Embedded geo object (based on community.lexicon.location.geo)
+interface GeoObject {
+  latitude: string;
+  longitude: string;
+  altitude?: string;
+  name?: string;
+}
+
+// Optional embedded FSQ place object (based on community.lexicon.location.fsq)
+interface FsqPlaceObject {
+  fsqPlaceId: string;
+  name?: string;
+  latitude?: string;
+  longitude?: string;
 }
 
 interface CheckinRecord {
   $type: "app.dropanchor.checkin";
   text: string;
   createdAt: string;
-  addressRef: StrongRef;
-  coordinates: GeoCoordinates;
+  address: AddressObject; // Embedded, not a ref
+  geo: GeoObject; // Renamed from coordinates
   category?: string;
   categoryGroup?: string;
   categoryIcon?: string;
   image?: CheckinImage;
+  fsq?: FsqPlaceObject; // Optional Foursquare venue data
 }
 
 interface CheckinImage {
@@ -145,17 +172,6 @@ interface BlobRef {
   ref: { $link: string }; // CID
   mimeType: string;
   size: number;
-}
-
-interface StrongRef {
-  uri: string;
-  cid: string;
-}
-
-// DAG-CBOR doesn't support floats, so coordinates must be stored as strings
-interface GeoCoordinates {
-  latitude: string;
-  longitude: string;
 }
 
 // API input format - coordinates might be strings
@@ -300,8 +316,8 @@ export async function createCheckin(c: Context): Promise<Response> {
     // Get sessions instance for clean OAuth API access
     const { sessions } = await import("../routes/oauth.ts");
 
-    // Create address and checkin records via AT Protocol
-    const createResult = await createAddressAndCheckin(
+    // Create checkin record with embedded address via AT Protocol
+    const createResult = await createCheckinWithEmbeddedAddress(
       sessions,
       did,
       place,
@@ -320,14 +336,13 @@ export async function createCheckin(c: Context): Promise<Response> {
     console.log("✅ Checkin created successfully");
 
     // Create shareable ID using simple rkey format for clean URLs
-    const rkey = createResult.checkinUri.split("/").pop();
+    const rkey = createResult.checkinUri!.split("/").pop();
     const shareableId = rkey;
 
     return setSessionCookie(
       c.json({
         success: true,
         checkinUri: createResult.checkinUri,
-        addressUri: createResult.addressUri,
         shareableId: shareableId,
         shareableUrl: `https://dropanchor.app/checkin/${shareableId}`,
         imageUploaded: !!processedImage,
@@ -351,8 +366,8 @@ function extractRkey(uri: string): string {
 
 // OAuth session methods now handle all authentication, DPoP, and token refresh automatically
 
-// Create address and checkin records via AT Protocol using OAuth sessions
-async function createAddressAndCheckin(
+// Create checkin record with embedded address via AT Protocol using OAuth sessions
+async function createCheckinWithEmbeddedAddress(
   sessions: OAuthSessionsInterface,
   did: string,
   place: Place,
@@ -365,7 +380,7 @@ async function createAddressAndCheckin(
   } | null,
   imageAlt?: string,
 ): Promise<
-  { success: boolean; checkinUri?: string; addressUri?: string; error?: string }
+  { success: boolean; checkinUri?: string; error?: string }
 > {
   try {
     console.log(`🔰 Getting OAuth session for DID: ${did}`);
@@ -393,10 +408,20 @@ async function createAddressAndCheckin(
     );
 
     // Get enhanced address using existing OverpassService logic
-    const addressRecord = await _getEnhancedAddressRecord(place);
+    const enhancedAddress = await _getEnhancedAddressRecord(place);
 
-    // Build coordinates using validated values - convert to strings for DAG-CBOR compliance
-    const coordinates: GeoCoordinates = {
+    // Build embedded address object (country is required)
+    const address: AddressObject = {
+      name: enhancedAddress.name,
+      street: enhancedAddress.street,
+      locality: enhancedAddress.locality,
+      region: enhancedAddress.region,
+      postalCode: enhancedAddress.postalCode,
+      country: enhancedAddress.country || "XX", // Fallback to XX if no country
+    };
+
+    // Build embedded geo object - convert to strings for DAG-CBOR compliance
+    const geo: GeoObject = {
       latitude: place.latitude.toString(),
       longitude: place.longitude.toString(),
     };
@@ -409,34 +434,6 @@ async function createAddressAndCheckin(
     console.log(
       `🔰 Creating checkin for ${place.name} by ${oauthSession.handle || did}`,
     );
-
-    // Step 1: Create address record using OAuth session's built-in request method
-    const addressResponse = await oauthSession.makeRequest(
-      "POST",
-      `${oauthSession.pdsUrl}/xrpc/com.atproto.repo.createRecord`,
-      {
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          repo: oauthSession.did,
-          collection: "community.lexicon.location.address",
-          record: addressRecord,
-        }),
-      },
-    );
-
-    if (!addressResponse.ok) {
-      const error = await addressResponse.text();
-      console.error("Failed to create address record:", error);
-      return {
-        success: false,
-        error: "Failed to create address record",
-      };
-    }
-
-    const addressResult = await addressResponse.json();
-    console.log(`✅ Created address record: ${addressResult.uri}`);
 
     // Step 2: Upload image blobs if present
     let imageData: CheckinImage | undefined;
@@ -523,16 +520,13 @@ async function createAddressAndCheckin(
       }
     }
 
-    // Step 3: Create checkin record with StrongRef to address
+    // Step 2: Create checkin record with embedded address and geo
     const checkinRecord: CheckinRecord = {
       $type: "app.dropanchor.checkin",
       text: message,
       createdAt: new Date().toISOString(),
-      addressRef: {
-        uri: addressResult.uri,
-        cid: addressResult.cid,
-      },
-      coordinates,
+      address,
+      geo,
       category,
       categoryGroup,
       categoryIcon,
@@ -559,23 +553,6 @@ async function createAddressAndCheckin(
     );
 
     if (!checkinResponse.ok) {
-      // Cleanup: Delete orphaned address record
-      const addressRkey = extractRkey(addressResult.uri);
-      await oauthSession.makeRequest(
-        "POST",
-        `${oauthSession.pdsUrl}/xrpc/com.atproto.repo.deleteRecord`,
-        {
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            repo: oauthSession.did,
-            collection: "community.lexicon.location.address",
-            rkey: addressRkey,
-          }),
-        },
-      ).catch(console.error); // Best effort cleanup
-
       const error = await checkinResponse.text();
       console.error("Failed to create checkin record:", error);
       return {
@@ -590,10 +567,9 @@ async function createAddressAndCheckin(
     return {
       success: true,
       checkinUri: checkinResult.uri,
-      addressUri: addressResult.uri,
     };
   } catch (err) {
-    console.error("❌ Create address and checkin failed:", err);
+    console.error("❌ Create checkin failed:", err);
     return {
       success: false,
       error: "Internal server error",
@@ -601,7 +577,7 @@ async function createAddressAndCheckin(
   }
 }
 
-// Delete a checkin and its associated address record
+// Delete a checkin record (address is now embedded, no separate record to delete)
 export async function deleteCheckin(c: Context): Promise<Response> {
   try {
     // Authenticate user with session refresh support
@@ -646,8 +622,8 @@ export async function deleteCheckin(c: Context): Promise<Response> {
     // Get sessions instance for clean OAuth API access
     const { sessions } = await import("../routes/oauth.ts");
 
-    // Delete checkin and address records via AT Protocol
-    const deleteResult = await deleteCheckinAndAddress(
+    // Delete checkin record via AT Protocol
+    const deleteResult = await deleteCheckinRecord(
       sessions,
       did,
       rkey,
@@ -677,8 +653,8 @@ export async function deleteCheckin(c: Context): Promise<Response> {
   }
 }
 
-// Delete checkin and address records via AT Protocol using OAuth sessions
-async function deleteCheckinAndAddress(
+// Delete checkin record via AT Protocol using OAuth sessions
+async function deleteCheckinRecord(
   sessions: OAuthSessionsInterface,
   did: string,
   checkinRkey: string,
@@ -698,8 +674,8 @@ async function deleteCheckinAndAddress(
 
     console.log(`✅ Got OAuth session for ${oauthSession.handle || did}`);
 
-    // First, fetch the checkin record to get the address reference
-    console.log(`🔰 Fetching checkin record to find address ref`);
+    // Fetch the checkin record to get image references for cleanup
+    console.log(`🔰 Fetching checkin record for image cleanup`);
     const checkinUri = `at://${did}/app.dropanchor.checkin/${checkinRkey}`;
 
     const getRecordResponse = await oauthSession.makeRequest(
@@ -717,7 +693,6 @@ async function deleteCheckinAndAddress(
     }
 
     const checkinData = await getRecordResponse.json();
-    const addressRef = checkinData.value?.addressRef;
     const imageData = checkinData.value?.image;
 
     // Step 1: Delete image blobs if they exist
@@ -814,40 +789,11 @@ async function deleteCheckinAndAddress(
 
     console.log(`✅ Deleted checkin record: ${checkinUri}`);
 
-    // Step 3: Delete the address record if we found a reference
-    if (addressRef?.uri) {
-      const addressRkey = extractRkey(addressRef.uri);
-      console.log(`🗑️ Deleting address record: ${addressRef.uri}`);
-
-      const deleteAddressResponse = await oauthSession.makeRequest(
-        "POST",
-        `${oauthSession.pdsUrl}/xrpc/com.atproto.repo.deleteRecord`,
-        {
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            repo: did,
-            collection: "community.lexicon.location.address",
-            rkey: addressRkey,
-          }),
-        },
-      );
-
-      if (!deleteAddressResponse.ok) {
-        // Log but don't fail - checkin is already deleted
-        const error = await deleteAddressResponse.text();
-        console.warn("Failed to delete address record (non-fatal):", error);
-      } else {
-        console.log(`✅ Deleted address record: ${addressRef.uri}`);
-      }
-    }
-
     return {
       success: true,
     };
   } catch (err) {
-    console.error("❌ Delete checkin and address failed:", err);
+    console.error("❌ Delete checkin failed:", err);
     return {
       success: false,
       error: "Internal server error",
