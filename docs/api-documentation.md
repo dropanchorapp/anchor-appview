@@ -68,7 +68,7 @@ All responses are JSON with proper CORS headers enabled.
 ### Check-in Object
 
 Each check-in in the response includes full profile information and optional
-image:
+fields:
 
 ```json
 {
@@ -94,16 +94,25 @@ image:
     "country": "US",
     "postalCode": "94111"
   },
+  "category": "cafe",
+  "categoryGroup": "Food & Drink",
+  "categoryIcon": "☕",
   "image": {
     "thumbUrl": "https://pds.example.com/xrpc/com.atproto.sync.getBlob?did=...&cid=bafyrei...",
     "fullsizeUrl": "https://pds.example.com/xrpc/com.atproto.sync.getBlob?did=...&cid=bafyrei...",
     "alt": "Latte art at Blue Bottle"
+  },
+  "fsq": {
+    "fsqPlaceId": "4b5bc7b0f964a520e68928e3",
+    "name": "Blue Bottle Coffee",
+    "latitude": "37.7749",
+    "longitude": "-122.4194"
   }
 }
 ```
 
-**Note**: The `image` field is optional and only present when a check-in has an
-attached photo.
+**Note**: The `image`, `fsq`, `category`, `categoryGroup`, and `categoryIcon`
+fields are optional.
 
 ### Error Response
 
@@ -625,7 +634,7 @@ curl -X DELETE "https://dropanchor.app/api/checkins/did:plc:wxex3wx5k4ctciupsv5m
 
 ## Data Model
 
-### Checkin Object
+### Checkin Object (API Response)
 
 ```typescript
 interface Checkin {
@@ -639,26 +648,86 @@ interface Checkin {
   };
   text: string; // Check-in message/review
   createdAt: string; // ISO timestamp
-  coordinates?: { // Optional location coordinates
+  coordinates: {
+    // Location coordinates (from geo object)
     latitude: number;
     longitude: number;
   };
-  address?: { // Optional resolved venue information
+  address?: {
+    // Venue/location address
     name?: string; // Venue name
     street?: string; // Street address
     locality?: string; // City
     region?: string; // State/Province
-    country?: string; // Country
+    country: string; // ISO 3166 country code (required)
     postalCode?: string; // Postal/ZIP code
   };
-  image?: { // Optional image attachment
+  category?: string; // Place category (e.g., "cafe", "restaurant")
+  categoryGroup?: string; // Category group (e.g., "Food & Drink")
+  categoryIcon?: string; // Emoji icon for the category
+  image?: {
+    // Optional image attachment
     thumbUrl: string; // Thumbnail URL (300KB max)
     fullsizeUrl: string; // Full-size URL (2MB max)
     alt?: string; // Alt text description
   };
+  fsq?: {
+    // Optional Foursquare venue data
+    fsqPlaceId: string; // Foursquare place ID
+    name?: string; // Venue name from Foursquare
+    latitude?: string; // Latitude from Foursquare
+    longitude?: string; // Longitude from Foursquare
+  };
   distance?: number; // Distance in km (only in nearby results)
 }
 ```
+
+### Checkin Record (AT Protocol Lexicon)
+
+The `app.dropanchor.checkin` record stored in the user's PDS:
+
+```typescript
+interface CheckinRecord {
+  $type: "app.dropanchor.checkin";
+  text: string; // Check-in message (required, max 3000 chars)
+  createdAt: string; // ISO timestamp (required)
+  address: {
+    // Embedded address (required)
+    name?: string;
+    street?: string;
+    locality?: string;
+    region?: string;
+    postalCode?: string;
+    country: string; // ISO 3166 code (required)
+  };
+  geo: {
+    // Embedded coordinates (required)
+    latitude: string; // Decimal degrees as string
+    longitude: string; // Decimal degrees as string
+    altitude?: string;
+    name?: string;
+  };
+  category?: string; // Place category
+  categoryGroup?: string; // Category group
+  categoryIcon?: string; // Emoji icon
+  image?: {
+    // Optional image
+    thumb: Blob; // Thumbnail (max 300KB)
+    fullsize: Blob; // Full-size (max 2MB)
+    alt?: string; // Alt text
+  };
+  fsq?: {
+    // Optional Foursquare data
+    fsqPlaceId: string; // Required if fsq present
+    name?: string;
+    latitude?: string;
+    longitude?: string;
+  };
+}
+```
+
+**Note**: Coordinates are stored as strings in the lexicon (for DAG-CBOR
+compliance) but returned as numbers in API responses for convenience.
 
 ## Error Codes
 
