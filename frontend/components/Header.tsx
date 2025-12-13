@@ -44,7 +44,7 @@ export function Header({
           }}
         >
           <img
-            src="https://res.cloudinary.com/dru3aznlk/image/upload/v1754747200/anchor-logo-transparent_nrw70y.png"
+            src="https://cdn.dropanchor.app/images/anchor-logo.png"
             alt="Anchor"
             style={{
               height: "48px",

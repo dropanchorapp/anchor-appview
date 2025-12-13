@@ -1,5 +1,6 @@
 // Likes API endpoints for checkin interactions
 // Handles like creation, retrieval, and deletion for check-ins
+// Supports multiple checkin lexicons (Anchor, BeaconBits, etc.)
 
 import {
   resolvePdsUrl,
@@ -19,6 +20,7 @@ import {
 } from "../utils/auth-helpers.ts";
 import { setSessionCookie } from "../utils/session.ts";
 import { resolveHandleToDid } from "../utils/atproto-resolver.ts";
+import { CHECKIN_SOURCES } from "../adapters/checkin-adapters.ts";
 
 export interface CorsHeaders {
   "Access-Control-Allow-Origin": string;
@@ -54,6 +56,32 @@ interface LikeResponse {
   createdAt: string;
 }
 
+/**
+ * Find a checkin record across all supported lexicons
+ * Tries each configured source until the record is found
+ * Returns the record data along with its collection type and full URI
+ */
+async function findCheckinRecord(
+  pdsUrl: string,
+  did: string,
+  rkey: string,
+): Promise<{ record: any; collection: string; uri: string } | null> {
+  for (const source of CHECKIN_SOURCES) {
+    const response = await fetch(
+      `${pdsUrl}/xrpc/com.atproto.repo.getRecord?repo=${did}&collection=${source.collection}&rkey=${rkey}`,
+    );
+    if (response.ok) {
+      const data = await response.json();
+      return {
+        record: data,
+        collection: source.collection,
+        uri: `at://${did}/${source.collection}/${rkey}`,
+      };
+    }
+  }
+  return null;
+}
+
 // Create a like for a checkin
 export async function createLike(
   checkinDid: string,
@@ -70,25 +98,25 @@ export async function createLike(
       throw new Error(`Failed to resolve PDS for checkin owner: ${checkinDid}`);
     }
 
-    // First, get the checkin record to create a proper reference
-    // Fetch from the checkin owner's PDS, not the liker's PDS
-    const checkinResponse = await fetch(
-      `${checkinOwnerPdsUrl}/xrpc/com.atproto.repo.getRecord?repo=${checkinDid}&collection=app.dropanchor.checkin&rkey=${checkinRkey}`,
+    // Find the checkin record across all supported lexicons
+    // This allows liking checkins from Anchor, BeaconBits, and other sources
+    const checkinResult = await findCheckinRecord(
+      checkinOwnerPdsUrl,
+      checkinDid,
+      checkinRkey,
     );
 
-    if (!checkinResponse.ok) {
-      throw new Error(`Checkin not found: ${checkinResponse.status}`);
+    if (!checkinResult) {
+      throw new Error(`Checkin not found in any supported collection`);
     }
 
-    const checkinData = await checkinResponse.json();
-
-    // Create the like record
+    // Create the like record with the actual URI (includes correct collection)
     const likeRecord = {
       $type: "app.dropanchor.like",
       createdAt: new Date().toISOString(),
       checkinRef: {
-        uri: `at://${checkinDid}/app.dropanchor.checkin/${checkinRkey}`,
-        cid: checkinData.cid,
+        uri: checkinResult.uri, // e.g., at://did/app.beaconbits.beacon/rkey
+        cid: checkinResult.record.cid,
       },
     };
 
@@ -120,8 +148,8 @@ export async function createLike(
 
     // Store interaction in index for efficient discovery
     try {
-      const checkinAtUri =
-        `at://${checkinDid}/app.dropanchor.checkin/${checkinRkey}`;
+      // Use the actual URI from the found record (includes correct collection)
+      const checkinAtUri = checkinResult.uri;
 
       // Insert or replace interaction record
       const interactionData: CheckinInteractionInsert = {
@@ -314,9 +342,10 @@ export async function removeLike(
   try {
     const pdsUrl = oauthSession.pdsUrl;
 
-    // First, find the like record that this user created for this checkin
-    const checkinAtUri =
-      `at://${checkinDid}/app.dropanchor.checkin/${checkinRkey}`;
+    // Build all possible URIs for this checkin (across all supported lexicons)
+    const possibleUris = CHECKIN_SOURCES.map(
+      (source) => `at://${checkinDid}/${source.collection}/${checkinRkey}`,
+    );
 
     const listResponse = await fetch(
       `${pdsUrl}/xrpc/com.atproto.repo.listRecords?repo=${authorDid}&collection=app.dropanchor.like&limit=100`,
@@ -328,9 +357,9 @@ export async function removeLike(
 
     const listData = await listResponse.json();
 
-    // Find the like record that references this specific checkin
+    // Find the like record that references this checkin (any supported collection)
     const likeRecord = listData.records.find((record: LikeRecord) => {
-      return record.value.checkinRef?.uri === checkinAtUri;
+      return possibleUris.includes(record.value.checkinRef?.uri);
     });
 
     if (!likeRecord) {

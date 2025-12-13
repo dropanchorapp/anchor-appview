@@ -112,25 +112,6 @@ app.get("/api/checkin/*", async (c) => {
   return await anchorApiHandler(c.req.raw);
 });
 
-// Serve lexicon definitions
-app.get("/.well-known/atproto-lexicons", async (c) => {
-  try {
-    const checkinLexicon = await Deno.readTextFile(
-      "./lexicons/app/dropanchor/checkin.json",
-    );
-    const addressLexicon = await Deno.readTextFile(
-      "./lexicons/community/lexicon/location/address.json",
-    );
-
-    return c.json({
-      "app.dropanchor.checkin": JSON.parse(checkinLexicon),
-      "community.lexicon.location.address": JSON.parse(addressLexicon),
-    });
-  } catch (_error) {
-    return c.json({ error: "Failed to load lexicons" }, 500);
-  }
-});
-
 // Debug endpoint for OAuth sessions
 app.get("/api/debug/oauth-sessions", async (c) => {
   try {

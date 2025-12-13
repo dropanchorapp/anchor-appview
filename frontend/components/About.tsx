@@ -21,7 +21,7 @@ export function About({ onLogin }: AboutProps) {
       {/* Hero Section */}
       <div style={{ textAlign: "center", marginBottom: "40px" }}>
         <img
-          src="https://res.cloudinary.com/dru3aznlk/image/upload/v1754731275/seagull-looking_yanxxb.png"
+          src="https://cdn.dropanchor.app/images/seagull-looking.png"
           alt="Anchor Logo"
           style={{
             width: "200px",

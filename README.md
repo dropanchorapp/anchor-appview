@@ -66,8 +66,9 @@ docs/
 └── deployment-guide.md  # Deployment instructions
 
 scripts/
-├── test.sh            # Run complete test suite
-└── debug-oauth-sessions.ts # Debug OAuth session status
+├── test.sh               # Run complete test suite
+├── debug-oauth-sessions.ts # Debug OAuth session status
+└── publish-lexicons.ts   # Publish lexicons to PDS as AT Protocol records
 
 tests/
 ├── unit/              # Unit tests for individual functions
@@ -328,6 +329,30 @@ The AppView is fully compatible with the AT Protocol ecosystem:
 - **Embedded Objects**: Address and geo data stored directly in the checkin
   record (no separate records or StrongRefs)
 - **Blob Storage**: Images stored as AT Protocol blobs in user's PDS
+
+### Lexicon Publishing
+
+Lexicons are published as `com.atproto.lexicon.schema` records following the
+official AT Protocol spec:
+
+| Lexicon                  | AT-URI                                                                                    |
+| ------------------------ | ----------------------------------------------------------------------------------------- |
+| `app.dropanchor.checkin` | `at://did:plc:aq7owa5y7ndc2hzjz37wy7ma/com.atproto.lexicon.schema/app.dropanchor.checkin` |
+| `app.dropanchor.like`    | `at://did:plc:aq7owa5y7ndc2hzjz37wy7ma/com.atproto.lexicon.schema/app.dropanchor.like`    |
+| `app.dropanchor.comment` | `at://did:plc:aq7owa5y7ndc2hzjz37wy7ma/com.atproto.lexicon.schema/app.dropanchor.comment` |
+
+Resolution chain: `app.dropanchor.*` → DNS TXT `_lexicon.dropanchor.app` →
+`did:plc:aq7owa5y7ndc2hzjz37wy7ma` → PDS (hamster.farm) → schema records.
+
+See `docs/lexicon-publishing.md` for details on updating lexicons.
+
+## 🖼️ Static Assets
+
+Static images are hosted on Bunny CDN at `cdn.dropanchor.app`:
+
+- `https://cdn.dropanchor.app/images/anchor-logo.png` - App logo
+- `https://cdn.dropanchor.app/images/seagull-looking.png` - Empty state
+- `https://cdn.dropanchor.app/images/seagull-chest.png` - Login prompt
 
 ## ☕ Support Development
 

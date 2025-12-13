@@ -17,8 +17,7 @@ const oauth: ATProtoOAuthInstance = createATProtoOAuth({
   baseUrl: BASE_URL,
   cookieSecret: COOKIE_SECRET,
   appName: "Anchor Location Feed",
-  logoUri:
-    "https://res.cloudinary.com/dru3aznlk/image/upload/v1754747200/anchor-logo-transparent_nrw70y.png",
+  logoUri: "https://cdn.dropanchor.app/images/anchor-logo.png",
   policyUri: `${BASE_URL}/privacy-policy`,
   sessionTtl: 60 * 60 * 24 * 30, // 30 days
   storage: new SQLiteStorage(sqliteAdapter(rawDb)),

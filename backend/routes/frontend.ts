@@ -233,8 +233,7 @@ export function createFrontendRoutes() {
     // Fetch checkin data to populate meta tags
     let metaTitle = "Anchor Check-in";
     let metaDescription = "View this check-in on Anchor";
-    let metaImage =
-      "https://res.cloudinary.com/dru3aznlk/image/upload/v1754747200/anchor-logo-transparent_nrw70y.png";
+    let metaImage = "https://cdn.dropanchor.app/images/anchor-logo.png";
     let metaImageType = "image/png";
     let checkinData = null; // Store for reuse in noscript
 

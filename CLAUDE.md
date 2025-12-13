@@ -185,6 +185,17 @@ const secret = Deno.env.get("COOKIE_SECRET");
 const baseUrl = Deno.env.get("ANCHOR_BASE_URL") || "https://dropanchor.app";
 ```
 
+Key environment variables (stored in `.env` locally, Val Town secrets in prod):
+
+- `COOKIE_SECRET` - Iron Session encryption key
+- `ANCHOR_BASE_URL` - Public URL (defaults to `https://dropanchor.app`)
+- `HANDLE` - AT Protocol handle for lexicon publishing (e.g., `tijs.org`)
+- `APP_PASSWORD` - App password for lexicon publishing
+- `BUNNY_STORAGE_ZONE` - Bunny CDN storage zone name
+- `BUNNY_STORAGE_KEY` - Bunny CDN API key
+- `BUNNY_STORAGE_REGION` - Bunny CDN region (e.g., `storage.bunnycdn.com`)
+- `BUNNY_CDN_URL` - CDN base URL (e.g., `https://cdn.dropanchor.app`)
+
 ### External Dependencies
 
 - Use `https://esm.sh` for npm packages
@@ -533,6 +544,61 @@ Always follow AT Protocol patterns:
 - OAuth sessions are encrypted with Iron Session
 - Mobile sessions use sealed tokens (not raw JWTs)
 - CORS headers on all public API endpoints
+
+## Infrastructure
+
+### Lexicon Publishing
+
+Lexicons are published as `com.atproto.lexicon.schema` records on hamster.farm
+(tijs.org's PDS), following the official AT Protocol spec.
+
+**Published lexicons**:
+
+- `app.dropanchor.checkin`
+- `app.dropanchor.like`
+- `app.dropanchor.comment`
+
+**Resolution chain**:
+
+1. NSID `app.dropanchor.checkin`
+2. Reverse domain → `dropanchor.app`
+3. DNS TXT `_lexicon.dropanchor.app` → `did:plc:aq7owa5y7ndc2hzjz37wy7ma`
+4. DID resolves to PDS `https://hamster.farm`
+5. Fetch record from PDS
+
+**Republishing lexicons** (after modifying `lexicons/` files):
+
+```bash
+source .env
+deno run --allow-net --allow-read --allow-env scripts/publish-lexicons.ts
+```
+
+**Verification**:
+
+```bash
+~/go/bin/glot status lexicons/
+dig TXT _lexicon.dropanchor.app +short
+```
+
+See `docs/lexicon-publishing.md` for full details.
+
+### Static Assets (Bunny CDN)
+
+Static images are hosted on Bunny CDN at `cdn.dropanchor.app`:
+
+- `https://cdn.dropanchor.app/images/anchor-logo.png`
+- `https://cdn.dropanchor.app/images/seagull-looking.png`
+- `https://cdn.dropanchor.app/images/seagull-chest.png`
+
+**Uploading new assets**:
+
+```bash
+source .env
+curl -X PUT "https://${BUNNY_STORAGE_REGION}/${BUNNY_STORAGE_ZONE}/images/filename.png" \
+  -H "AccessKey: ${BUNNY_STORAGE_KEY}" \
+  -H "Content-Type: image/png" \
+  --data-binary @/path/to/file.png
+```
 
 ## Project History & Context
 

@@ -14,8 +14,7 @@ const oauth = createATProtoOAuth({
   cookieSecret: Deno.env.get("COOKIE_SECRET"),
   mobileScheme: "anchor-app://auth-callback",
   appName: "Anchor Location Feed",
-  logoUri:
-    "https://res.cloudinary.com/dru3aznlk/image/upload/v1754747200/anchor-logo-transparent_nrw70y.png",
+  logoUri: "https://cdn.dropanchor.app/images/anchor-logo.png",
   policyUri: "https://dropanchor.app/privacy-policy",
   sessionTtl: 60 * 60 * 24 * 30, // 30 days for mobile
   storage: new SQLiteStorage(rawDb),

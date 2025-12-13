@@ -134,7 +134,7 @@ export function Feed(
                 }}
               >
                 <img
-                  src="https://res.cloudinary.com/dru3aznlk/image/upload/v1754731274/seagull-chest_oc7rjd.png"
+                  src="https://cdn.dropanchor.app/images/seagull-chest.png"
                   alt="Login required"
                   style={{
                     width: "400px",
@@ -194,7 +194,7 @@ export function Feed(
               /* Show regular empty state for authenticated empty feeds */
               <>
                 <img
-                  src="https://res.cloudinary.com/dru3aznlk/image/upload/v1754731275/seagull-looking_yanxxb.png"
+                  src="https://cdn.dropanchor.app/images/seagull-looking.png"
                   alt="Seagull looking around"
                   style={{
                     width: "400px",
