@@ -17,6 +17,7 @@ import {
   getCheckinByDidAndRkey,
   getUserCheckins,
   getUserCheckinsByDid,
+  type PaginationOptions,
 } from "./user-checkins.ts";
 import { resolveHandleToDid } from "../utils/atproto-resolver.ts";
 import { getAuthenticatedUserDid } from "../utils/auth-helpers.ts";
@@ -181,7 +182,22 @@ export default async function (req: Request): Promise<Response> {
             }
             did = resolvedDid;
           }
-          return await getUserCheckinsByDid(did, corsHeaders);
+
+          // Extract pagination params from query string
+          const pagination: PaginationOptions = {};
+          const limitParam = url.searchParams.get("limit");
+          const cursorParam = url.searchParams.get("cursor");
+          if (limitParam) {
+            const limit = parseInt(limitParam, 10);
+            if (!isNaN(limit) && limit > 0 && limit <= 100) {
+              pagination.limit = limit;
+            }
+          }
+          if (cursorParam) {
+            pagination.cursor = cursorParam;
+          }
+
+          return await getUserCheckinsByDid(did, corsHeaders, pagination);
         }
 
         // POST is handled directly by main.tsx routes

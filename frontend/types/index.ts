@@ -39,6 +39,7 @@ export interface CheckinData {
   categoryIcon?: string;
   distance?: number;
   likesCount?: number;
+  source?: "anchor" | "beaconbits"; // Source app for attribution
 }
 
 export interface AuthState {

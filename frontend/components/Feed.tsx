@@ -1,25 +1,65 @@
 /** @jsxImportSource https://esm.sh/react@19.1.0 */
-import { useEffect, useState } from "https://esm.sh/react@19.1.0";
+import { useEffect, useRef, useState } from "https://esm.sh/react@19.1.0";
 import { AuthState, CheckinData } from "../types/index.ts";
 import { CheckinCard } from "./CheckinCard.tsx";
 
 interface FeedProps {
   checkins: CheckinData[];
   loading: boolean;
+  loadingMore?: boolean;
+  hasMore?: boolean;
+  onLoadMore?: () => void;
   auth: AuthState;
   onLogin: () => void;
   onCheckinsChange?: (checkins: CheckinData[]) => void;
 }
 
 export function Feed(
-  { checkins, loading, auth, onLogin, onCheckinsChange }: FeedProps,
+  {
+    checkins,
+    loading,
+    loadingMore = false,
+    hasMore = true,
+    onLoadMore,
+    auth,
+    onLogin,
+    onCheckinsChange,
+  }: FeedProps,
 ) {
   const [localCheckins, setLocalCheckins] = useState(checkins);
+  const sentinelRef = useRef<HTMLDivElement>(null);
 
   // Update local checkins when props change
   useEffect(() => {
     setLocalCheckins(checkins);
   }, [checkins]);
+
+  // Intersection Observer for infinite scroll
+  useEffect(() => {
+    // Wait until we have checkins and the sentinel is rendered
+    if (!onLoadMore || !sentinelRef.current || localCheckins.length === 0) {
+      return;
+    }
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        const entry = entries[0];
+        if (entry.isIntersecting && hasMore && !loadingMore) {
+          onLoadMore();
+        }
+      },
+      {
+        rootMargin: "100px", // Trigger 100px before reaching the sentinel
+        threshold: 0,
+      },
+    );
+
+    observer.observe(sentinelRef.current);
+
+    return () => {
+      observer.disconnect();
+    };
+  }, [onLoadMore, hasMore, loadingMore, localCheckins.length]);
 
   const handleDelete = (deletedCheckinId: string) => {
     const updatedCheckins = localCheckins.filter((c) =>
@@ -199,6 +239,62 @@ export function Feed(
               onDelete={handleDelete}
             />
           ))}
+
+          {/* Sentinel element for infinite scroll */}
+          <div ref={sentinelRef} style={{ height: "1px" }} />
+
+          {/* Loading more indicator */}
+          {loadingMore && (
+            <div
+              style={{
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                padding: "24px 0",
+              }}
+            >
+              <div
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: "12px",
+                }}
+              >
+                <div
+                  style={{
+                    width: "16px",
+                    height: "16px",
+                    border: "2px solid #e5e5ea",
+                    borderTop: "2px solid #007aff",
+                    borderRadius: "50%",
+                    animation: "spin 1s ease-in-out infinite",
+                  }}
+                />
+                <span
+                  style={{
+                    fontSize: "14px",
+                    color: "#8e8e93",
+                  }}
+                >
+                  Loading more...
+                </span>
+              </div>
+            </div>
+          )}
+
+          {/* End of feed message */}
+          {!hasMore && !loadingMore && localCheckins.length > 0 && (
+            <div
+              style={{
+                textAlign: "center",
+                padding: "32px 0",
+                color: "#8e8e93",
+                fontSize: "14px",
+              }}
+            >
+              You've reached the end
+            </div>
+          )}
         </div>
       )}
     </>

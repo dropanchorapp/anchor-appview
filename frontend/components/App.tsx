@@ -68,7 +68,8 @@ export function App() {
     return <CheckinDetail checkinId={checkinId} />;
   }
 
-  const [checkins, setCheckins] = useState<CheckinData[]>([]);
+  const [allCheckins, setAllCheckins] = useState<CheckinData[]>([]); // All checkins, sorted by date
+  const [displayedCount, setDisplayedCount] = useState(20); // How many to show
   const [loading, setLoading] = useState(false);
   const [auth, setAuth] = useState<AuthState>({ isAuthenticated: false });
   const [error, setError] = useState<string | null>(null);
@@ -161,60 +162,73 @@ export function App() {
     };
   }, [showUserDropdown]);
 
-  // Load feed data
+  // Load all checkins, sort by date, paginate client-side
+  // (AT Protocol listRecords only sorts by rkey, not by createdAt)
   useEffect(() => {
     const loadFeed = async () => {
       setLoading(true);
       setError(null);
+      setDisplayedCount(20);
 
       try {
         // For timeline feed, require authentication
         if (!auth.isAuthenticated) {
-          // Don't fetch data, show login prompt instead
-          setCheckins([]);
+          setAllCheckins([]);
           setLoading(false);
           return;
         }
 
-        let url = "";
-        if (auth.isAuthenticated) {
-          url = `/api/checkins/${auth.userDid}`;
-        }
-
-        // If no valid URL, don't fetch
-        if (!url) {
-          setCheckins([]);
+        // If no valid user DID, don't fetch
+        if (!auth.userDid) {
+          setAllCheckins([]);
           setLoading(false);
           return;
         }
 
-        const response = await apiFetch(url);
-        if (!response.ok) {
-          const errorText = await response.text();
-          console.error("API error response:", errorText);
-          throw new Error(`Failed to fetch: ${response.status} - ${errorText}`);
-        }
+        // Fetch ALL checkins by following pagination cursors
+        const allFetchedCheckins: CheckinData[] = [];
+        let cursor: string | null = null;
 
-        let data;
-        try {
-          data = await response.json();
-        } catch (jsonError) {
-          console.error("Failed to parse JSON response:", jsonError);
-          throw new Error("Invalid response format from server");
-        }
+        do {
+          const url = cursor
+            ? `/api/checkins/${auth.userDid}?limit=100&cursor=${
+              encodeURIComponent(cursor)
+            }`
+            : `/api/checkins/${auth.userDid}?limit=100`;
 
-        if (data && typeof data === "object") {
-          setCheckins(data.checkins || []);
-        } else {
-          console.error("Unexpected response format:", data);
-          throw new Error("Unexpected response format from server");
-        }
+          const response = await apiFetch(url);
+          if (!response.ok) {
+            const errorText = await response.text();
+            console.error("API error response:", errorText);
+            throw new Error(
+              `Failed to fetch: ${response.status} - ${errorText}`,
+            );
+          }
+
+          const data = await response.json();
+          if (data && typeof data === "object") {
+            allFetchedCheckins.push(...(data.checkins || []));
+            cursor = data.cursor || null;
+          } else {
+            throw new Error("Unexpected response format from server");
+          }
+        } while (cursor);
+
+        // Sort all checkins by createdAt descending (newest first)
+        const sortedCheckins = allFetchedCheckins.sort(
+          (a: CheckinData, b: CheckinData) => {
+            const dateA = new Date(a.createdAt || 0).getTime();
+            const dateB = new Date(b.createdAt || 0).getTime();
+            return dateB - dateA;
+          },
+        );
+        setAllCheckins(sortedCheckins);
       } catch (error) {
         console.error("Failed to load feed:", error);
         setError(
           error instanceof Error ? error.message : "Failed to load feed",
         );
-        setCheckins([]);
+        setAllCheckins([]);
       } finally {
         setLoading(false);
       }
@@ -222,6 +236,17 @@ export function App() {
 
     loadFeed();
   }, [auth.isAuthenticated, auth.userDid]);
+
+  // Derived state: checkins to display and pagination info
+  const checkins = allCheckins.slice(0, displayedCount);
+  const hasMore = displayedCount < allCheckins.length;
+  const loadingMore = false; // No async loading for client-side pagination
+
+  // Load more checkins (client-side pagination)
+  const loadMore = () => {
+    if (displayedCount >= allCheckins.length) return;
+    setDisplayedCount((prev) => Math.min(prev + 20, allCheckins.length));
+  };
 
   const handleLogin = () => {
     setShowLoginForm(true);
@@ -286,6 +311,9 @@ export function App() {
             <Feed
               checkins={checkins}
               loading={loading}
+              loadingMore={loadingMore}
+              hasMore={hasMore}
+              onLoadMore={loadMore}
               auth={auth}
               onLogin={handleLogin}
             />

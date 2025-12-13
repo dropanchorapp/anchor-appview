@@ -1,6 +1,7 @@
 /**
  * User checkins API endpoints
  * Handles fetching and displaying user checkins from their PDS
+ * Supports multiple checkin lexicons (Anchor, BeaconBits, etc.)
  */
 
 import {
@@ -11,6 +12,11 @@ import {
 import { db } from "../database/db.ts";
 import { checkinCountsTable } from "../database/schema.ts";
 import { and, eq } from "https://esm.sh/drizzle-orm@0.44.5";
+import {
+  CHECKIN_SOURCES,
+  fetchAllRecords,
+  type TransformedCheckin,
+} from "../adapters/checkin-adapters.ts";
 
 /**
  * Fetch address record from PDS (for old format checkins with addressRef)
@@ -172,7 +178,7 @@ export async function getUserCheckins(
     const cursor = url.searchParams.get("cursor");
 
     let listUrl =
-      `${pdsUrl}/xrpc/com.atproto.repo.listRecords?repo=${targetDid}&collection=app.dropanchor.checkin&limit=${limit}`;
+      `${pdsUrl}/xrpc/com.atproto.repo.listRecords?repo=${targetDid}&collection=app.dropanchor.checkin&limit=${limit}&reverse=true`;
     if (cursor) {
       listUrl += `&cursor=${cursor}`;
     }
@@ -192,10 +198,19 @@ export async function getUserCheckins(
 
     const data = await response.json();
 
+    // Sort checkins by createdAt descending (newest first)
+    const sortedRecords = [...(data.records || [])].sort(
+      (a: any, b: any) => {
+        const dateA = new Date(a.value?.createdAt || 0).getTime();
+        const dateB = new Date(b.value?.createdAt || 0).getTime();
+        return dateB - dateA;
+      },
+    );
+
     // Return fetched check-ins
     return new Response(
       JSON.stringify({
-        checkins: data.records,
+        checkins: sortedRecords,
         cursor: data.cursor,
       }),
       {
@@ -215,11 +230,21 @@ export async function getUserCheckins(
 }
 
 /**
+ * Pagination options for checkin queries
+ */
+export interface PaginationOptions {
+  limit?: number;
+  cursor?: string;
+}
+
+/**
  * Get user checkins by DID with full formatting and metadata
+ * Fetches from multiple lexicons (Anchor, BeaconBits, etc.) and merges results
  */
 export async function getUserCheckinsByDid(
   did: string,
   corsHeaders: CorsHeaders,
+  _pagination?: PaginationOptions,
 ): Promise<Response> {
   try {
     const pdsUrl = await resolvePdsUrl(did);
@@ -233,40 +258,30 @@ export async function getUserCheckinsByDid(
       );
     }
 
-    // Fetch all checkins for this user
-    const response = await fetch(
-      `${pdsUrl}/xrpc/com.atproto.repo.listRecords?repo=${did}&collection=app.dropanchor.checkin&limit=100`,
+    // Fetch from all configured checkin sources in parallel
+    const fetchPromises = CHECKIN_SOURCES.map((source) =>
+      fetchAllRecords(pdsUrl, did, source.collection).then((records) => ({
+        source,
+        records,
+      }))
     );
+    const results = await Promise.all(fetchPromises);
 
-    if (!response.ok) {
-      console.error("Failed to fetch check-ins:", response.status);
-      return new Response(
-        JSON.stringify({ error: "Failed to fetch check-ins" }),
-        {
-          status: 500,
-          headers: corsHeaders,
-        },
-      );
+    // Transform all records using their source adapters
+    const allTransformed: TransformedCheckin[] = [];
+    for (const { source, records } of results) {
+      for (const record of records) {
+        const transformed = source.transform(record, did, pdsUrl);
+        if (transformed) {
+          allTransformed.push(transformed);
+        }
+      }
     }
 
-    const data = await response.json();
-
-    // Handle case where user has no checkins yet
-    if (!data.records || data.records.length === 0) {
+    // Handle case where user has no checkins
+    if (allTransformed.length === 0) {
       return new Response(
-        JSON.stringify({ checkins: [] }),
-        {
-          status: 200,
-          headers: corsHeaders,
-        },
-      );
-    }
-
-    // Use all records
-    if (data.records.length === 0) {
-      console.log(`✅ No checkins found for ${did}`);
-      return new Response(
-        JSON.stringify({ checkins: [] }),
+        JSON.stringify({ checkins: [], cursor: null }),
         {
           status: 200,
           headers: corsHeaders,
@@ -277,155 +292,81 @@ export async function getUserCheckinsByDid(
     // Resolve profile data once for the user
     const profileData = await resolveProfileFromPds(did);
 
+    // Enrich each transformed checkin with additional data
     const checkins = await Promise.all(
-      data.records.map(async (record: any) => {
-        const rkey = record.uri.split("/").pop(); // Extract rkey from AT URI
-
-        // Parse coordinates - handle both old and new format
-        let coordinates;
-        if (record.value?.geo) {
-          // NEW format: embedded geo object
-          const rawGeo = record.value.geo;
-          coordinates = {
-            latitude: typeof rawGeo.latitude === "number"
-              ? rawGeo.latitude
-              : parseFloat(rawGeo.latitude),
-            longitude: typeof rawGeo.longitude === "number"
-              ? rawGeo.longitude
-              : parseFloat(rawGeo.longitude),
-          };
-        } else if (record.value?.coordinates) {
-          // OLD format: coordinates object (will be migrated on login)
-          const rawCoords = record.value.coordinates;
-          coordinates = {
-            latitude: typeof rawCoords.latitude === "number"
-              ? rawCoords.latitude
-              : parseFloat(rawCoords.latitude),
-            longitude: typeof rawCoords.longitude === "number"
-              ? rawCoords.longitude
-              : parseFloat(rawCoords.longitude),
-          };
-        } else {
-          console.warn(
-            `⚠️ Skipping checkin ${rkey} with missing geo/coordinates`,
-          );
-          return null;
-        }
-
-        // Validate parsed coordinates
-        if (isNaN(coordinates.latitude) || isNaN(coordinates.longitude)) {
-          console.warn(`⚠️ Skipping checkin ${rkey} with invalid coordinates`);
-          return null;
-        }
-
+      allTransformed.map(async (transformed) => {
         const checkin: any = {
-          id: rkey, // Use simple rkey for cleaner URLs
-          uri: record.uri,
+          id: transformed.id,
+          uri: transformed.uri,
           author: {
             did: did,
             handle: profileData?.handle || did,
             displayName: profileData?.displayName,
             avatar: profileData?.avatar,
           },
-          text: record.value.text,
-          createdAt: record.value.createdAt,
-          coordinates,
+          text: transformed.text,
+          createdAt: transformed.createdAt,
+          coordinates: transformed.coordinates,
+          source: transformed.source,
         };
 
-        // Add category info if present
-        if (record.value.category) {
-          checkin.category = record.value.category;
+        // Add optional fields if present
+        if (transformed.address) checkin.address = transformed.address;
+        if (transformed.category) checkin.category = transformed.category;
+        if (transformed.categoryGroup) {
+          checkin.categoryGroup = transformed.categoryGroup;
         }
-        if (record.value.categoryGroup) {
-          checkin.categoryGroup = record.value.categoryGroup;
+        if (transformed.categoryIcon) {
+          checkin.categoryIcon = transformed.categoryIcon;
         }
-        if (record.value.categoryIcon) {
-          checkin.categoryIcon = record.value.categoryIcon;
-        }
+        if (transformed.fsq) checkin.fsq = transformed.fsq;
 
-        // Get address - handle both old and new format
-        if (record.value.address && typeof record.value.address === "object") {
-          // NEW format: embedded address object
-          checkin.address = {
-            name: record.value.address.name,
-            street: record.value.address.street,
-            locality: record.value.address.locality,
-            region: record.value.address.region,
-            country: record.value.address.country,
-            postalCode: record.value.address.postalCode,
-          };
-        } else if (record.value.addressRef) {
-          // OLD format: fetch referenced address record (will be migrated on login)
-          const addressData = await fetchAddressRecordPublic(
-            pdsUrl,
-            did,
-            record.value.addressRef,
-          );
-          if (addressData) {
-            checkin.address = {
-              name: addressData.name,
-              street: addressData.street,
-              locality: addressData.locality,
-              region: addressData.region,
-              country: addressData.country,
-              postalCode: addressData.postalCode,
-            };
-          }
-        }
-
-        // Add fsq data if present
-        if (record.value.fsq && typeof record.value.fsq === "object") {
-          checkin.fsq = {
-            fsqPlaceId: record.value.fsq.fsqPlaceId,
-            name: record.value.fsq.name,
-            latitude: record.value.fsq.latitude,
-            longitude: record.value.fsq.longitude,
-          };
-        }
-
-        // Add image URLs if present (construct URLs from blob CIDs)
-        if (record.value.image?.thumb && record.value.image?.fullsize) {
-          const thumbCid = record.value.image.thumb.ref.$link;
-          const fullsizeCid = record.value.image.fullsize.ref.$link;
-
+        // Build image URLs from CIDs (Anchor only)
+        if (transformed.imageThumbCid && transformed.imageFullsizeCid) {
           checkin.image = {
             thumbUrl:
-              `${pdsUrl}/xrpc/com.atproto.sync.getBlob?did=${did}&cid=${thumbCid}`,
+              `${pdsUrl}/xrpc/com.atproto.sync.getBlob?did=${did}&cid=${transformed.imageThumbCid}`,
             fullsizeUrl:
-              `${pdsUrl}/xrpc/com.atproto.sync.getBlob?did=${did}&cid=${fullsizeCid}`,
-            alt: record.value.image.alt,
+              `${pdsUrl}/xrpc/com.atproto.sync.getBlob?did=${did}&cid=${transformed.imageFullsizeCid}`,
+            alt: transformed.imageAlt,
           };
         }
 
-        // Fetch like count from database
-        try {
-          const countResult = await db.select()
-            .from(checkinCountsTable)
-            .where(and(
-              eq(checkinCountsTable.checkinDid, did),
-              eq(checkinCountsTable.checkinRkey, rkey),
-            ))
-            .limit(1);
+        // Fetch like count from database (for Anchor checkins only)
+        if (transformed.source === "anchor") {
+          try {
+            const countResult = await db.select()
+              .from(checkinCountsTable)
+              .where(and(
+                eq(checkinCountsTable.checkinDid, did),
+                eq(checkinCountsTable.checkinRkey, transformed.id),
+              ))
+              .limit(1);
 
-          if (countResult.length > 0 && countResult[0].likesCount > 0) {
-            checkin.likesCount = countResult[0].likesCount;
+            if (countResult.length > 0 && countResult[0].likesCount > 0) {
+              checkin.likesCount = countResult[0].likesCount;
+            }
+          } catch (countError) {
+            // Log but don't fail if count fetch fails
+            console.warn("Failed to fetch like count for checkin:", countError);
           }
-        } catch (countError) {
-          // Log but don't fail if count fetch fails
-          console.warn("Failed to fetch like count for checkin:", countError);
         }
 
         return checkin;
       }),
     );
 
-    // Filter out null values (records that failed validation)
-    const validCheckins = checkins.filter((c) => c !== null);
+    // Sort by createdAt descending (newest first)
+    checkins.sort((a, b) => {
+      const dateA = new Date(a.createdAt || 0).getTime();
+      const dateB = new Date(b.createdAt || 0).getTime();
+      return dateB - dateA;
+    });
 
     return new Response(
       JSON.stringify({
-        checkins: validCheckins,
-        cursor: data.cursor,
+        checkins,
+        cursor: null, // No cursor needed - we fetch all and sort client-side
       }),
       {
         headers: corsHeaders,
@@ -443,6 +384,7 @@ export async function getUserCheckinsByDid(
 /**
  * GET /api/checkins/:identifier/:rkey - Get a specific checkin
  * identifier can be DID or handle
+ * Searches across all configured checkin sources (Anchor, BeaconBits, etc.)
  */
 export async function getCheckinByDidAndRkey(
   identifier: string,
@@ -480,12 +422,23 @@ export async function getCheckinByDidAndRkey(
       );
     }
 
-    // Fetch the specific checkin
-    const response = await fetch(
-      `${pdsUrl}/xrpc/com.atproto.repo.getRecord?repo=${did}&collection=app.dropanchor.checkin&rkey=${rkey}`,
-    );
+    // Try each configured checkin source until we find the record
+    let record: any = null;
+    let matchedSource: typeof CHECKIN_SOURCES[0] | null = null;
 
-    if (!response.ok) {
+    for (const source of CHECKIN_SOURCES) {
+      const response = await fetch(
+        `${pdsUrl}/xrpc/com.atproto.repo.getRecord?repo=${did}&collection=${source.collection}&rkey=${rkey}`,
+      );
+
+      if (response.ok) {
+        record = await response.json();
+        matchedSource = source;
+        break;
+      }
+    }
+
+    if (!record || !matchedSource) {
       return new Response(
         JSON.stringify({ error: "Checkin not found" }),
         {
@@ -495,36 +448,11 @@ export async function getCheckinByDidAndRkey(
       );
     }
 
-    const data = await response.json();
-    const record = data;
-
-    // Parse coordinates - handle both old and new format
-    let coordinates;
-    if (record.value?.geo) {
-      // NEW format: embedded geo object
-      const rawGeo = record.value.geo;
-      coordinates = {
-        latitude: typeof rawGeo.latitude === "number"
-          ? rawGeo.latitude
-          : parseFloat(rawGeo.latitude),
-        longitude: typeof rawGeo.longitude === "number"
-          ? rawGeo.longitude
-          : parseFloat(rawGeo.longitude),
-      };
-    } else if (record.value?.coordinates) {
-      // OLD format: coordinates object (will be migrated on login)
-      const rawCoords = record.value.coordinates;
-      coordinates = {
-        latitude: typeof rawCoords.latitude === "number"
-          ? rawCoords.latitude
-          : parseFloat(rawCoords.latitude),
-        longitude: typeof rawCoords.longitude === "number"
-          ? rawCoords.longitude
-          : parseFloat(rawCoords.longitude),
-      };
-    } else {
+    // Transform the record using its source adapter
+    const transformed = matchedSource.transform(record, did, pdsUrl);
+    if (!transformed) {
       return new Response(
-        JSON.stringify({ error: "Checkin has invalid geo/coordinates" }),
+        JSON.stringify({ error: "Checkin has invalid data" }),
         {
           status: 400,
           headers: corsHeaders,
@@ -536,43 +464,47 @@ export async function getCheckinByDidAndRkey(
     const profileData = await resolveProfileFromPds(did);
 
     const checkin: any = {
-      id: rkey,
-      uri: record.uri,
+      id: transformed.id,
+      uri: transformed.uri,
       author: {
         did: did,
         handle: profileData?.handle || did,
         displayName: profileData?.displayName,
         avatar: profileData?.avatar,
       },
-      text: record.value.text,
-      createdAt: record.value.createdAt,
-      coordinates,
+      text: transformed.text,
+      createdAt: transformed.createdAt,
+      coordinates: transformed.coordinates,
+      source: transformed.source,
     };
 
-    // Add category info if present
-    if (record.value.category) {
-      checkin.category = record.value.category;
+    // Add optional fields from transformed data
+    if (transformed.address) checkin.address = transformed.address;
+    if (transformed.category) checkin.category = transformed.category;
+    if (transformed.categoryGroup) {
+      checkin.categoryGroup = transformed.categoryGroup;
     }
-    if (record.value.categoryGroup) {
-      checkin.categoryGroup = record.value.categoryGroup;
+    if (transformed.categoryIcon) {
+      checkin.categoryIcon = transformed.categoryIcon;
     }
-    if (record.value.categoryIcon) {
-      checkin.categoryIcon = record.value.categoryIcon;
+    if (transformed.fsq) checkin.fsq = transformed.fsq;
+
+    // Build image URLs from CIDs (Anchor only)
+    if (transformed.imageThumbCid && transformed.imageFullsizeCid) {
+      checkin.image = {
+        thumbUrl:
+          `${pdsUrl}/xrpc/com.atproto.sync.getBlob?did=${did}&cid=${transformed.imageThumbCid}`,
+        fullsizeUrl:
+          `${pdsUrl}/xrpc/com.atproto.sync.getBlob?did=${did}&cid=${transformed.imageFullsizeCid}`,
+        alt: transformed.imageAlt,
+      };
     }
 
-    // Get address - handle both old and new format
-    if (record.value.address && typeof record.value.address === "object") {
-      // NEW format: embedded address object
-      checkin.address = {
-        name: record.value.address.name,
-        street: record.value.address.street,
-        locality: record.value.address.locality,
-        region: record.value.address.region,
-        country: record.value.address.country,
-        postalCode: record.value.address.postalCode,
-      };
-    } else if (record.value.addressRef) {
-      // OLD format: fetch referenced address record (will be migrated on login)
+    // Handle old Anchor format with addressRef (not handled by adapter)
+    if (
+      !checkin.address && record.value?.addressRef &&
+      transformed.source === "anchor"
+    ) {
       const addressData = await fetchAddressRecordPublic(
         pdsUrl,
         did,
@@ -590,46 +522,24 @@ export async function getCheckinByDidAndRkey(
       }
     }
 
-    // Add fsq data if present
-    if (record.value.fsq && typeof record.value.fsq === "object") {
-      checkin.fsq = {
-        fsqPlaceId: record.value.fsq.fsqPlaceId,
-        name: record.value.fsq.name,
-        latitude: record.value.fsq.latitude,
-        longitude: record.value.fsq.longitude,
-      };
-    }
+    // Fetch like count from database (for Anchor checkins only)
+    if (transformed.source === "anchor") {
+      try {
+        const countResult = await db.select()
+          .from(checkinCountsTable)
+          .where(and(
+            eq(checkinCountsTable.checkinDid, did),
+            eq(checkinCountsTable.checkinRkey, rkey),
+          ))
+          .limit(1);
 
-    // Add image URLs if present (construct URLs from blob CIDs)
-    if (record.value.image?.thumb && record.value.image?.fullsize) {
-      const thumbCid = record.value.image.thumb.ref.$link;
-      const fullsizeCid = record.value.image.fullsize.ref.$link;
-
-      checkin.image = {
-        thumbUrl:
-          `${pdsUrl}/xrpc/com.atproto.sync.getBlob?did=${did}&cid=${thumbCid}`,
-        fullsizeUrl:
-          `${pdsUrl}/xrpc/com.atproto.sync.getBlob?did=${did}&cid=${fullsizeCid}`,
-        alt: record.value.image.alt,
-      };
-    }
-
-    // Fetch like count from database
-    try {
-      const countResult = await db.select()
-        .from(checkinCountsTable)
-        .where(and(
-          eq(checkinCountsTable.checkinDid, did),
-          eq(checkinCountsTable.checkinRkey, rkey),
-        ))
-        .limit(1);
-
-      if (countResult.length > 0 && countResult[0].likesCount > 0) {
-        checkin.likesCount = countResult[0].likesCount;
+        if (countResult.length > 0 && countResult[0].likesCount > 0) {
+          checkin.likesCount = countResult[0].likesCount;
+        }
+      } catch (countError) {
+        // Log but don't fail if count fetch fails
+        console.warn("Failed to fetch like count for checkin:", countError);
       }
-    } catch (countError) {
-      // Log but don't fail if count fetch fails
-      console.warn("Failed to fetch like count for checkin:", countError);
     }
 
     return new Response(
