@@ -1,14 +1,11 @@
 /** @jsxImportSource https://esm.sh/react@19.1.0 */
-import React, {
-  useEffect,
-  useRef,
-  useState,
-} from "https://esm.sh/react@19.1.0";
-import { css } from "https://esm.sh/@emotion/css@11.13.5";
-import { Header } from "./Header.tsx";
+import React, { useEffect, useState } from "https://esm.sh/react@19.1.0";
+import { Layout } from "./Layout.tsx";
 import { Feed } from "./Feed.tsx";
 import { About } from "./About.tsx";
+import { Help } from "./Help.tsx";
 import { PrivacyPolicy } from "./PrivacyPolicy.tsx";
+import { TermsOfService } from "./TermsOfService.tsx";
 import { LoginForm } from "./LoginForm.tsx";
 import { MobileAuth } from "./MobileAuth.tsx";
 import { CheckinDetail } from "./CheckinDetail.tsx";
@@ -16,39 +13,27 @@ import { CheckinComposer } from "./CheckinComposer.tsx";
 import { AuthState, CheckinData } from "../types/index.ts";
 import { apiFetch } from "../utils/api.ts";
 import { injectGlobalStyles } from "../styles/globalStyles.ts";
-import { alertError, container, fab } from "../styles/components.ts";
-import { spacing } from "../styles/theme.ts";
-
-const appContainerStyle = css`
-  min-height: 100vh;
-`;
-
-const mainContentStyle = css`
-  ${container} padding-top: ${spacing.xl};
-`;
+import { alertError } from "../styles/components.ts";
 
 export function App() {
-  // Check if we're on the mobile-auth route first, before any hooks
+  // Parse route first, before any hooks
+  let currentPath = "/";
   let isMobileAuth = false;
   let isPrivacyPolicy = false;
-  try {
-    isMobileAuth = globalThis.location?.pathname === "/mobile-auth";
-    isPrivacyPolicy = globalThis.location?.pathname === "/privacy-policy";
-  } catch (error) {
-    console.error("Error checking routes:", error);
-    isMobileAuth = false;
-    isPrivacyPolicy = false;
-  }
-
-  // Check if we're on a checkin detail route
-  let checkinMatch = null;
+  let isTermsOfService = false;
+  let isHelp = false;
   let isCheckinDetail = false;
-  let checkinId = null;
-  let checkinDid = null;
-  let checkinRkey = null;
+  let checkinId: string | null = null;
+  let checkinDid: string | null = null;
+  let checkinRkey: string | null = null;
 
   try {
-    const pathname = globalThis.location?.pathname || "";
+    const pathname = globalThis.location?.pathname || "/";
+    currentPath = pathname;
+    isMobileAuth = pathname === "/mobile-auth";
+    isPrivacyPolicy = pathname === "/privacy-policy";
+    isTermsOfService = pathname === "/terms";
+    isHelp = pathname === "/help";
 
     // Try new REST-style URL first: /checkins/:did/:rkey
     const restMatch = pathname.match(/^\/checkins\/([^\/]+)\/([^\/]+)$/);
@@ -58,26 +43,19 @@ export function App() {
       checkinId = `${checkinDid}/${checkinRkey}`;
     } else {
       // Fallback to legacy URL: /checkin/:id
-      checkinMatch = pathname.match(/^\/checkin\/(.+)$/);
-      isCheckinDetail = !!checkinMatch;
-      checkinId = checkinMatch?.[1];
+      const legacyMatch = pathname.match(/^\/checkin\/(.+)$/);
+      if (legacyMatch) {
+        isCheckinDetail = true;
+        checkinId = legacyMatch[1];
+      }
     }
   } catch (error) {
-    console.error("Error parsing checkin route:", error);
-    isCheckinDetail = false;
-    checkinId = null;
+    console.error("Error parsing route:", error);
   }
 
+  // Mobile auth is a special standalone page
   if (isMobileAuth) {
     return <MobileAuth />;
-  }
-
-  if (isPrivacyPolicy) {
-    return <PrivacyPolicy />;
-  }
-
-  if (isCheckinDetail && checkinId) {
-    return <CheckinDetail checkinId={checkinId} />;
   }
 
   const [allCheckins, setAllCheckins] = useState<CheckinData[]>([]);
@@ -88,8 +66,6 @@ export function App() {
   const [showLoginForm, setShowLoginForm] = useState(false);
   const [loginHandle, setLoginHandle] = useState("");
   const [loginLoading, setLoginLoading] = useState(false);
-  const [showUserDropdown, setShowUserDropdown] = useState(false);
-  const userDropdownRef = useRef<HTMLDivElement>(null);
   const [showCheckinComposer, setShowCheckinComposer] = useState(false);
 
   // Inject global styles on mount
@@ -120,26 +96,6 @@ export function App() {
 
     checkAuth();
   }, []);
-
-  // Close user dropdown when clicking outside
-  useEffect(() => {
-    const handleClickOutside = (event: MouseEvent) => {
-      if (
-        userDropdownRef.current &&
-        !userDropdownRef.current.contains(event.target as Node)
-      ) {
-        setShowUserDropdown(false);
-      }
-    };
-
-    if (showUserDropdown) {
-      document.addEventListener("click", handleClickOutside);
-    }
-
-    return () => {
-      document.removeEventListener("click", handleClickOutside);
-    };
-  }, [showUserDropdown]);
 
   // Load all checkins, sort by date, paginate client-side
   useEffect(() => {
@@ -252,38 +208,78 @@ export function App() {
       }
 
       setAuth({ isAuthenticated: false });
-      setShowUserDropdown(false);
       globalThis.location.reload();
     } catch (error) {
       console.error("Logout failed:", error);
     }
   };
 
+  const handleCreateCheckin = () => {
+    setShowCheckinComposer(true);
+  };
+
+  // Render content based on route
+  const renderContent = () => {
+    // Privacy policy is a full-page standalone
+    if (isPrivacyPolicy) {
+      return <PrivacyPolicy />;
+    }
+
+    // Terms of service is a full-page standalone
+    if (isTermsOfService) {
+      return <TermsOfService />;
+    }
+
+    // Help page
+    if (isHelp) {
+      return <Help />;
+    }
+
+    // Checkin detail page
+    if (isCheckinDetail && checkinId) {
+      return <CheckinDetail checkinId={checkinId} auth={auth} />;
+    }
+
+    // Home/Feed page
+    if (auth.isAuthenticated) {
+      return (
+        <Feed
+          checkins={checkins}
+          loading={loading}
+          loadingMore={loadingMore}
+          hasMore={hasMore}
+          onLoadMore={loadMore}
+          auth={auth}
+          onLogin={handleLogin}
+        />
+      );
+    }
+
+    // Not authenticated - show about page
+    return <About onLogin={handleLogin} />;
+  };
+
+  // Privacy policy is standalone without layout
+  if (isPrivacyPolicy) {
+    return <PrivacyPolicy />;
+  }
+
+  // Terms of service is standalone without layout
+  if (isTermsOfService) {
+    return <TermsOfService />;
+  }
+
   return (
-    <div className={appContainerStyle}>
-      <Header
+    <>
+      <Layout
         auth={auth}
         onLogin={handleLogin}
         onLogout={handleLogout}
-        showUserDropdown={showUserDropdown}
-        setShowUserDropdown={setShowUserDropdown}
-      />
-
-      <div className={mainContentStyle}>
-        {auth.isAuthenticated
-          ? (
-            <Feed
-              checkins={checkins}
-              loading={loading}
-              loadingMore={loadingMore}
-              hasMore={hasMore}
-              onLoadMore={loadMore}
-              auth={auth}
-              onLogin={handleLogin}
-            />
-          )
-          : <About onLogin={handleLogin} />}
-      </div>
+        onCreateCheckin={handleCreateCheckin}
+        currentPath={currentPath}
+      >
+        {renderContent()}
+      </Layout>
 
       <LoginForm
         showLoginForm={showLoginForm}
@@ -300,29 +296,6 @@ export function App() {
         </div>
       )}
 
-      {auth.isAuthenticated && (
-        <button
-          type="button"
-          onClick={() => setShowCheckinComposer(true)}
-          className={fab}
-          title="Create check-in"
-        >
-          <svg
-            width="28"
-            height="28"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="white"
-            strokeWidth="2"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-          >
-            <line x1="12" y1="5" x2="12" y2="19" />
-            <line x1="5" y1="12" x2="19" y2="12" />
-          </svg>
-        </button>
-      )}
-
       <CheckinComposer
         isOpen={showCheckinComposer}
         onClose={() => setShowCheckinComposer(false)}
@@ -331,6 +304,6 @@ export function App() {
           globalThis.location.href = checkinUrl;
         }}
       />
-    </div>
+    </>
   );
 }

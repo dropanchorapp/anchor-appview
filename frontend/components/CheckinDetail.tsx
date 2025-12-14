@@ -5,12 +5,7 @@ import { AuthState, CheckinData } from "../types/index.ts";
 import { ImageLightbox } from "./ImageLightbox.tsx";
 import { apiDelete, apiFetch } from "../utils/api.ts";
 import { injectGlobalStyles } from "../styles/globalStyles.ts";
-import {
-  avatar,
-  avatarFallback,
-  containerNarrow,
-  flexCenter,
-} from "../styles/components.ts";
+import { avatar, avatarFallback, flexCenter } from "../styles/components.ts";
 import {
   colors,
   radii,
@@ -46,8 +41,6 @@ const errorStyle = css`
 `;
 
 const pageContainerStyle = css`
-  ${containerNarrow} padding-top: ${spacing.xl};
-  padding-bottom: ${spacing.xl};
   font-family: ${typography.fontFamily};
   line-height: ${typography.lineHeights.normal};
   color: ${colors.text};

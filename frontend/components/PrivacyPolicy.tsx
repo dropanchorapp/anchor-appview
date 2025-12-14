@@ -152,36 +152,44 @@ export function PrivacyPolicy() {
         </section>
 
         <section className={sectionStyle}>
-          <h2 className={sectionTitleStyle}>What Information We Collect</h2>
-          <h3 className={subsectionTitleStyle}>Information You Provide</h3>
+          <h2 className={sectionTitleStyle}>What Anchor Stores</h2>
+          <p className={paragraphStyle}>
+            Anchor operates with minimal data storage. The only information
+            stored on Anchor's servers is:
+          </p>
           <ul className={listStyle}>
             <li className={listItemStyle}>
-              Location coordinates when you create check-ins
-            </li>
-            <li className={listItemStyle}>Venue names and addresses</li>
-            <li className={listItemStyle}>
-              Optional text descriptions for your check-ins
+              <strong>OAuth sessions:</strong>{" "}
+              Encrypted authentication tokens to keep you logged in
             </li>
             <li className={listItemStyle}>
-              Your Bluesky handle and profile information for authentication
+              <strong>Error logs:</strong>{" "}
+              Technical logs for debugging (no personal location data)
             </li>
           </ul>
 
           <h3 className={subsectionTitleStyle}>
-            Technical Information We Store
+            What Anchor Does NOT Store
           </h3>
+          <p className={paragraphStyle}>
+            Anchor does not store, cache, or index any of the following:
+          </p>
           <ul className={listStyle}>
             <li className={listItemStyle}>
-              OAuth authentication sessions (encrypted and stored securely for
-              login management)
+              Your location check-ins or coordinates
             </li>
-            <li className={listItemStyle}>Error logs for debugging purposes</li>
+            <li className={listItemStyle}>Venue names or addresses</li>
+            <li className={listItemStyle}>Photos or images you upload</li>
+            <li className={listItemStyle}>
+              Text descriptions or messages
+            </li>
+            <li className={listItemStyle}>Your location history</li>
           </ul>
           <p className={paragraphStyle}>
-            <strong>What we don't store:</strong>{" "}
-            We do not store your check-ins, location coordinates, venue
-            information, or any other personal content on our servers. All of
-            this data lives exclusively on your PDS.
+            All of this data is written directly to your Personal Data Server
+            (PDS) and read from there when needed. Anchor acts as a client
+            application that communicates with your PDS—we are not a data
+            warehouse.
           </p>
         </section>
 

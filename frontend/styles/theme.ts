@@ -4,23 +4,23 @@ export const colors = {
   // Primary
   primary: "#007aff",
   primaryHover: "#0056b3",
-  primaryLight: "#f0f8ff",
+  primaryLight: "#eff6ff",
 
-  // Text
-  text: "#1c1c1e",
-  textSecondary: "#8e8e93",
-  textMuted: "#c7c7cc",
-  textBody: "#3c3c43",
+  // Text - Slate palette for subtle blue tint
+  text: "#1e293b",
+  textSecondary: "#64748b",
+  textMuted: "#94a3b8",
+  textBody: "#334155",
 
-  // Backgrounds
-  background: "#f2f2f7",
-  surface: "white",
-  surfaceHover: "#f8f9fa",
-  surfaceActive: "#e9ecef",
+  // Backgrounds - Subtle blue tint (Slate palette)
+  background: "#f8fafc",
+  surface: "#ffffff",
+  surfaceHover: "#f1f5f9",
+  surfaceActive: "#e2e8f0",
 
-  // Borders
-  border: "#e5e5ea",
-  borderLight: "#f2f2f7",
+  // Borders - Slate palette
+  border: "#e2e8f0",
+  borderLight: "#f1f5f9",
 
   // Semantic
   error: "#ff3b30",
@@ -36,6 +36,10 @@ export const colors = {
   // Overlay
   overlay: "rgba(0, 0, 0, 0.5)",
   overlayDark: "rgba(0, 0, 0, 0.8)",
+
+  // Sidebar
+  sidebarBg: "#ffffff",
+  sidebarBorder: "#e2e8f0",
 } as const;
 
 export const spacing = {

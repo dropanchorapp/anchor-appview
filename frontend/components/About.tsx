@@ -3,7 +3,6 @@ import { css } from "https://esm.sh/@emotion/css@11.13.5";
 import {
   alertWarning,
   buttonPrimaryLarge,
-  cardLarge,
   heading1,
   heading2,
   heading3,
@@ -24,8 +23,9 @@ interface AboutProps {
 }
 
 const containerStyle = css`
-  ${cardLarge} margin: ${spacing.xl} auto;
-  max-width: 800px;
+  background: ${colors.surface};
+  border-radius: ${radii.xxl};
+  padding: ${spacing.xxl};
 `;
 
 const heroStyle = css`

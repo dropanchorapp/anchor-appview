@@ -1,174 +1,115 @@
 /** @jsxImportSource https://esm.sh/react@19.1.0 */
 import { css } from "https://esm.sh/@emotion/css@11.13.5";
-import { AuthState } from "../types/index.ts";
 import {
-  avatar,
-  avatarFallback,
-  dropdown,
-  dropdownItemDanger,
-  header,
-  headerContent,
-} from "../styles/components.ts";
-import {
+  breakpoints,
   colors,
   radii,
-  shadows,
   spacing,
   transitions,
-  typography,
+  zIndex,
 } from "../styles/theme.ts";
 
 interface HeaderProps {
-  auth: AuthState;
-  onLogin: () => void;
-  onLogout: () => void;
-  showUserDropdown: boolean;
-  setShowUserDropdown: (show: boolean) => void;
+  onMenuToggle: () => void;
 }
+
+const headerStyle = css`
+  position: sticky;
+  top: 0;
+  z-index: ${zIndex.header};
+  background: ${colors.surface};
+  border-bottom: 1px solid ${colors.border};
+`;
+
+const headerContentStyle = css`
+  max-width: 1280px;
+  margin: 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: ${spacing.md} ${spacing.xl};
+  height: 72px;
+
+  @media (max-width: ${breakpoints.md}) {
+    padding: ${spacing.md} ${spacing.lg};
+  }
+`;
 
 const logoContainerStyle = css`
   display: flex;
   align-items: center;
-  flex: 1;
+`;
+
+const logoLinkStyle = css`
+  display: flex;
+  align-items: center;
+  text-decoration: none;
 `;
 
 const logoStyle = css`
-  height: 48px;
+  height: 44px;
   width: auto;
-  max-width: 200px;
+  max-width: 180px;
 `;
 
-const actionsStyle = css`
-  display: flex;
+const menuButtonStyle = css`
+  display: none;
   align-items: center;
-  gap: ${spacing.lg};
-  flex: 0 0 auto;
-`;
-
-const loginButtonStyle = css`
-  background: ${colors.primary};
-  color: white;
-  border: none;
-  padding: 10px ${spacing.xl};
-  border-radius: ${radii.pill};
-  font-size: ${typography.sizes.base};
-  font-weight: ${typography.weights.semibold};
-  display: inline-flex;
-  align-items: center;
-  gap: ${spacing.sm};
-  cursor: pointer;
-  min-width: 80px;
   justify-content: center;
-  transition: background ${transitions.normal};
-
-  &:hover {
-    background: ${colors.primaryHover};
-  }
-`;
-
-const userButtonStyle = css`
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  background: ${colors.surface};
+  width: 44px;
+  height: 44px;
+  background: transparent;
   border: 1px solid ${colors.border};
-  border-radius: 24px;
-  padding: 6px ${spacing.lg} 6px 6px;
+  border-radius: ${radii.lg};
   cursor: pointer;
-  box-shadow: ${shadows.md};
-  font-size: ${typography.sizes.base};
-  color: ${colors.text};
-  transition: all ${transitions.normal};
+  transition: all ${transitions.fast};
 
   &:hover {
-    border-color: ${colors.textMuted};
+    background: ${colors.surfaceHover};
+  }
+
+  svg {
+    width: 24px;
+    height: 24px;
+    color: ${colors.text};
+  }
+
+  @media (max-width: ${breakpoints.md}) {
+    display: flex;
   }
 `;
 
-const userNameStyle = css`
-  font-weight: ${typography.weights.medium};
-  white-space: nowrap;
-`;
+const MenuIcon = () => (
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+    <line x1="3" y1="12" x2="21" y2="12" />
+    <line x1="3" y1="6" x2="21" y2="6" />
+    <line x1="3" y1="18" x2="21" y2="18" />
+  </svg>
+);
 
-const chevronStyle = (isOpen: boolean) =>
-  css`
-    font-size: ${typography.sizes.xs};
-    color: ${colors.textSecondary};
-    transform: ${isOpen ? "rotate(180deg)" : "rotate(0deg)"};
-    transition: transform ${transitions.normal};
-  `;
-
-export function Header({
-  auth,
-  onLogin,
-  onLogout,
-  showUserDropdown,
-  setShowUserDropdown,
-}: HeaderProps) {
+export function Header({ onMenuToggle }: HeaderProps) {
   return (
-    <div className={header}>
-      <div className={headerContent}>
+    <header className={headerStyle}>
+      <div className={headerContentStyle}>
         <div className={logoContainerStyle}>
-          <img
-            src="https://cdn.dropanchor.app/images/anchor-logo.png"
-            alt="Anchor"
-            className={logoStyle}
-          />
+          <a href="/" className={logoLinkStyle}>
+            <img
+              src="https://cdn.dropanchor.app/images/anchor-logo.png"
+              alt="Anchor"
+              className={logoStyle}
+            />
+          </a>
         </div>
 
-        <div className={actionsStyle}>
-          {!auth.isAuthenticated
-            ? (
-              <button
-                type="button"
-                onClick={onLogin}
-                className={loginButtonStyle}
-              >
-                Login
-              </button>
-            )
-            : (
-              <div style={{ position: "relative" }}>
-                <button
-                  type="button"
-                  onClick={() => setShowUserDropdown(!showUserDropdown)}
-                  className={userButtonStyle}
-                >
-                  {auth.userAvatar
-                    ? (
-                      <img
-                        src={auth.userAvatar}
-                        alt={auth.userDisplayName || auth.userHandle}
-                        className={avatar(36)}
-                      />
-                    )
-                    : (
-                      <div className={avatarFallback(36, 16)}>
-                        {(auth.userDisplayName || auth.userHandle)?.[0]
-                          ?.toUpperCase() || "?"}
-                      </div>
-                    )}
-                  <span className={userNameStyle}>
-                    {auth.userDisplayName || auth.userHandle}
-                  </span>
-                  <div className={chevronStyle(showUserDropdown)}>▼</div>
-                </button>
-
-                {showUserDropdown && (
-                  <div className={dropdown}>
-                    <button
-                      type="button"
-                      onClick={onLogout}
-                      className={dropdownItemDanger}
-                    >
-                      Sign out
-                    </button>
-                  </div>
-                )}
-              </div>
-            )}
-        </div>
+        <button
+          type="button"
+          onClick={onMenuToggle}
+          className={menuButtonStyle}
+          aria-label="Toggle menu"
+        >
+          <MenuIcon />
+        </button>
       </div>
-    </div>
+    </header>
   );
 }
