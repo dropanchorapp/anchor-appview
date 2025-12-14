@@ -1,13 +1,20 @@
 /** @jsxImportSource https://esm.sh/react@19.1.0 */
-import { useEffect, useRef, useState } from "https://esm.sh/react@19.1.0";
+import React, {
+  useEffect,
+  useRef,
+  useState,
+} from "https://esm.sh/react@19.1.0";
+import { createPortal } from "https://esm.sh/react-dom@19.1.0?deps=react@19.1.0";
 import { css } from "https://esm.sh/@emotion/css@11.13.5";
 import { AuthState, CheckinData } from "../types/index.ts";
 import { ImageLightbox } from "./ImageLightbox.tsx";
+import { SIDEBAR_PORTAL_ID } from "./RightSidebar.tsx";
 import { apiDelete, apiFetch } from "../utils/api.ts";
 import { checkinCache } from "../utils/checkin-cache.ts";
 import { injectGlobalStyles } from "../styles/globalStyles.ts";
 import { avatar, avatarFallback, flexCenter } from "../styles/components.ts";
 import {
+  breakpoints,
   colors,
   radii,
   shadows,
@@ -45,25 +52,6 @@ const pageContainerStyle = css`
   font-family: ${typography.fontFamily};
   line-height: ${typography.lineHeights.normal};
   color: ${colors.text};
-`;
-
-const backButtonStyle = css`
-  background: ${colors.surfaceHover};
-  border: 1px solid ${colors.borderLight};
-  padding: ${spacing.sm} ${spacing.lg};
-  border-radius: ${radii.md};
-  font-size: ${typography.sizes.md};
-  color: ${colors.text};
-  cursor: pointer;
-  margin-bottom: ${spacing.xl};
-  font-weight: ${typography.weights.medium};
-  transition: all ${transitions.fast};
-
-  &:hover {
-    background: ${colors.surfaceActive};
-    border-color: ${colors.primary};
-    color: ${colors.primary};
-  }
 `;
 
 const mainCardStyle = css`
@@ -176,6 +164,55 @@ const mapContainerStyle = css`
   background: ${colors.surfaceActive};
 `;
 
+// Location section in main content - only visible on mobile
+const mobileLocationSectionStyle = css`
+  display: none;
+
+  @media (max-width: ${breakpoints.lg}) {
+    display: block;
+  }
+`;
+
+// Sidebar location section styles
+const sidebarLocationSectionStyle = css`
+  background: ${colors.surface};
+  border-radius: ${radii.lg};
+  box-shadow: ${shadows.sm};
+  overflow: hidden;
+  margin-bottom: ${spacing.lg};
+`;
+
+const sidebarLocationDetailsStyle = css`
+  padding: ${spacing.md};
+`;
+
+const sidebarVenueNameStyle = css`
+  font-size: ${typography.sizes.md};
+  font-weight: ${typography.weights.semibold};
+  color: ${colors.text};
+  margin-bottom: ${spacing.xs};
+  line-height: ${typography.lineHeights.tight};
+`;
+
+const sidebarAddressTextStyle = css`
+  font-size: ${typography.sizes.sm};
+  color: ${colors.textSecondary};
+  line-height: ${typography.lineHeights.normal};
+  margin-bottom: ${spacing.xs};
+`;
+
+const sidebarCoordinatesStyle = css`
+  font-size: ${typography.sizes.xs};
+  color: ${colors.textMuted};
+  font-family: monospace;
+`;
+
+const sidebarMapContainerStyle = css`
+  width: 100%;
+  height: 160px;
+  background: ${colors.surfaceActive};
+`;
+
 const likesSectionStyle = css`
   background: ${colors.surfaceHover};
   padding: ${spacing.lg};
@@ -231,61 +268,69 @@ const signInHintStyle = css`
   margin-top: ${spacing.sm};
 `;
 
-const shareCardStyle = css`
-  background: ${colors.surface};
-  border-radius: ${radii.lg};
-  box-shadow: ${shadows.sm};
-  padding: ${spacing.lg};
-`;
-
 const shareTitleStyle = css`
-  font-size: ${typography.sizes.lg};
+  font-size: ${typography.sizes.md};
   font-weight: ${typography.weights.semibold};
   color: ${colors.text};
-  margin-bottom: ${spacing.md};
-`;
-
-const shareInputRowStyle = css`
-  display: flex;
-  align-items: center;
-  gap: ${spacing.sm};
-  background: ${colors.surfaceHover};
-  padding: ${spacing.md};
-  border-radius: ${radii.md};
-  border: 1px solid ${colors.borderLight};
+  margin-bottom: ${spacing.sm};
 `;
 
 const shareInputStyle = css`
-  flex: 1;
-  background: transparent;
-  border: none;
-  font-size: ${typography.sizes.md};
-  color: ${colors.text};
-  outline: none;
+  width: 100%;
+  background: ${colors.surfaceHover};
+  padding: ${spacing.sm} ${spacing.md};
+  border-radius: ${radii.sm};
+  border: 1px solid ${colors.borderLight};
+  font-size: ${typography.sizes.xs};
+  color: ${colors.textSecondary};
+  margin-bottom: ${spacing.md};
+  box-sizing: border-box;
+
+  &:focus {
+    outline: none;
+    border-color: ${colors.primary};
+  }
+`;
+
+const shareButtonRowStyle = css`
+  display: flex;
+  gap: ${spacing.sm};
 `;
 
 const copyButtonStyle = css`
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: ${spacing.xs};
   background: ${colors.surfaceHover};
-  color: ${colors.primary};
-  border: 1px solid ${colors.primary};
+  color: ${colors.text};
+  border: 1px solid ${colors.border};
   padding: ${spacing.sm} ${spacing.md};
   border-radius: ${radii.sm};
-  font-size: ${typography.sizes.md};
+  font-size: ${typography.sizes.sm};
   cursor: pointer;
   transition: all ${transitions.fast};
 
   &:hover {
-    background: ${colors.primaryLight};
+    background: ${colors.surfaceActive};
+    border-color: ${colors.primary};
+    color: ${colors.primary};
   }
 `;
 
 const shareButtonStyle = css`
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: ${spacing.xs};
   background: ${colors.primary};
   color: white;
   border: none;
   padding: ${spacing.sm} ${spacing.md};
   border-radius: ${radii.sm};
-  font-size: ${typography.sizes.md};
+  font-size: ${typography.sizes.sm};
   cursor: pointer;
   transition: all ${transitions.fast};
 
@@ -301,6 +346,382 @@ const beaconBitsLinkStyle = css`
     opacity: 0.8;
   }
 `;
+
+// ============ CHECKIN ACTIONS STYLES ============
+
+const sidebarActionsStyle = css`
+  background: ${colors.surface};
+  border-radius: ${radii.lg};
+  box-shadow: ${shadows.sm};
+  padding: ${spacing.lg};
+`;
+
+// Inline mobile actions - only visible on mobile (desktop uses sidebar)
+const inlineMobileActionsStyle = css`
+  display: none;
+  background: ${colors.surfaceHover};
+  border-radius: ${radii.lg};
+  padding: ${spacing.lg};
+  margin-top: ${spacing.lg};
+  border: 1px solid ${colors.borderLight};
+
+  @media (max-width: ${breakpoints.lg}) {
+    display: block;
+  }
+`;
+
+const inlineActionsTitleStyle = css`
+  font-size: ${typography.sizes.md};
+  font-weight: ${typography.weights.semibold};
+  color: ${colors.text};
+  margin-bottom: ${spacing.md};
+`;
+
+const inlineActionsRowStyle = css`
+  display: flex;
+  gap: ${spacing.sm};
+  flex-wrap: wrap;
+`;
+
+const inlineActionButtonStyle = css`
+  flex: 1;
+  min-width: 100px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: ${spacing.xs};
+  background: ${colors.surface};
+  color: ${colors.text};
+  border: 1px solid ${colors.border};
+  padding: ${spacing.sm} ${spacing.md};
+  border-radius: ${radii.md};
+  font-size: ${typography.sizes.sm};
+  cursor: pointer;
+  transition: all ${transitions.fast};
+
+  &:hover {
+    background: ${colors.surfaceActive};
+    border-color: ${colors.primary};
+    color: ${colors.primary};
+  }
+`;
+
+const inlineShareButtonStyle = css`
+  flex: 1;
+  min-width: 100px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: ${spacing.xs};
+  background: ${colors.primary};
+  color: white;
+  border: none;
+  padding: ${spacing.sm} ${spacing.md};
+  border-radius: ${radii.md};
+  font-size: ${typography.sizes.sm};
+  cursor: pointer;
+  transition: all ${transitions.fast};
+
+  &:hover {
+    background: ${colors.primaryHover};
+  }
+`;
+
+const inlineDeleteButtonStyle = css`
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: ${spacing.xs};
+  background: transparent;
+  color: ${colors.textMuted};
+  border: none;
+  padding: ${spacing.sm} ${spacing.md};
+  margin-top: ${spacing.md};
+  border-radius: ${radii.md};
+  font-size: ${typography.sizes.sm};
+  cursor: pointer;
+  transition: all ${transitions.fast};
+  border-top: 1px solid ${colors.borderLight};
+  padding-top: ${spacing.md};
+
+  &:hover:not(:disabled) {
+    color: ${colors.error};
+    background: rgba(239, 68, 68, 0.1);
+  }
+
+  &:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+`;
+
+const deleteButtonStyle = css`
+  display: flex;
+  align-items: center;
+  gap: ${spacing.xs};
+  padding: ${spacing.sm} ${spacing.md};
+  margin-top: ${spacing.md};
+  border: none;
+  background: transparent;
+  color: ${colors.textMuted};
+  cursor: pointer;
+  font-size: ${typography.sizes.sm};
+  border-radius: ${radii.sm};
+  transition: all ${transitions.normal};
+  width: 100%;
+  justify-content: center;
+  border-top: 1px solid ${colors.borderLight};
+  padding-top: ${spacing.md};
+
+  &:hover:not(:disabled) {
+    color: ${colors.error};
+    background: rgba(239, 68, 68, 0.1);
+  }
+
+  &:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+`;
+
+// ============ SIDEBAR ACTIONS COMPONENT ============
+
+interface SidebarActionsProps {
+  portalTarget: HTMLElement | null;
+  shareUrl: string;
+  canDelete: boolean;
+  isDeleting: boolean;
+  onDelete: () => void;
+  coordinates?: {
+    latitude: number;
+    longitude: number;
+  };
+  address?: {
+    name?: string;
+    street?: string;
+    locality?: string;
+    region?: string;
+    country?: string;
+  };
+}
+
+function SidebarActions({
+  portalTarget,
+  shareUrl,
+  canDelete,
+  isDeleting,
+  onDelete,
+  coordinates,
+  address,
+}: SidebarActionsProps): React.ReactNode {
+  if (!portalTarget) return null;
+
+  const hasLocation = address || coordinates;
+  const addressParts = address
+    ? [address.street, address.locality, address.region, address.country]
+      .filter(
+        Boolean,
+      )
+    : [];
+
+  const content = (
+    <>
+      {/* Location section - above share */}
+      {hasLocation && (
+        <div className={sidebarLocationSectionStyle}>
+          {/* Map at top */}
+          {coordinates && (
+            <SidebarMapWidget
+              latitude={coordinates.latitude}
+              longitude={coordinates.longitude}
+              venueName={address?.name}
+            />
+          )}
+
+          {/* Location details below map */}
+          <div className={sidebarLocationDetailsStyle}>
+            {address?.name && (
+              <div className={sidebarVenueNameStyle}>{address.name}</div>
+            )}
+            {addressParts.length > 0 && (
+              <div className={sidebarAddressTextStyle}>
+                {addressParts.join(", ")}
+              </div>
+            )}
+            {coordinates && (
+              <div className={sidebarCoordinatesStyle}>
+                {coordinates.latitude.toFixed(6)},{" "}
+                {coordinates.longitude.toFixed(6)}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      <div className={sidebarActionsStyle}>
+        <div className={shareTitleStyle}>Share</div>
+        <input
+          type="text"
+          value={shareUrl}
+          readOnly
+          className={shareInputStyle}
+          onFocus={(e) => e.target.select()}
+        />
+        <div className={shareButtonRowStyle}>
+          <button
+            type="button"
+            onClick={async () => {
+              try {
+                await navigator.clipboard.writeText(shareUrl);
+                alert("Link copied!");
+              } catch (err) {
+                console.error("Failed to copy:", err);
+              }
+            }}
+            className={copyButtonStyle}
+          >
+            <svg
+              width="14"
+              height="14"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            >
+              <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
+              <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
+            </svg>
+            Copy
+          </button>
+          {typeof navigator !== "undefined" && navigator.share && (
+            <button
+              type="button"
+              onClick={async () => {
+                try {
+                  const shareText = `Dropped anchor at ${
+                    address?.name || "a location"
+                  } ${shareUrl}`;
+                  await navigator.share({ text: shareText });
+                } catch (err) {
+                  console.log("Share cancelled:", err);
+                }
+              }}
+              className={shareButtonStyle}
+            >
+              <svg
+                width="14"
+                height="14"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              >
+                <circle cx="18" cy="5" r="3" />
+                <circle cx="6" cy="12" r="3" />
+                <circle cx="18" cy="19" r="3" />
+                <line x1="8.59" y1="13.51" x2="15.42" y2="17.49" />
+                <line x1="15.41" y1="6.51" x2="8.59" y2="10.49" />
+              </svg>
+              Share
+            </button>
+          )}
+        </div>
+
+        {canDelete && (
+          <button
+            type="button"
+            onClick={onDelete}
+            disabled={isDeleting}
+            className={deleteButtonStyle}
+            title={isDeleting ? "Deleting..." : "Delete check-in"}
+          >
+            <svg
+              width="14"
+              height="14"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            >
+              <path d="M3 6h18" />
+              <path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6" />
+              <path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2" />
+            </svg>
+            {isDeleting ? "Deleting..." : "Delete"}
+          </button>
+        )}
+      </div>
+    </>
+  );
+
+  // Type cast needed due to esm.sh JSX pragma type resolution mismatch
+  return createPortal(content, portalTarget) as unknown as React.ReactNode;
+}
+
+// ============ SIDEBAR MAP WIDGET ============
+
+function SidebarMapWidget({ latitude, longitude, venueName }: MapWidgetProps) {
+  const mapRef = useRef<HTMLDivElement>(null);
+  const mapInstanceRef = useRef<any>(null);
+
+  useEffect(() => {
+    const loadLeaflet = async () => {
+      if (mapInstanceRef.current || !mapRef.current) return;
+
+      try {
+        const link = document.createElement("link");
+        link.rel = "stylesheet";
+        link.href = "https://unpkg.com/leaflet@1.9.4/dist/leaflet.css";
+        document.head.appendChild(link);
+
+        const L = await import("https://esm.sh/leaflet@1.9.4");
+
+        const map = L.default.map(mapRef.current).setView(
+          [latitude, longitude],
+          16,
+        );
+
+        L.default.tileLayer(
+          "https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png",
+          {
+            attribution:
+              '© <a href="https://www.openstreetmap.org/copyright">OSM</a> © <a href="https://carto.com/attributions">CARTO</a>',
+            maxZoom: 20,
+            subdomains: "abcd",
+          },
+        ).addTo(map);
+
+        const marker = L.default.marker([latitude, longitude]).addTo(map);
+
+        if (venueName) {
+          marker.bindPopup(venueName).openPopup();
+        }
+
+        mapInstanceRef.current = map;
+
+        return () => {
+          if (mapInstanceRef.current) {
+            mapInstanceRef.current.remove();
+            mapInstanceRef.current = null;
+          }
+        };
+      } catch (error) {
+        console.error("Failed to load map:", error);
+      }
+    };
+
+    loadLeaflet();
+  }, [latitude, longitude, venueName]);
+
+  return <div ref={mapRef} className={sidebarMapContainerStyle} />;
+}
 
 // ============ MAP WIDGET ============
 
@@ -374,6 +795,12 @@ export function CheckinDetail({ checkinId, auth }: CheckinDetailProps) {
   const [likesLoading, setLikesLoading] = useState(false);
   const [likesError, setLikesError] = useState<string | null>(null);
 
+  // Delete state
+  const [isDeleting, setIsDeleting] = useState(false);
+
+  // Portal target for sidebar actions
+  const [sidebarPortal, setSidebarPortal] = useState<HTMLElement | null>(null);
+
   // Local authentication state (fallback if not provided via props)
   const [localAuth, setLocalAuth] = useState<AuthState>({
     isAuthenticated: false,
@@ -382,6 +809,12 @@ export function CheckinDetail({ checkinId, auth }: CheckinDetailProps) {
   // Inject global styles on mount
   useEffect(() => {
     injectGlobalStyles();
+  }, []);
+
+  // Find sidebar portal target after mount
+  useEffect(() => {
+    const portal = document.getElementById(SIDEBAR_PORTAL_ID);
+    setSidebarPortal(portal);
   }, []);
 
   useEffect(() => {
@@ -557,6 +990,42 @@ export function CheckinDetail({ checkinId, auth }: CheckinDetailProps) {
     }
   };
 
+  // Handle delete
+  const handleDelete = async () => {
+    if (!confirm("Are you sure you want to delete this check-in?")) {
+      return;
+    }
+
+    setIsDeleting(true);
+    try {
+      const response = await apiDelete(
+        `/api/checkins/${checkin?.author.did}/${checkin?.id}`,
+      );
+
+      if (response.ok) {
+        // Invalidate cache
+        if (currentAuth.userDid) {
+          await checkinCache.invalidateFeed(currentAuth.userDid);
+        }
+        // Redirect to feed
+        globalThis.location.href = "/";
+      } else {
+        const errorData = await response.json();
+        alert(
+          `Failed to delete check-in: ${errorData.error || "Unknown error"}`,
+        );
+      }
+    } catch (err) {
+      console.error("Delete error:", err);
+      alert("Failed to delete check-in. Please try again.");
+    } finally {
+      setIsDeleting(false);
+    }
+  };
+
+  const canDelete = currentAuth.isAuthenticated &&
+    currentAuth.userDid === checkin?.author.did;
+
   if (loading) {
     return <div className={loadingStyle}>Loading checkin...</div>;
   }
@@ -570,17 +1039,6 @@ export function CheckinDetail({ checkinId, auth }: CheckinDetailProps) {
 
   return (
     <div className={pageContainerStyle}>
-      {/* Back button */}
-      <button
-        type="button"
-        onClick={() => {
-          globalThis.location.href = "/";
-        }}
-        className={backButtonStyle}
-      >
-        ← Back to Feed
-      </button>
-
       {/* Main checkin card */}
       <div className={mainCardStyle}>
         {/* Author header */}
@@ -675,44 +1133,46 @@ export function CheckinDetail({ checkinId, auth }: CheckinDetailProps) {
           </div>
         )}
 
-        {/* Location info */}
+        {/* Location info - only shown on mobile, desktop shows in sidebar */}
         {(checkin.address || checkin.coordinates) && (
-          <div className={locationSectionStyle}>
-            <div className={locationHeaderStyle}>
-              <span style={{ fontSize: typography.sizes.lg }}>📍</span>
-              <span className={locationLabelStyle}>Location</span>
-            </div>
-
-            {checkin.address && (
-              <div>
-                {checkin.address.name && (
-                  <div className={venueNameStyle}>{checkin.address.name}</div>
-                )}
-                <div className={addressTextStyle}>
-                  {[
-                    checkin.address.street,
-                    checkin.address.locality,
-                    checkin.address.region,
-                    checkin.address.country,
-                  ].filter(Boolean).join(", ")}
-                </div>
+          <div className={mobileLocationSectionStyle}>
+            <div className={locationSectionStyle}>
+              <div className={locationHeaderStyle}>
+                <span style={{ fontSize: typography.sizes.lg }}>📍</span>
+                <span className={locationLabelStyle}>Location</span>
               </div>
-            )}
 
-            {checkin.coordinates && (
-              <>
-                <div className={coordinatesStyle}>
-                  {checkin.coordinates.latitude.toFixed(6)},{" "}
-                  {checkin.coordinates.longitude.toFixed(6)}
+              {checkin.address && (
+                <div>
+                  {checkin.address.name && (
+                    <div className={venueNameStyle}>{checkin.address.name}</div>
+                  )}
+                  <div className={addressTextStyle}>
+                    {[
+                      checkin.address.street,
+                      checkin.address.locality,
+                      checkin.address.region,
+                      checkin.address.country,
+                    ].filter(Boolean).join(", ")}
+                  </div>
                 </div>
+              )}
 
-                <MapWidget
-                  latitude={checkin.coordinates.latitude}
-                  longitude={checkin.coordinates.longitude}
-                  venueName={checkin.address?.name}
-                />
-              </>
-            )}
+              {checkin.coordinates && (
+                <>
+                  <div className={coordinatesStyle}>
+                    {checkin.coordinates.latitude.toFixed(6)},{" "}
+                    {checkin.coordinates.longitude.toFixed(6)}
+                  </div>
+
+                  <MapWidget
+                    latitude={checkin.coordinates.latitude}
+                    longitude={checkin.coordinates.longitude}
+                    venueName={checkin.address?.name}
+                  />
+                </>
+              )}
+            </div>
           </div>
         )}
 
@@ -770,33 +1230,51 @@ export function CheckinDetail({ checkinId, auth }: CheckinDetailProps) {
         </div>
       </div>
 
-      {/* Share section */}
-      <div className={shareCardStyle}>
-        <div className={shareTitleStyle}>Share this checkin</div>
+      {/* Desktop sidebar actions via portal */}
+      <SidebarActions
+        portalTarget={sidebarPortal}
+        shareUrl={shareUrl}
+        canDelete={canDelete}
+        isDeleting={isDeleting}
+        onDelete={handleDelete}
+        coordinates={checkin.coordinates}
+        address={checkin.address}
+      />
 
-        <div className={shareInputRowStyle}>
-          <input
-            type="text"
-            value={shareUrl}
-            readOnly
-            className={shareInputStyle}
-          />
+      {/* Inline mobile actions - only visible on mobile */}
+      <div className={inlineMobileActionsStyle}>
+        <div className={inlineActionsTitleStyle}>Share</div>
+        <div className={inlineActionsRowStyle}>
           <button
             type="button"
             onClick={async () => {
               try {
                 await navigator.clipboard.writeText(shareUrl);
-                alert("Link copied to clipboard!");
+                alert("Link copied!");
               } catch (err) {
                 console.error("Failed to copy to clipboard:", err);
-                alert("Failed to copy link. Please copy manually.");
+                alert("Failed to copy link.");
               }
             }}
-            className={copyButtonStyle}
+            className={inlineActionButtonStyle}
           >
-            Copy
+            <svg
+              width="14"
+              height="14"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            >
+              <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
+              <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
+            </svg>
+            Copy Link
           </button>
-          {navigator.share && (
+
+          {typeof navigator !== "undefined" && navigator.share && (
             <button
               type="button"
               onClick={async () => {
@@ -811,12 +1289,54 @@ export function CheckinDetail({ checkinId, auth }: CheckinDetailProps) {
                   console.log("Share cancelled or failed:", err);
                 }
               }}
-              className={shareButtonStyle}
+              className={inlineShareButtonStyle}
             >
+              <svg
+                width="14"
+                height="14"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              >
+                <circle cx="18" cy="5" r="3" />
+                <circle cx="6" cy="12" r="3" />
+                <circle cx="18" cy="19" r="3" />
+                <line x1="8.59" y1="13.51" x2="15.42" y2="17.49" />
+                <line x1="15.41" y1="6.51" x2="8.59" y2="10.49" />
+              </svg>
               Share
             </button>
           )}
         </div>
+
+        {canDelete && (
+          <button
+            type="button"
+            onClick={handleDelete}
+            disabled={isDeleting}
+            className={inlineDeleteButtonStyle}
+            title={isDeleting ? "Deleting..." : "Delete check-in"}
+          >
+            <svg
+              width="14"
+              height="14"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            >
+              <path d="M3 6h18" />
+              <path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6" />
+              <path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2" />
+            </svg>
+            {isDeleting ? "Deleting..." : "Delete"}
+          </button>
+        )}
       </div>
 
       {/* Image Lightbox */}

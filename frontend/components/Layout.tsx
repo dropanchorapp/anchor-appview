@@ -252,14 +252,16 @@ export function Layout({
 
         {/* Center content */}
         <main className={centerColumnStyle}>
-          {/* Desktop logo that scrolls with content */}
-          <div className={desktopLogoContainerStyle}>
-            <img
-              src="https://cdn.dropanchor.app/images/anchor-logo.png"
-              alt="Anchor"
-              className={desktopLogoStyle}
-            />
-          </div>
+          {/* Desktop logo that scrolls with content - hidden on detail pages */}
+          {!currentPath.startsWith("/checkins/") && (
+            <div className={desktopLogoContainerStyle}>
+              <img
+                src="https://cdn.dropanchor.app/images/anchor-logo.png"
+                alt="Anchor"
+                className={desktopLogoStyle}
+              />
+            </div>
+          )}
           {children}
         </main>
 

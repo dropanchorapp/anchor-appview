@@ -2,11 +2,18 @@
 import { css } from "https://esm.sh/@emotion/css@11.13.5";
 import { colors, spacing, transitions, typography } from "../styles/theme.ts";
 
+// Portal target ID for page-specific sidebar content
+export const SIDEBAR_PORTAL_ID = "right-sidebar-portal";
+
 const sidebarContainerStyle = css`
   display: flex;
   flex-direction: column;
   height: 100%;
   padding-left: ${spacing.xl};
+`;
+
+const portalContainerStyle = css`
+  /* Portal content appears at top of sidebar */
 `;
 
 const spacerStyle = css`
@@ -41,7 +48,10 @@ const copyrightStyle = css`
 export function RightSidebar() {
   return (
     <div className={sidebarContainerStyle}>
-      {/* Empty space for future widgets */}
+      {/* Portal target for page-specific content (e.g., share actions) */}
+      <div id={SIDEBAR_PORTAL_ID} className={portalContainerStyle} />
+
+      {/* Spacer pushes footer to bottom */}
       <div className={spacerStyle} />
 
       {/* Footer links */}

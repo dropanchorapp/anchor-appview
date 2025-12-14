@@ -129,20 +129,25 @@ export function Help() {
         <h2 className={subheadingStyle}>Getting Started</h2>
         <p className={paragraphStyle}>
           To use Anchor, you need a Bluesky account. Sign in with your Bluesky
-          handle to connect your PDS and start creating check-ins.
+          handle to connect your PDS and start creating check-ins. The web app
+          is the recommended way to use Anchor for daily check-ins.
         </p>
         <p className={paragraphStyle}>
-          For the best experience, download the{" "}
+          There's also an{" "}
           <a
             href="https://testflight.apple.com/join/gmSQv4Gh"
             target="_blank"
             rel="noopener noreferrer"
             className={linkStyle}
           >
-            iOS app via TestFlight
-          </a>
-          . The mobile app provides GPS-based location detection and a native
-          check-in experience.
+            iOS app available via TestFlight
+          </a>{" "}
+          with GPS-based location detection, but it's currently in alpha and
+          better suited for testing than daily use. Check out the{" "}
+          <a href="/tools" className={linkStyle}>
+            Tools page
+          </a>{" "}
+          for more utilities including a Foursquare import tool.
         </p>
 
         <h2 className={subheadingStyle}>Privacy Notice</h2>

@@ -3,7 +3,6 @@ import { useEffect, useRef, useState } from "https://esm.sh/react@19.1.0";
 import { css } from "https://esm.sh/@emotion/css@11.13.5";
 import { AuthState, CheckinData } from "../types/index.ts";
 import { CheckinCard } from "./CheckinCard.tsx";
-import { checkinCache } from "../utils/checkin-cache.ts";
 import {
   buttonPrimaryPill,
   card,
@@ -23,7 +22,6 @@ interface FeedProps {
   onLoadMore?: () => void;
   auth: AuthState;
   onLogin: () => void;
-  onCheckinsChange?: (checkins: CheckinData[]) => void;
 }
 
 const loadingContainerStyle = css`
@@ -96,7 +94,6 @@ export function Feed({
   onLoadMore,
   auth,
   onLogin,
-  onCheckinsChange,
 }: FeedProps) {
   const [localCheckins, setLocalCheckins] = useState(checkins);
   const sentinelRef = useRef<HTMLDivElement>(null);
@@ -129,25 +126,6 @@ export function Feed({
       observer.disconnect();
     };
   }, [onLoadMore, hasMore, loadingMore, localCheckins.length]);
-
-  const handleDelete = async (deletedCheckinId: string) => {
-    // Find the checkin to get its URI for cache removal
-    const deletedCheckin = localCheckins.find((c) => c.id === deletedCheckinId);
-
-    const updatedCheckins = localCheckins.filter((c) =>
-      c.id !== deletedCheckinId
-    );
-    setLocalCheckins(updatedCheckins);
-
-    // Update cache
-    if (auth.userDid && deletedCheckin?.uri) {
-      await checkinCache.removeCheckin(auth.userDid, deletedCheckin.uri);
-    }
-
-    if (onCheckinsChange) {
-      onCheckinsChange(updatedCheckins);
-    }
-  };
 
   return (
     <>
@@ -214,7 +192,6 @@ export function Feed({
               key={checkin.id}
               checkin={checkin}
               auth={auth}
-              onDelete={handleDelete}
             />
           ))}
 

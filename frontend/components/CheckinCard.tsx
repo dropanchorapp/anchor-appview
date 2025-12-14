@@ -1,8 +1,6 @@
 /** @jsxImportSource https://esm.sh/react@19.1.0 */
-import { useState } from "https://esm.sh/react@19.1.0";
 import { css } from "https://esm.sh/@emotion/css@11.13.5";
 import { AuthState, CheckinData } from "../types/index.ts";
-import { apiDelete } from "../utils/api.ts";
 import { avatar, avatarFallback, locationBadge } from "../styles/components.ts";
 import {
   colors,
@@ -16,7 +14,6 @@ import {
 interface CheckinCardProps {
   checkin: CheckinData;
   auth: AuthState;
-  onDelete?: (checkinId: string) => void;
 }
 
 const cardStyle = css`
@@ -116,36 +113,6 @@ const likesStyle = css`
   margin-top: ${spacing.sm};
 `;
 
-const deleteButtonStyle = css`
-  position: absolute;
-  bottom: ${spacing.md};
-  right: ${spacing.md};
-  background: rgba(255, 255, 255, 0.95);
-  border: 1px solid rgba(0, 0, 0, 0.1);
-  cursor: pointer;
-  color: ${colors.error};
-  padding: ${spacing.sm};
-  border-radius: ${radii.sm};
-  transition: all ${transitions.normal};
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 28px;
-  height: 28px;
-  box-shadow: ${shadows.sm};
-
-  &:hover:not(:disabled) {
-    background: ${colors.errorLight};
-    transform: scale(1.05);
-  }
-
-  &:disabled {
-    cursor: not-allowed;
-    opacity: 0.5;
-    color: ${colors.textMuted};
-  }
-`;
-
 const beaconBitsLinkStyle = css`
   display: flex;
 
@@ -154,45 +121,10 @@ const beaconBitsLinkStyle = css`
   }
 `;
 
-export function CheckinCard({ checkin, auth, onDelete }: CheckinCardProps) {
-  const [isDeleting, setIsDeleting] = useState(false);
-
+export function CheckinCard({ checkin, auth: _auth }: CheckinCardProps) {
   const handleClick = () => {
     globalThis.location.href = `/checkins/${checkin.author.did}/${checkin.id}`;
   };
-
-  const handleDelete = async (e: React.MouseEvent) => {
-    e.stopPropagation();
-
-    if (!confirm("Are you sure you want to delete this check-in?")) {
-      return;
-    }
-
-    setIsDeleting(true);
-    try {
-      const response = await apiDelete(
-        `/api/checkins/${checkin.author.did}/${checkin.id}`,
-      );
-
-      if (response.ok) {
-        if (onDelete) {
-          onDelete(checkin.id);
-        } else {
-          globalThis.location.reload();
-        }
-      } else {
-        const error = await response.json();
-        alert(`Failed to delete check-in: ${error.error || "Unknown error"}`);
-      }
-    } catch (error) {
-      console.error("Delete error:", error);
-      alert("Failed to delete check-in. Please try again.");
-    } finally {
-      setIsDeleting(false);
-    }
-  };
-
-  const canDelete = auth.isAuthenticated && auth.userDid === checkin.author.did;
 
   const formatTime = () => {
     const date = new Date(checkin.createdAt);
@@ -296,7 +228,7 @@ export function CheckinCard({ checkin, auth, onDelete }: CheckinCardProps) {
           </div>
         )}
 
-        {checkin.likesCount && checkin.likesCount > 0 && (
+        {checkin.likesCount > 0 && (
           <div className={likesStyle}>
             <svg
               width="14"
@@ -311,37 +243,6 @@ export function CheckinCard({ checkin, auth, onDelete }: CheckinCardProps) {
           </div>
         )}
       </div>
-
-      {canDelete && (
-        <button
-          type="button"
-          onClick={handleDelete}
-          disabled={isDeleting}
-          className={deleteButtonStyle}
-          title={isDeleting ? "Deleting..." : "Delete check-in"}
-        >
-          <svg
-            width="16"
-            height="16"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="2"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-          >
-            {isDeleting ? <circle cx="12" cy="12" r="10" opacity="0.25" /> : (
-              <>
-                <path d="M3 6h18" />
-                <path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6" />
-                <path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2" />
-                <line x1="10" x2="10" y1="11" y2="17" />
-                <line x1="14" x2="14" y1="11" y2="17" />
-              </>
-            )}
-          </svg>
-        </button>
-      )}
     </div>
   );
 }

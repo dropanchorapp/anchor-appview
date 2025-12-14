@@ -4,6 +4,7 @@ import { Layout } from "./Layout.tsx";
 import { Feed } from "./Feed.tsx";
 import { About } from "./About.tsx";
 import { Help } from "./Help.tsx";
+import { Tools } from "./Tools.tsx";
 import { PrivacyPolicy } from "./PrivacyPolicy.tsx";
 import { TermsOfService } from "./TermsOfService.tsx";
 import { LoginForm } from "./LoginForm.tsx";
@@ -23,6 +24,7 @@ export function App() {
   let isPrivacyPolicy = false;
   let isTermsOfService = false;
   let isHelp = false;
+  let isTools = false;
   let isCheckinDetail = false;
   let checkinId: string | null = null;
   let checkinDid: string | null = null;
@@ -35,6 +37,7 @@ export function App() {
     isPrivacyPolicy = pathname === "/privacy-policy";
     isTermsOfService = pathname === "/terms";
     isHelp = pathname === "/help";
+    isTools = pathname === "/tools";
 
     // Try new REST-style URL first: /checkins/:did/:rkey
     const restMatch = pathname.match(/^\/checkins\/([^\/]+)\/([^\/]+)$/);
@@ -264,6 +267,11 @@ export function App() {
     // Help page
     if (isHelp) {
       return <Help />;
+    }
+
+    // Tools page
+    if (isTools) {
+      return <Tools />;
     }
 
     // Checkin detail page
