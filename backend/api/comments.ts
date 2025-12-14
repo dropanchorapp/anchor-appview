@@ -215,9 +215,6 @@ export async function getCommentsForCheckin(
   corsHeaders: Record<string, string>,
 ): Promise<Response> {
   try {
-    // const checkinAtUri =
-    //   `at://${checkinDid}/app.dropanchor.checkin/${checkinRkey}`;
-
     // Use index to efficiently find all comments for this checkin
     const indexComments = await db.select()
       .from(checkinInteractionsTable)
