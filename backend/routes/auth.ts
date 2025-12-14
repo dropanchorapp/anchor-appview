@@ -7,6 +7,7 @@ import { isValidHandle } from "npm:@atproto/syntax@0.3.0";
 import { oauth } from "./oauth.ts";
 import { getSessionFromRequest } from "../utils/session.ts";
 import { migrateUserCheckinsInBackground } from "../services/checkin-migration-service.ts";
+import { resolveProfileFromPds } from "../utils/atproto-resolver.ts";
 
 const app = new Hono();
 
@@ -44,12 +45,29 @@ app.get("/api/auth/session", async (c) => {
     makeRequest: result.session.makeRequest.bind(result.session),
   });
 
+  // Fetch profile data (avatar, displayName) for the session
+  // This is a quick PDS lookup that provides user display info
+  let avatar: string | undefined;
+  let displayName: string | undefined;
+  try {
+    const profile = await resolveProfileFromPds(result.session.did);
+    if (profile) {
+      avatar = profile.avatar;
+      displayName = profile.displayName;
+    }
+  } catch (profileError) {
+    console.warn("[Session] Failed to fetch profile:", profileError);
+    // Continue without profile data - not critical
+  }
+
   // Return session info with tokens for mobile compatibility
   const response = c.json({
     valid: true,
     did: result.session.did,
     handle: result.session.handle,
     userHandle: result.session.handle, // Mobile client compatibility
+    displayName,
+    avatar,
     accessToken: result.session.accessToken,
     refreshToken: result.session.refreshToken,
   });
