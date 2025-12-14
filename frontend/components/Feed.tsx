@@ -1,7 +1,18 @@
 /** @jsxImportSource https://esm.sh/react@19.1.0 */
 import { useEffect, useRef, useState } from "https://esm.sh/react@19.1.0";
+import { css } from "https://esm.sh/@emotion/css@11.13.5";
 import { AuthState, CheckinData } from "../types/index.ts";
 import { CheckinCard } from "./CheckinCard.tsx";
+import {
+  buttonPrimaryPill,
+  card,
+  emptyState,
+  emptyStateText,
+  emptyStateTitle,
+  flexCenter,
+  spinner,
+} from "../styles/components.ts";
+import { colors, spacing, typography } from "../styles/theme.ts";
 
 interface FeedProps {
   checkins: CheckinData[];
@@ -14,29 +25,86 @@ interface FeedProps {
   onCheckinsChange?: (checkins: CheckinData[]) => void;
 }
 
-export function Feed(
-  {
-    checkins,
-    loading,
-    loadingMore = false,
-    hasMore = true,
-    onLoadMore,
-    auth,
-    onLogin,
-    onCheckinsChange,
-  }: FeedProps,
-) {
+const loadingContainerStyle = css`
+  ${flexCenter} padding: 60px 0;
+`;
+
+const loadingContentStyle = css`
+  display: flex;
+  align-items: center;
+  gap: ${spacing.lg};
+`;
+
+const loadingTextStyle = css`
+  font-size: ${typography.sizes.base};
+  color: ${colors.textSecondary};
+`;
+
+const emptyContainerStyle = css`
+  ${emptyState} padding: 80px 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+`;
+
+const loginCardStyle = css`
+  ${card} padding: 60px ${spacing.xxxxl};
+  margin: 0 ${spacing.xl};
+`;
+
+const illustrationStyle = css`
+  width: 400px;
+  height: auto;
+  margin-bottom: ${spacing.xxxxl};
+`;
+
+const feedListStyle = css`
+  display: flex;
+  flex-direction: column;
+  gap: ${spacing.lg};
+`;
+
+const loadingMoreStyle = css`
+  ${flexCenter} padding: ${spacing.xxl} 0;
+`;
+
+const loadingMoreContentStyle = css`
+  display: flex;
+  align-items: center;
+  gap: ${spacing.md};
+`;
+
+const loadingMoreTextStyle = css`
+  font-size: ${typography.sizes.md};
+  color: ${colors.textSecondary};
+`;
+
+const endMessageStyle = css`
+  text-align: center;
+  padding: ${spacing.xxxl} 0;
+  color: ${colors.textSecondary};
+  font-size: ${typography.sizes.md};
+`;
+
+export function Feed({
+  checkins,
+  loading,
+  loadingMore = false,
+  hasMore = true,
+  onLoadMore,
+  auth,
+  onLogin,
+  onCheckinsChange,
+}: FeedProps) {
   const [localCheckins, setLocalCheckins] = useState(checkins);
   const sentinelRef = useRef<HTMLDivElement>(null);
 
-  // Update local checkins when props change
   useEffect(() => {
     setLocalCheckins(checkins);
   }, [checkins]);
 
-  // Intersection Observer for infinite scroll
   useEffect(() => {
-    // Wait until we have checkins and the sentinel is rendered
     if (!onLoadMore || !sentinelRef.current || localCheckins.length === 0) {
       return;
     }
@@ -49,7 +117,7 @@ export function Feed(
         }
       },
       {
-        rootMargin: "100px", // Trigger 100px before reaching the sentinel
+        rootMargin: "100px",
         threshold: 0,
       },
     );
@@ -70,157 +138,57 @@ export function Feed(
       onCheckinsChange(updatedCheckins);
     }
   };
+
   return (
     <>
       {loading && (
-        <div
-          style={{
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            padding: "60px 0",
-          }}
-        >
-          <div
-            style={{
-              display: "flex",
-              alignItems: "center",
-              gap: "16px",
-            }}
-          >
-            <div
-              style={{
-                width: "20px",
-                height: "20px",
-                border: "2px solid #e5e5ea",
-                borderTop: "2px solid #007aff",
-                borderRadius: "50%",
-                animation: "spin 1s ease-in-out infinite",
-              }}
-            />
-            <span
-              style={{
-                fontSize: "15px",
-                color: "#8e8e93",
-              }}
-            >
-              Loading check-ins...
-            </span>
+        <div className={loadingContainerStyle}>
+          <div className={loadingContentStyle}>
+            <div className={spinner(20)} />
+            <span className={loadingTextStyle}>Loading check-ins...</span>
           </div>
         </div>
       )}
 
       {localCheckins.length === 0 && !loading && (
-        <div
-          style={{
-            textAlign: "center",
-            padding: "80px 0",
-            display: "flex",
-            flexDirection: "column",
-            alignItems: "center",
-            justifyContent: "center",
-          }}
-        >
-          {/* Show login illustration when not authenticated */}
+        <div className={emptyContainerStyle}>
           {!auth.isAuthenticated
             ? (
-              <div
-                style={{
-                  background: "white",
-                  borderRadius: "12px",
-                  padding: "60px 40px",
-                  boxShadow: "0 1px 3px rgba(0,0,0,0.1)",
-                  margin: "0 20px",
-                }}
-              >
+              <div className={loginCardStyle}>
                 <img
                   src="https://cdn.dropanchor.app/images/seagull-chest.png"
                   alt="Login required"
-                  style={{
-                    width: "400px",
-                    height: "auto",
-                    marginBottom: "40px",
-                  }}
+                  className={illustrationStyle}
                 />
-                <h3
-                  style={{
-                    fontSize: "20px",
-                    fontWeight: "600",
-                    color: "#1c1c1e",
-                    margin: "0 0 8px 0",
-                  }}
-                >
+                <h3 className={emptyStateTitle}>
                   Sign in to see your check-ins
                 </h3>
                 <p
-                  style={{
-                    fontSize: "15px",
-                    color: "#8e8e93",
-                    margin: "0 auto 24px auto",
-                    maxWidth: "400px",
-                    lineHeight: "1.4",
-                  }}
+                  className={emptyStateText}
+                  style={{ marginBottom: spacing.xxl }}
                 >
                   Connect with your Bluesky account to see your check-ins.
                 </p>
                 <button
                   type="button"
                   onClick={onLogin}
-                  style={{
-                    background: "#007aff",
-                    color: "white",
-                    border: "none",
-                    borderRadius: "22px",
-                    padding: "12px 24px",
-                    fontSize: "16px",
-                    fontWeight: "600",
-                    cursor: "pointer",
-                    transition: "all 0.2s ease",
-                  }}
-                  onMouseEnter={(e) => {
-                    e.currentTarget.style.background = "#0056b3";
-                    e.currentTarget.style.transform = "translateY(-1px)";
-                  }}
-                  onMouseLeave={(e) => {
-                    e.currentTarget.style.background = "#007aff";
-                    e.currentTarget.style.transform = "translateY(0)";
-                  }}
+                  className={buttonPrimaryPill}
                 >
                   Sign in with Bluesky
                 </button>
               </div>
             )
             : (
-              /* Show regular empty state for authenticated empty feeds */
               <>
                 <img
                   src="https://cdn.dropanchor.app/images/seagull-looking.png"
                   alt="Seagull looking around"
-                  style={{
-                    width: "400px",
-                    height: "auto",
-                    marginBottom: "40px",
-                  }}
+                  className={illustrationStyle}
                 />
-                <h3
-                  style={{
-                    fontSize: "20px",
-                    fontWeight: "600",
-                    color: "#1c1c1e",
-                    margin: "0 0 8px 0",
-                  }}
-                >
+                <h3 className={emptyStateTitle}>
                   Your check-ins will appear here
                 </h3>
-                <p
-                  style={{
-                    fontSize: "15px",
-                    color: "#8e8e93",
-                    margin: "0 auto",
-                    maxWidth: "400px",
-                    lineHeight: "1.4",
-                  }}
-                >
+                <p className={emptyStateText}>
                   When you create check-ins with the Anchor app, they'll appear
                   here.
                 </p>
@@ -230,7 +198,7 @@ export function Feed(
       )}
 
       {localCheckins.length > 0 && (
-        <div style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
+        <div className={feedListStyle}>
           {localCheckins.map((checkin) => (
             <CheckinCard
               key={checkin.id}
@@ -240,60 +208,19 @@ export function Feed(
             />
           ))}
 
-          {/* Sentinel element for infinite scroll */}
           <div ref={sentinelRef} style={{ height: "1px" }} />
 
-          {/* Loading more indicator */}
           {loadingMore && (
-            <div
-              style={{
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                padding: "24px 0",
-              }}
-            >
-              <div
-                style={{
-                  display: "flex",
-                  alignItems: "center",
-                  gap: "12px",
-                }}
-              >
-                <div
-                  style={{
-                    width: "16px",
-                    height: "16px",
-                    border: "2px solid #e5e5ea",
-                    borderTop: "2px solid #007aff",
-                    borderRadius: "50%",
-                    animation: "spin 1s ease-in-out infinite",
-                  }}
-                />
-                <span
-                  style={{
-                    fontSize: "14px",
-                    color: "#8e8e93",
-                  }}
-                >
-                  Loading more...
-                </span>
+            <div className={loadingMoreStyle}>
+              <div className={loadingMoreContentStyle}>
+                <div className={spinner(16)} />
+                <span className={loadingMoreTextStyle}>Loading more...</span>
               </div>
             </div>
           )}
 
-          {/* End of feed message */}
           {!hasMore && !loadingMore && localCheckins.length > 0 && (
-            <div
-              style={{
-                textAlign: "center",
-                padding: "32px 0",
-                color: "#8e8e93",
-                fontSize: "14px",
-              }}
-            >
-              You've reached the end
-            </div>
+            <div className={endMessageStyle}>You've reached the end</div>
           )}
         </div>
       )}

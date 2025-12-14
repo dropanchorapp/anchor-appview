@@ -1,14 +1,134 @@
 /** @jsxImportSource https://esm.sh/react@19.1.0 */
-import React, { useState } from "https://esm.sh/react@19.1.0";
+import React, { useEffect, useState } from "https://esm.sh/react@19.1.0";
+import { css } from "https://esm.sh/@emotion/css@11.13.5";
+import {
+  buttonPrimaryLarge,
+  input,
+  label,
+  spinnerWhite,
+} from "../styles/components.ts";
+import { injectGlobalStyles } from "../styles/globalStyles.ts";
+import {
+  colors,
+  radii,
+  shadows,
+  spacing,
+  typography,
+} from "../styles/theme.ts";
 
 interface MobileLoginProps {
   redirectUri: string;
 }
 
+const pageStyle = css`
+  min-height: 100vh;
+  background: ${colors.background};
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: ${spacing.xl};
+  font-family: ${typography.fontFamily};
+`;
+
+const cardStyle = css`
+  background: ${colors.surface};
+  border-radius: ${radii.xxl};
+  box-shadow: ${shadows.md};
+  padding: ${spacing.xxxxl};
+  width: 100%;
+  max-width: 400px;
+`;
+
+const headerStyle = css`
+  text-align: center;
+  margin-bottom: ${spacing.xxxl};
+`;
+
+const logoStyle = css`
+  height: 64px;
+  width: auto;
+  margin-bottom: ${spacing.lg};
+`;
+
+const titleStyle = css`
+  font-size: ${typography.sizes.xxxl};
+  font-weight: ${typography.weights.semibold};
+  color: ${colors.text};
+  margin: 0 0 ${spacing.sm} 0;
+`;
+
+const subtitleStyle = css`
+  color: ${colors.textSecondary};
+  font-size: ${typography.sizes.lg};
+  margin: 0 0 ${spacing.xxxl} 0;
+  line-height: ${typography.lineHeights.normal};
+`;
+
+const formGroupStyle = css`
+  margin-bottom: ${spacing.xxl};
+`;
+
+const inputLargeStyle = css`
+  ${input} border-radius: ${radii.xl};
+`;
+
+const buttonFullWidth = css`
+  ${buttonPrimaryLarge} width: 100%;
+  padding: 14px;
+`;
+
+const errorStyle = css`
+  color: ${colors.error};
+  font-size: ${typography.sizes.md};
+  margin-top: ${spacing.md};
+  text-align: center;
+  padding: ${spacing.sm};
+  background: rgba(255, 59, 48, 0.1);
+  border-radius: ${radii.md};
+`;
+
+const securityNoteStyle = css`
+  margin-top: ${spacing.xxl};
+  padding: ${spacing.lg};
+  background: rgba(52, 199, 89, 0.1);
+  border-radius: ${radii.xl};
+  text-align: center;
+`;
+
+const securityHeaderStyle = css`
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: ${spacing.sm};
+  margin-bottom: ${spacing.sm};
+`;
+
+const securityIconStyle = css`
+  color: ${colors.success};
+  font-size: ${typography.sizes.lg};
+`;
+
+const securityTitleStyle = css`
+  font-size: ${typography.sizes.md};
+  font-weight: ${typography.weights.medium};
+  color: ${colors.text};
+`;
+
+const securityTextStyle = css`
+  font-size: ${typography.sizes.sm};
+  color: ${colors.textSecondary};
+  margin: 0;
+  line-height: ${typography.lineHeights.normal};
+`;
+
 export function MobileLogin({ redirectUri }: MobileLoginProps) {
   const [handle, setHandle] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+
+  useEffect(() => {
+    injectGlobalStyles();
+  }, []);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -22,7 +142,6 @@ export function MobileLogin({ redirectUri }: MobileLoginProps) {
     setError("");
 
     try {
-      // Redirect to OAuth flow with handle and redirect_uri
       const params = new URLSearchParams({
         handle: handle.trim(),
         redirect_uri: redirectUri,
@@ -36,84 +155,23 @@ export function MobileLogin({ redirectUri }: MobileLoginProps) {
   };
 
   return (
-    <div
-      style={{
-        minHeight: "100vh",
-        background: "#f2f2f7",
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "center",
-        padding: "20px",
-        fontFamily:
-          "-apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif",
-      }}
-    >
-      <div
-        style={{
-          background: "white",
-          borderRadius: "16px",
-          boxShadow: "0 4px 20px rgba(0,0,0,0.08)",
-          padding: "40px",
-          width: "100%",
-          maxWidth: "400px",
-        }}
-      >
-        {/* Header with logo */}
-        <div
-          style={{
-            textAlign: "center",
-            marginBottom: "32px",
-          }}
-        >
+    <div className={pageStyle}>
+      <div className={cardStyle}>
+        <div className={headerStyle}>
           <img
             src="https://cdn.dropanchor.app/images/anchor-logo.png"
             alt="Anchor"
-            style={{
-              height: "64px",
-              width: "auto",
-              marginBottom: "16px",
-            }}
+            className={logoStyle}
           />
-          <h1
-            style={{
-              fontSize: "24px",
-              fontWeight: "600",
-              color: "#1c1c1e",
-              marginBottom: "8px",
-              margin: "0 0 8px 0",
-            }}
-          >
-            Sign in to Anchor
-          </h1>
-          <p
-            style={{
-              color: "#8e8e93",
-              fontSize: "16px",
-              margin: "0 0 32px 0",
-              lineHeight: "1.4",
-            }}
-          >
+          <h1 className={titleStyle}>Sign in to Anchor</h1>
+          <p className={subtitleStyle}>
             Enter your Bluesky handle to continue
           </p>
         </div>
 
-        {/* Login form */}
         <form onSubmit={handleSubmit}>
-          <div
-            style={{
-              marginBottom: "24px",
-            }}
-          >
-            <label
-              htmlFor="handle"
-              style={{
-                display: "block",
-                fontWeight: "500",
-                color: "#1c1c1e",
-                marginBottom: "8px",
-                fontSize: "15px",
-              }}
-            >
+          <div className={formGroupStyle}>
+            <label htmlFor="handle" className={label}>
               Bluesky Handle
             </label>
             <input
@@ -127,147 +185,33 @@ export function MobileLogin({ redirectUri }: MobileLoginProps) {
               autoCapitalize="none"
               autoCorrect="off"
               disabled={loading}
-              style={{
-                width: "100%",
-                padding: "12px 16px",
-                border: "1px solid #e5e5ea",
-                borderRadius: "12px",
-                fontSize: "16px",
-                background: loading ? "#f8f9fa" : "white",
-                color: "#1c1c1e",
-                outline: "none",
-                transition: "border-color 0.2s ease",
-              }}
-              onFocus={(e) => {
-                e.target.style.borderColor = "#007aff";
-              }}
-              onBlur={(e) => {
-                e.target.style.borderColor = "#e5e5ea";
-              }}
+              className={inputLargeStyle}
             />
           </div>
 
           <button
             type="submit"
             disabled={loading || !handle.trim()}
-            style={{
-              width: "100%",
-              padding: "14px",
-              background: loading || !handle.trim() ? "#c7c7cc" : "#007aff",
-              color: "white",
-              border: "none",
-              borderRadius: "12px",
-              fontSize: "16px",
-              fontWeight: "600",
-              cursor: loading || !handle.trim() ? "not-allowed" : "pointer",
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              gap: "8px",
-              transition: "background-color 0.2s ease",
-            }}
-            onMouseOver={(e) => {
-              if (!loading && handle.trim()) {
-                e.currentTarget.style.background = "#0056cc";
-              }
-            }}
-            onMouseOut={(e) => {
-              if (!loading && handle.trim()) {
-                e.currentTarget.style.background = "#007aff";
-              }
-            }}
+            className={buttonFullWidth}
           >
-            {loading && (
-              <div
-                style={{
-                  width: "16px",
-                  height: "16px",
-                  border: "2px solid rgba(255,255,255,0.3)",
-                  borderTopColor: "white",
-                  borderRadius: "50%",
-                  animation: "spin 1s linear infinite",
-                }}
-              />
-            )}
+            {loading && <div className={spinnerWhite(16)} />}
             {loading ? "Connecting..." : "Continue with Bluesky"}
           </button>
 
-          {error && (
-            <div
-              style={{
-                color: "#ff3b30",
-                fontSize: "14px",
-                marginTop: "12px",
-                textAlign: "center",
-                padding: "8px",
-                background: "rgba(255, 59, 48, 0.1)",
-                borderRadius: "8px",
-              }}
-            >
-              {error}
-            </div>
-          )}
+          {error && <div className={errorStyle}>{error}</div>}
         </form>
 
-        {/* Security note */}
-        <div
-          style={{
-            marginTop: "24px",
-            padding: "16px",
-            background: "rgba(52, 199, 89, 0.1)",
-            borderRadius: "12px",
-            textAlign: "center",
-          }}
-        >
-          <div
-            style={{
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              gap: "6px",
-              marginBottom: "8px",
-            }}
-          >
-            <span
-              style={{
-                color: "#34c759",
-                fontSize: "16px",
-              }}
-            >
-              🔒
-            </span>
-            <span
-              style={{
-                fontSize: "14px",
-                fontWeight: "500",
-                color: "#1c1c1e",
-              }}
-            >
-              Secure Authentication
-            </span>
+        <div className={securityNoteStyle}>
+          <div className={securityHeaderStyle}>
+            <span className={securityIconStyle}>🔒</span>
+            <span className={securityTitleStyle}>Secure Authentication</span>
           </div>
-          <p
-            style={{
-              fontSize: "13px",
-              color: "#8e8e93",
-              margin: "0",
-              lineHeight: "1.4",
-            }}
-          >
+          <p className={securityTextStyle}>
             Your password will be entered securely on Bluesky's servers. Anchor
             never sees your password.
           </p>
         </div>
       </div>
-
-      {/* CSS animation for spinner */}
-      <style>
-        {`
-        @keyframes spin {
-          to { transform: rotate(360deg); }
-        }
-      `}
-      </style>
     </div>
   );
 }

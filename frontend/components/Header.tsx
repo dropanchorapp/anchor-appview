@@ -1,5 +1,22 @@
 /** @jsxImportSource https://esm.sh/react@19.1.0 */
+import { css } from "https://esm.sh/@emotion/css@11.13.5";
 import { AuthState } from "../types/index.ts";
+import {
+  avatar,
+  avatarFallback,
+  dropdown,
+  dropdownItemDanger,
+  header,
+  headerContent,
+} from "../styles/components.ts";
+import {
+  colors,
+  radii,
+  shadows,
+  spacing,
+  transitions,
+  typography,
+} from "../styles/theme.ts";
 
 interface HeaderProps {
   auth: AuthState;
@@ -9,6 +26,78 @@ interface HeaderProps {
   setShowUserDropdown: (show: boolean) => void;
 }
 
+const logoContainerStyle = css`
+  display: flex;
+  align-items: center;
+  flex: 1;
+`;
+
+const logoStyle = css`
+  height: 48px;
+  width: auto;
+  max-width: 200px;
+`;
+
+const actionsStyle = css`
+  display: flex;
+  align-items: center;
+  gap: ${spacing.lg};
+  flex: 0 0 auto;
+`;
+
+const loginButtonStyle = css`
+  background: ${colors.primary};
+  color: white;
+  border: none;
+  padding: 10px ${spacing.xl};
+  border-radius: ${radii.pill};
+  font-size: ${typography.sizes.base};
+  font-weight: ${typography.weights.semibold};
+  display: inline-flex;
+  align-items: center;
+  gap: ${spacing.sm};
+  cursor: pointer;
+  min-width: 80px;
+  justify-content: center;
+  transition: background ${transitions.normal};
+
+  &:hover {
+    background: ${colors.primaryHover};
+  }
+`;
+
+const userButtonStyle = css`
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: ${colors.surface};
+  border: 1px solid ${colors.border};
+  border-radius: 24px;
+  padding: 6px ${spacing.lg} 6px 6px;
+  cursor: pointer;
+  box-shadow: ${shadows.md};
+  font-size: ${typography.sizes.base};
+  color: ${colors.text};
+  transition: all ${transitions.normal};
+
+  &:hover {
+    border-color: ${colors.textMuted};
+  }
+`;
+
+const userNameStyle = css`
+  font-weight: ${typography.weights.medium};
+  white-space: nowrap;
+`;
+
+const chevronStyle = (isOpen: boolean) =>
+  css`
+    font-size: ${typography.sizes.xs};
+    color: ${colors.textSecondary};
+    transform: ${isOpen ? "rotate(180deg)" : "rotate(0deg)"};
+    transition: transform ${transitions.normal};
+  `;
+
 export function Header({
   auth,
   onLogin,
@@ -17,78 +106,23 @@ export function Header({
   setShowUserDropdown,
 }: HeaderProps) {
   return (
-    <div
-      style={{
-        background: "white",
-        borderBottom: "1px solid #e5e5ea",
-        position: "sticky",
-        top: "0",
-        zIndex: "100",
-        padding: "16px 20px",
-      }}
-    >
-      <div
-        style={{
-          maxWidth: "1200px",
-          margin: "0 auto",
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "space-between",
-        }}
-      >
-        <div
-          style={{
-            display: "flex",
-            alignItems: "center",
-            flex: "1",
-          }}
-        >
+    <div className={header}>
+      <div className={headerContent}>
+        <div className={logoContainerStyle}>
           <img
             src="https://cdn.dropanchor.app/images/anchor-logo.png"
             alt="Anchor"
-            style={{
-              height: "48px",
-              width: "auto",
-              maxWidth: "200px",
-            }}
+            className={logoStyle}
           />
         </div>
 
-        <div
-          style={{
-            display: "flex",
-            alignItems: "center",
-            gap: "16px",
-            flex: "0 0 auto",
-          }}
-        >
+        <div className={actionsStyle}>
           {!auth.isAuthenticated
             ? (
               <button
                 type="button"
                 onClick={onLogin}
-                style={{
-                  background: "#007aff",
-                  color: "white",
-                  border: "none",
-                  padding: "10px 20px",
-                  borderRadius: "22px",
-                  fontSize: "15px",
-                  fontWeight: "600",
-                  textDecoration: "none",
-                  display: "inline-flex",
-                  alignItems: "center",
-                  gap: "6px",
-                  cursor: "pointer",
-                  minWidth: "80px",
-                  justifyContent: "center",
-                }}
-                onMouseOver={(e) => {
-                  e.currentTarget.style.background = "#0056cc";
-                }}
-                onMouseOut={(e) => {
-                  e.currentTarget.style.background = "#007aff";
-                }}
+                className={loginButtonStyle}
               >
                 Login
               </button>
@@ -98,107 +132,34 @@ export function Header({
                 <button
                   type="button"
                   onClick={() => setShowUserDropdown(!showUserDropdown)}
-                  style={{
-                    display: "flex",
-                    alignItems: "center",
-                    gap: "10px",
-                    background: "white",
-                    border: "1px solid #e5e5ea",
-                    borderRadius: "24px",
-                    padding: "6px 16px 6px 6px",
-                    cursor: "pointer",
-                    boxShadow: "0 2px 8px rgba(0,0,0,0.08)",
-                    fontSize: "15px",
-                    color: "#1c1c1e",
-                    transition: "all 0.2s ease",
-                  }}
+                  className={userButtonStyle}
                 >
                   {auth.userAvatar
                     ? (
                       <img
                         src={auth.userAvatar}
                         alt={auth.userDisplayName || auth.userHandle}
-                        style={{
-                          width: "36px",
-                          height: "36px",
-                          borderRadius: "18px",
-                          objectFit: "cover",
-                        }}
+                        className={avatar(36)}
                       />
                     )
                     : (
-                      <div
-                        style={{
-                          width: "36px",
-                          height: "36px",
-                          background:
-                            "linear-gradient(135deg, #667eea 0%, #764ba2 100%)",
-                          borderRadius: "18px",
-                          display: "flex",
-                          alignItems: "center",
-                          justifyContent: "center",
-                          fontSize: "16px",
-                          fontWeight: "600",
-                          color: "white",
-                        }}
-                      >
+                      <div className={avatarFallback(36, 16)}>
                         {(auth.userDisplayName || auth.userHandle)?.[0]
                           ?.toUpperCase() || "?"}
                       </div>
                     )}
-                  <span style={{ fontWeight: "500", whiteSpace: "nowrap" }}>
+                  <span className={userNameStyle}>
                     {auth.userDisplayName || auth.userHandle}
                   </span>
-                  <div
-                    style={{
-                      fontSize: "12px",
-                      color: "#8e8e93",
-                      transform: showUserDropdown
-                        ? "rotate(180deg)"
-                        : "rotate(0deg)",
-                      transition: "transform 0.2s ease",
-                    }}
-                  >
-                    ▼
-                  </div>
+                  <div className={chevronStyle(showUserDropdown)}>▼</div>
                 </button>
 
                 {showUserDropdown && (
-                  <div
-                    style={{
-                      position: "absolute",
-                      top: "100%",
-                      right: "0",
-                      marginTop: "8px",
-                      background: "white",
-                      borderRadius: "12px",
-                      boxShadow: "0 4px 12px rgba(0,0,0,0.15)",
-                      padding: "8px",
-                      minWidth: "120px",
-                      zIndex: "1000",
-                    }}
-                  >
+                  <div className={dropdown}>
                     <button
                       type="button"
                       onClick={onLogout}
-                      style={{
-                        width: "100%",
-                        fontSize: "14px",
-                        fontWeight: "500",
-                        background: "none",
-                        color: "#ff3b30",
-                        border: "none",
-                        borderRadius: "8px",
-                        padding: "8px 12px",
-                        cursor: "pointer",
-                        textAlign: "left",
-                      }}
-                      onMouseOver={(e) => {
-                        e.currentTarget.style.background = "#f2f2f7";
-                      }}
-                      onMouseOut={(e) => {
-                        e.currentTarget.style.background = "none";
-                      }}
+                      className={dropdownItemDanger}
                     >
                       Sign out
                     </button>

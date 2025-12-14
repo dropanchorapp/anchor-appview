@@ -1,12 +1,28 @@
 /** @jsxImportSource https://esm.sh/react@19.1.0 */
 import { useEffect, useRef, useState } from "https://esm.sh/react@19.1.0";
+import { css } from "https://esm.sh/@emotion/css@11.13.5";
 import { AuthState, CheckinData } from "../types/index.ts";
 import { ImageLightbox } from "./ImageLightbox.tsx";
 import { apiDelete, apiFetch } from "../utils/api.ts";
+import { injectGlobalStyles } from "../styles/globalStyles.ts";
+import {
+  avatar,
+  avatarFallback,
+  containerNarrow,
+  flexCenter,
+} from "../styles/components.ts";
+import {
+  colors,
+  radii,
+  shadows,
+  spacing,
+  transitions,
+  typography,
+} from "../styles/theme.ts";
 
 interface CheckinDetailProps {
   checkinId: string;
-  auth?: AuthState; // Optional auth prop for when used in App context
+  auth?: AuthState;
 }
 
 interface MapWidgetProps {
@@ -15,32 +31,306 @@ interface MapWidgetProps {
   venueName?: string;
 }
 
+// ============ LOCAL STYLES ============
+
+const loadingStyle = css`
+  ${flexCenter} min-height: 200px;
+  font-size: ${typography.sizes.lg};
+  color: ${colors.textSecondary};
+`;
+
+const errorStyle = css`
+  ${flexCenter} min-height: 200px;
+  font-size: ${typography.sizes.lg};
+  color: ${colors.error};
+`;
+
+const pageContainerStyle = css`
+  ${containerNarrow} padding-top: ${spacing.xl};
+  padding-bottom: ${spacing.xl};
+  font-family: ${typography.fontFamily};
+  line-height: ${typography.lineHeights.normal};
+  color: ${colors.text};
+`;
+
+const backButtonStyle = css`
+  background: ${colors.surfaceHover};
+  border: 1px solid ${colors.borderLight};
+  padding: ${spacing.sm} ${spacing.lg};
+  border-radius: ${radii.md};
+  font-size: ${typography.sizes.md};
+  color: ${colors.text};
+  cursor: pointer;
+  margin-bottom: ${spacing.xl};
+  font-weight: ${typography.weights.medium};
+  transition: all ${transitions.fast};
+
+  &:hover {
+    background: ${colors.surfaceActive};
+    border-color: ${colors.primary};
+    color: ${colors.primary};
+  }
+`;
+
+const mainCardStyle = css`
+  background: ${colors.surface};
+  border-radius: ${radii.xxl};
+  box-shadow: ${shadows.md};
+  padding: ${spacing.xxl};
+  margin-bottom: ${spacing.lg};
+`;
+
+const authorHeaderStyle = css`
+  display: flex;
+  align-items: center;
+  gap: ${spacing.lg};
+  margin-bottom: ${spacing.lg};
+`;
+
+const authorInfoStyle = css`
+  flex: 1;
+`;
+
+const displayNameStyle = css`
+  font-weight: ${typography.weights.semibold};
+  font-size: ${typography.sizes.xl};
+  color: ${colors.text};
+  margin-bottom: 2px;
+  display: flex;
+  align-items: center;
+  gap: ${spacing.sm};
+`;
+
+const handleStyle = css`
+  font-size: ${typography.sizes.base};
+  color: ${colors.textSecondary};
+`;
+
+const timestampStyle = css`
+  font-size: ${typography.sizes.md};
+  color: ${colors.textSecondary};
+  text-align: right;
+`;
+
+const checkinTextStyle = css`
+  font-size: ${typography.sizes.xl};
+  line-height: ${typography.lineHeights.normal};
+  color: ${colors.text};
+  margin-bottom: ${spacing.xl};
+`;
+
+const imageContainerStyle = css`
+  margin-bottom: ${spacing.xl};
+  border-radius: ${radii.lg};
+  overflow: hidden;
+  border: 1px solid ${colors.border};
+  cursor: pointer;
+
+  img {
+    width: 100%;
+    height: auto;
+    display: block;
+  }
+`;
+
+const locationSectionStyle = css`
+  background: ${colors.surfaceHover};
+  padding: ${spacing.lg};
+  border-radius: ${radii.lg};
+  border: 1px solid ${colors.borderLight};
+`;
+
+const locationHeaderStyle = css`
+  display: flex;
+  align-items: center;
+  gap: ${spacing.sm};
+  margin-bottom: ${spacing.sm};
+`;
+
+const locationLabelStyle = css`
+  font-size: ${typography.sizes.lg};
+  font-weight: ${typography.weights.semibold};
+  color: ${colors.text};
+`;
+
+const venueNameStyle = css`
+  font-size: ${typography.sizes.lg};
+  font-weight: ${typography.weights.medium};
+  color: ${colors.text};
+  margin-bottom: ${spacing.xs};
+`;
+
+const addressTextStyle = css`
+  font-size: ${typography.sizes.md};
+  color: ${colors.textSecondary};
+  line-height: ${typography.lineHeights.relaxed};
+`;
+
+const coordinatesStyle = css`
+  font-size: ${typography.sizes.sm};
+  color: ${colors.textSecondary};
+  font-family: monospace;
+  margin-top: ${spacing.sm};
+  margin-bottom: ${spacing.md};
+`;
+
+const mapContainerStyle = css`
+  width: 100%;
+  height: 200px;
+  border-radius: ${radii.lg};
+  overflow: hidden;
+  background: ${colors.surfaceActive};
+`;
+
+const likesSectionStyle = css`
+  background: ${colors.surfaceHover};
+  padding: ${spacing.lg};
+  border-radius: ${radii.lg};
+  border: 1px solid ${colors.borderLight};
+  margin-top: ${spacing.lg};
+`;
+
+const likesRowStyle = css`
+  display: flex;
+  align-items: center;
+  gap: ${spacing.md};
+`;
+
+const likeButtonStyle = css`
+  background: none;
+  border: none;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: ${spacing.sm};
+  padding: ${spacing.sm};
+  border-radius: ${radii.md};
+  transition: all ${transitions.normal};
+
+  &:hover:not(:disabled) {
+    background: ${colors.surfaceActive};
+  }
+
+  &:disabled {
+    cursor: not-allowed;
+    opacity: 0.5;
+  }
+`;
+
+const heartIconStyle = css`
+  transition: all ${transitions.normal};
+
+  &:hover {
+    transform: scale(1.1);
+  }
+`;
+
+const likesErrorStyle = css`
+  font-size: ${typography.sizes.md};
+  color: ${colors.error};
+  margin-left: ${spacing.sm};
+`;
+
+const signInHintStyle = css`
+  font-size: ${typography.sizes.md};
+  color: ${colors.textSecondary};
+  margin-top: ${spacing.sm};
+`;
+
+const shareCardStyle = css`
+  background: ${colors.surface};
+  border-radius: ${radii.lg};
+  box-shadow: ${shadows.sm};
+  padding: ${spacing.lg};
+`;
+
+const shareTitleStyle = css`
+  font-size: ${typography.sizes.lg};
+  font-weight: ${typography.weights.semibold};
+  color: ${colors.text};
+  margin-bottom: ${spacing.md};
+`;
+
+const shareInputRowStyle = css`
+  display: flex;
+  align-items: center;
+  gap: ${spacing.sm};
+  background: ${colors.surfaceHover};
+  padding: ${spacing.md};
+  border-radius: ${radii.md};
+  border: 1px solid ${colors.borderLight};
+`;
+
+const shareInputStyle = css`
+  flex: 1;
+  background: transparent;
+  border: none;
+  font-size: ${typography.sizes.md};
+  color: ${colors.text};
+  outline: none;
+`;
+
+const copyButtonStyle = css`
+  background: ${colors.surfaceHover};
+  color: ${colors.primary};
+  border: 1px solid ${colors.primary};
+  padding: ${spacing.sm} ${spacing.md};
+  border-radius: ${radii.sm};
+  font-size: ${typography.sizes.md};
+  cursor: pointer;
+  transition: all ${transitions.fast};
+
+  &:hover {
+    background: ${colors.primaryLight};
+  }
+`;
+
+const shareButtonStyle = css`
+  background: ${colors.primary};
+  color: white;
+  border: none;
+  padding: ${spacing.sm} ${spacing.md};
+  border-radius: ${radii.sm};
+  font-size: ${typography.sizes.md};
+  cursor: pointer;
+  transition: all ${transitions.fast};
+
+  &:hover {
+    background: ${colors.primaryHover};
+  }
+`;
+
+const beaconBitsLinkStyle = css`
+  display: flex;
+
+  &:hover svg {
+    opacity: 0.8;
+  }
+`;
+
+// ============ MAP WIDGET ============
+
 function MapWidget({ latitude, longitude, venueName }: MapWidgetProps) {
   const mapRef = useRef<HTMLDivElement>(null);
   const mapInstanceRef = useRef<any>(null);
 
   useEffect(() => {
-    // Dynamically load Leaflet
     const loadLeaflet = async () => {
       if (mapInstanceRef.current || !mapRef.current) return;
 
       try {
-        // Load Leaflet CSS
         const link = document.createElement("link");
         link.rel = "stylesheet";
         link.href = "https://unpkg.com/leaflet@1.9.4/dist/leaflet.css";
         document.head.appendChild(link);
 
-        // Load Leaflet JS
         const L = await import("https://esm.sh/leaflet@1.9.4");
 
-        // Create map
         const map = L.default.map(mapRef.current).setView(
           [latitude, longitude],
           16,
         );
 
-        // Add CartoDB Voyager tiles - clean and modern style
         L.default.tileLayer(
           "https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png",
           {
@@ -51,7 +341,6 @@ function MapWidget({ latitude, longitude, venueName }: MapWidgetProps) {
           },
         ).addTo(map);
 
-        // Add marker
         const marker = L.default.marker([latitude, longitude]).addTo(map);
 
         if (venueName) {
@@ -60,7 +349,6 @@ function MapWidget({ latitude, longitude, venueName }: MapWidgetProps) {
 
         mapInstanceRef.current = map;
 
-        // Clean up on unmount
         return () => {
           if (mapInstanceRef.current) {
             mapInstanceRef.current.remove();
@@ -75,19 +363,10 @@ function MapWidget({ latitude, longitude, venueName }: MapWidgetProps) {
     loadLeaflet();
   }, [latitude, longitude, venueName]);
 
-  return (
-    <div
-      ref={mapRef}
-      style={{
-        width: "100%",
-        height: "200px",
-        borderRadius: "12px",
-        overflow: "hidden",
-        background: "#f0f0f0",
-      }}
-    />
-  );
+  return <div ref={mapRef} className={mapContainerStyle} />;
 }
+
+// ============ MAIN COMPONENT ============
 
 export function CheckinDetail({ checkinId, auth }: CheckinDetailProps) {
   const [checkin, setCheckin] = useState<CheckinData | null>(null);
@@ -106,50 +385,9 @@ export function CheckinDetail({ checkinId, auth }: CheckinDetailProps) {
     isAuthenticated: false,
   });
 
-  // Inject proper CSS styles on mount
+  // Inject global styles on mount
   useEffect(() => {
-    const style = document.createElement("style");
-    style.textContent = `
-      * {
-        margin: 0;
-        padding: 0;
-        box-sizing: border-box;
-      }
-
-      body {
-        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
-        line-height: 1.5;
-        color: #1c1c1e;
-        background: #f2f2f7;
-        min-height: 100vh;
-      }
-
-      /* Heart icon styles */
-      .heart-icon {
-        transition: all 0.2s ease;
-        cursor: pointer;
-      }
-
-      .heart-icon:hover {
-        transform: scale(1.1);
-      }
-
-      .heart-icon.liked {
-        color: #ff3b30;
-        fill: #ff3b30;
-      }
-
-      .heart-icon:not(.liked) {
-        color: #8e8e93;
-        fill: none;
-      }
-    `;
-    document.head.appendChild(style);
-    return () => {
-      if (style.parentNode) {
-        document.head.removeChild(style);
-      }
-    };
+    injectGlobalStyles();
   }, []);
 
   useEffect(() => {
@@ -158,13 +396,10 @@ export function CheckinDetail({ checkinId, auth }: CheckinDetailProps) {
         setLoading(true);
         setError(null);
 
-        // Check if checkinId is in new format (identifier/rkey) or legacy format
         let apiUrl = "";
         if (checkinId.includes("/")) {
-          // New format: identifier/rkey (identifier can be DID or handle)
           apiUrl = `/api/checkins/${checkinId}`;
         } else {
-          // Legacy format: use old API endpoint
           apiUrl = `/api/checkin/${checkinId}`;
         }
 
@@ -193,7 +428,6 @@ export function CheckinDetail({ checkinId, auth }: CheckinDetailProps) {
   }, [checkinId]);
 
   // Check authentication status
-  // NOTE: Use regular fetch() here, not apiFetch(), to avoid redirect loops
   useEffect(() => {
     const checkAuth = async () => {
       try {
@@ -214,16 +448,14 @@ export function CheckinDetail({ checkinId, auth }: CheckinDetailProps) {
       }
     };
 
-    // Only check auth if not provided via props
     if (!auth) {
       checkAuth();
     }
   }, [auth]);
 
-  // Get current auth state (from props or local)
   const currentAuth = auth || localAuth;
 
-  // Fetch likes data for the checkin
+  // Fetch likes data
   const fetchLikesData = async () => {
     if (!checkin || !checkinId.includes("/")) return;
 
@@ -231,7 +463,6 @@ export function CheckinDetail({ checkinId, auth }: CheckinDetailProps) {
       setLikesLoading(true);
       setLikesError(null);
 
-      // Parse checkin ID to get DID and rkey
       const [checkinDid, checkinRkey] = checkinId.split("/");
 
       const response = await apiFetch(
@@ -246,7 +477,6 @@ export function CheckinDetail({ checkinId, auth }: CheckinDetailProps) {
 
       setLikesCount(data.count || 0);
 
-      // Check if current user has liked this checkin
       if (currentAuth.isAuthenticated && currentAuth.userDid) {
         const userLiked = data.likes?.some((like: any) =>
           like.author.did === currentAuth.userDid
@@ -261,20 +491,15 @@ export function CheckinDetail({ checkinId, auth }: CheckinDetailProps) {
     }
   };
 
-  // Fetch likes data when checkin is loaded
   useEffect(() => {
     if (checkin && checkinId.includes("/")) {
       fetchLikesData();
     }
   }, [checkin, checkinId, currentAuth.userDid]);
 
-  // Handle like/unlike action
+  // Handle like/unlike
   const handleLike = async () => {
-    // Should not be called if not authenticated (button is disabled)
-    if (!currentAuth.isAuthenticated) {
-      return;
-    }
-
+    if (!currentAuth.isAuthenticated) return;
     if (!checkin || !checkinId.includes("/")) return;
 
     try {
@@ -284,7 +509,6 @@ export function CheckinDetail({ checkinId, auth }: CheckinDetailProps) {
       const [checkinDid, checkinRkey] = checkinId.split("/");
 
       if (isLiked) {
-        // Unlike
         const response = await apiDelete(
           `/api/checkins/${checkinDid}/${checkinRkey}/likes`,
         );
@@ -296,7 +520,6 @@ export function CheckinDetail({ checkinId, auth }: CheckinDetailProps) {
         setIsLiked(false);
         setLikesCount((prev) => Math.max(0, prev - 1));
       } else {
-        // Like
         const response = await apiFetch(
           `/api/checkins/${checkinDid}/${checkinRkey}/likes`,
           {
@@ -321,153 +544,50 @@ export function CheckinDetail({ checkinId, auth }: CheckinDetailProps) {
   };
 
   if (loading) {
-    return (
-      <div
-        style={{
-          display: "flex",
-          justifyContent: "center",
-          alignItems: "center",
-          minHeight: "200px",
-          fontSize: "16px",
-          color: "#8e8e93",
-        }}
-      >
-        Loading checkin...
-      </div>
-    );
+    return <div className={loadingStyle}>Loading checkin...</div>;
   }
 
   if (error || !checkin) {
-    return (
-      <div
-        style={{
-          display: "flex",
-          justifyContent: "center",
-          alignItems: "center",
-          minHeight: "200px",
-          fontSize: "16px",
-          color: "#ff3b30",
-        }}
-      >
-        {error || "Checkin not found"}
-      </div>
-    );
+    return <div className={errorStyle}>{error || "Checkin not found"}</div>;
   }
 
-  // Use DID-based URL for sharing (consistent, permanent identifier)
   const shareUrl =
     `${globalThis.location.origin}/checkins/${checkin.author.did}/${checkin.id}`;
 
   return (
-    <div
-      style={{
-        maxWidth: "600px",
-        margin: "0 auto",
-        padding: "20px",
-        fontFamily:
-          "-apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif",
-        lineHeight: "1.5",
-        color: "#1c1c1e",
-      }}
-    >
+    <div className={pageContainerStyle}>
       {/* Back button */}
       <button
         type="button"
         onClick={() => {
-          // Always go to main feed for consistency
           globalThis.location.href = "/";
         }}
-        style={{
-          background: "#f8f9fa",
-          border: "1px solid #d1d1d6",
-          padding: "8px 16px",
-          borderRadius: "8px",
-          fontSize: "14px",
-          color: "#1c1c1e",
-          cursor: "pointer",
-          marginBottom: "20px",
-          fontWeight: "500",
-          transition: "all 0.1s ease-in-out",
-        }}
-        onMouseEnter={(e) => {
-          e.currentTarget.style.background = "#e9ecef";
-          e.currentTarget.style.borderColor = "#007aff";
-          e.currentTarget.style.color = "#007aff";
-        }}
-        onMouseLeave={(e) => {
-          e.currentTarget.style.background = "#f8f9fa";
-          e.currentTarget.style.borderColor = "#d1d1d6";
-          e.currentTarget.style.color = "#1c1c1e";
-        }}
+        className={backButtonStyle}
       >
         ← Back to Feed
       </button>
 
       {/* Main checkin card */}
-      <div
-        style={{
-          background: "white",
-          borderRadius: "16px",
-          boxShadow: "0 2px 10px rgba(0,0,0,0.1)",
-          padding: "24px",
-          marginBottom: "16px",
-        }}
-      >
+      <div className={mainCardStyle}>
         {/* Author header */}
-        <div
-          style={{
-            display: "flex",
-            alignItems: "center",
-            gap: "16px",
-            marginBottom: "16px",
-          }}
-        >
+        <div className={authorHeaderStyle}>
           {checkin.author.avatar
             ? (
               <img
                 src={checkin.author.avatar}
                 alt={checkin.author.displayName || checkin.author.handle}
-                style={{
-                  width: "56px",
-                  height: "56px",
-                  borderRadius: "28px",
-                  objectFit: "cover",
-                }}
+                className={avatar(56)}
               />
             )
             : (
-              <div
-                style={{
-                  width: "56px",
-                  height: "56px",
-                  background:
-                    "linear-gradient(135deg, #667eea 0%, #764ba2 100%)",
-                  borderRadius: "28px",
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "center",
-                  fontSize: "20px",
-                  fontWeight: "600",
-                  color: "white",
-                }}
-              >
+              <div className={avatarFallback(56, 20)}>
                 {(checkin.author.displayName || checkin.author.handle)?.[0]
                   ?.toUpperCase() || "?"}
               </div>
             )}
 
-          <div style={{ flex: "1" }}>
-            <div
-              style={{
-                fontWeight: "600",
-                fontSize: "18px",
-                color: "#1c1c1e",
-                marginBottom: "2px",
-                display: "flex",
-                alignItems: "center",
-                gap: "6px",
-              }}
-            >
+          <div className={authorInfoStyle}>
+            <div className={displayNameStyle}>
               {checkin.author.displayName || checkin.author.handle}
               {checkin.source === "beaconbits" && (
                 <a
@@ -475,7 +595,7 @@ export function CheckinDetail({ checkinId, auth }: CheckinDetailProps) {
                   target="_blank"
                   rel="noopener noreferrer"
                   title="View on BeaconBits"
-                  style={{ display: "flex" }}
+                  className={beaconBitsLinkStyle}
                 >
                   <svg
                     viewBox="0 0 705 704"
@@ -500,23 +620,10 @@ export function CheckinDetail({ checkinId, auth }: CheckinDetailProps) {
                 </a>
               )}
             </div>
-            <div
-              style={{
-                fontSize: "15px",
-                color: "#8e8e93",
-              }}
-            >
-              @{checkin.author.handle}
-            </div>
+            <div className={handleStyle}>@{checkin.author.handle}</div>
           </div>
 
-          <time
-            style={{
-              fontSize: "14px",
-              color: "#8e8e93",
-              textAlign: "right",
-            }}
-          >
+          <time className={timestampStyle}>
             {new Date(checkin.createdAt).toLocaleDateString(undefined, {
               weekday: "long",
               year: "numeric",
@@ -532,29 +639,12 @@ export function CheckinDetail({ checkinId, auth }: CheckinDetailProps) {
         </div>
 
         {/* Checkin message */}
-        {checkin.text && (
-          <div
-            style={{
-              fontSize: "18px",
-              lineHeight: "1.5",
-              color: "#1c1c1e",
-              marginBottom: "20px",
-            }}
-          >
-            {checkin.text}
-          </div>
-        )}
+        {checkin.text && <div className={checkinTextStyle}>{checkin.text}</div>}
 
         {/* Image */}
         {checkin.image && (
           <div
-            style={{
-              marginBottom: "20px",
-              borderRadius: "12px",
-              overflow: "hidden",
-              border: "1px solid #e5e5ea",
-              cursor: "pointer",
-            }}
+            className={imageContainerStyle}
             onClick={() => setLightboxOpen(true)}
             role="button"
             tabIndex={0}
@@ -567,66 +657,24 @@ export function CheckinDetail({ checkinId, auth }: CheckinDetailProps) {
             <img
               src={checkin.image.fullsizeUrl}
               alt={checkin.image.alt || "Check-in photo"}
-              style={{
-                width: "100%",
-                height: "auto",
-                display: "block",
-              }}
             />
           </div>
         )}
 
         {/* Location info */}
         {(checkin.address || checkin.coordinates) && (
-          <div
-            style={{
-              background: "#f8f9fa",
-              padding: "16px",
-              borderRadius: "12px",
-              border: "1px solid #e1e1e6",
-            }}
-          >
-            <div
-              style={{
-                display: "flex",
-                alignItems: "center",
-                gap: "8px",
-                marginBottom: "8px",
-              }}
-            >
-              <span style={{ fontSize: "16px" }}>📍</span>
-              <span
-                style={{
-                  fontSize: "16px",
-                  fontWeight: "600",
-                  color: "#1c1c1e",
-                }}
-              >
-                Location
-              </span>
+          <div className={locationSectionStyle}>
+            <div className={locationHeaderStyle}>
+              <span style={{ fontSize: typography.sizes.lg }}>📍</span>
+              <span className={locationLabelStyle}>Location</span>
             </div>
 
             {checkin.address && (
               <div>
                 {checkin.address.name && (
-                  <div
-                    style={{
-                      fontSize: "16px",
-                      fontWeight: "500",
-                      color: "#1c1c1e",
-                      marginBottom: "4px",
-                    }}
-                  >
-                    {checkin.address.name}
-                  </div>
+                  <div className={venueNameStyle}>{checkin.address.name}</div>
                 )}
-                <div
-                  style={{
-                    fontSize: "14px",
-                    color: "#8e8e93",
-                    lineHeight: "1.4",
-                  }}
-                >
+                <div className={addressTextStyle}>
                   {[
                     checkin.address.street,
                     checkin.address.locality,
@@ -639,20 +687,11 @@ export function CheckinDetail({ checkinId, auth }: CheckinDetailProps) {
 
             {checkin.coordinates && (
               <>
-                <div
-                  style={{
-                    fontSize: "13px",
-                    color: "#8e8e93",
-                    marginTop: checkin.address ? "8px" : "0",
-                    fontFamily: "monospace",
-                    marginBottom: "12px",
-                  }}
-                >
+                <div className={coordinatesStyle}>
                   {checkin.coordinates.latitude.toFixed(6)},{" "}
                   {checkin.coordinates.longitude.toFixed(6)}
                 </div>
 
-                {/* Map widget */}
                 <MapWidget
                   latitude={checkin.coordinates.latitude}
                   longitude={checkin.coordinates.longitude}
@@ -664,48 +703,13 @@ export function CheckinDetail({ checkinId, auth }: CheckinDetailProps) {
         )}
 
         {/* Likes section */}
-        <div
-          style={{
-            background: "#f8f9fa",
-            padding: "16px",
-            borderRadius: "12px",
-            border: "1px solid #e1e1e6",
-            marginTop: "16px",
-          }}
-        >
-          <div
-            style={{
-              display: "flex",
-              alignItems: "center",
-              gap: "12px",
-            }}
-          >
+        <div className={likesSectionStyle}>
+          <div className={likesRowStyle}>
             <button
               type="button"
               onClick={handleLike}
               disabled={!currentAuth.isAuthenticated || likesLoading}
-              style={{
-                background: "none",
-                border: "none",
-                cursor: !currentAuth.isAuthenticated || likesLoading
-                  ? "not-allowed"
-                  : "pointer",
-                display: "flex",
-                alignItems: "center",
-                gap: "8px",
-                padding: "8px",
-                borderRadius: "8px",
-                transition: "all 0.2s ease",
-                opacity: !currentAuth.isAuthenticated ? 0.5 : 1,
-              }}
-              onMouseEnter={(e) => {
-                if (currentAuth.isAuthenticated && !likesLoading) {
-                  e.currentTarget.style.background = "#e9ecef";
-                }
-              }}
-              onMouseLeave={(e) => {
-                e.currentTarget.style.background = "none";
-              }}
+              className={likeButtonStyle}
               title={currentAuth.isAuthenticated
                 ? (isLiked ? "Unlike" : "Like")
                 : "Sign in to like"}
@@ -719,18 +723,19 @@ export function CheckinDetail({ checkinId, auth }: CheckinDetailProps) {
                 strokeWidth="2"
                 strokeLinecap="round"
                 strokeLinejoin="round"
-                className={`heart-icon ${isLiked ? "liked" : ""}`}
+                className={heartIconStyle}
                 style={{
                   opacity: likesLoading ? 0.5 : 1,
+                  color: isLiked ? colors.error : colors.textSecondary,
                 }}
               >
                 <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z" />
               </svg>
               <span
                 style={{
-                  fontSize: "16px",
-                  fontWeight: "600",
-                  color: isLiked ? "#ff3b30" : "#1c1c1e",
+                  fontSize: typography.sizes.lg,
+                  fontWeight: typography.weights.semibold,
+                  color: isLiked ? colors.error : colors.text,
                   minWidth: "20px",
                   textAlign: "left",
                 }}
@@ -739,27 +744,12 @@ export function CheckinDetail({ checkinId, auth }: CheckinDetailProps) {
               </span>
             </button>
 
-            {likesError && (
-              <span
-                style={{
-                  fontSize: "14px",
-                  color: "#ff3b30",
-                  marginLeft: "8px",
-                }}
-              >
-                {likesError}
-              </span>
-            )}
+            {likesError && <span className={likesErrorStyle}>{likesError}
+            </span>}
           </div>
 
           {!currentAuth.isAuthenticated && (
-            <div
-              style={{
-                fontSize: "14px",
-                color: "#8e8e93",
-                marginTop: "8px",
-              }}
-            >
+            <div className={signInHintStyle}>
               Sign in to like this checkin
             </div>
           )}
@@ -767,48 +757,15 @@ export function CheckinDetail({ checkinId, auth }: CheckinDetailProps) {
       </div>
 
       {/* Share section */}
-      <div
-        style={{
-          background: "white",
-          borderRadius: "12px",
-          boxShadow: "0 1px 3px rgba(0,0,0,0.1)",
-          padding: "16px",
-        }}
-      >
-        <div
-          style={{
-            fontSize: "16px",
-            fontWeight: "600",
-            color: "#1c1c1e",
-            marginBottom: "12px",
-          }}
-        >
-          Share this checkin
-        </div>
+      <div className={shareCardStyle}>
+        <div className={shareTitleStyle}>Share this checkin</div>
 
-        <div
-          style={{
-            display: "flex",
-            alignItems: "center",
-            gap: "8px",
-            background: "#f8f9fa",
-            padding: "12px",
-            borderRadius: "8px",
-            border: "1px solid #e1e1e6",
-          }}
-        >
+        <div className={shareInputRowStyle}>
           <input
             type="text"
             value={shareUrl}
             readOnly
-            style={{
-              flex: "1",
-              background: "transparent",
-              border: "none",
-              fontSize: "14px",
-              color: "#1c1c1e",
-              outline: "none",
-            }}
+            className={shareInputStyle}
           />
           <button
             type="button"
@@ -821,16 +778,7 @@ export function CheckinDetail({ checkinId, auth }: CheckinDetailProps) {
                 alert("Failed to copy link. Please copy manually.");
               }
             }}
-            style={{
-              background: "#f8f9fa",
-              color: "#007aff",
-              border: "1px solid #007aff",
-              padding: "6px 12px",
-              borderRadius: "6px",
-              fontSize: "14px",
-              cursor: "pointer",
-              marginRight: "4px",
-            }}
+            className={copyButtonStyle}
           >
             Copy
           </button>
@@ -849,15 +797,7 @@ export function CheckinDetail({ checkinId, auth }: CheckinDetailProps) {
                   console.log("Share cancelled or failed:", err);
                 }
               }}
-              style={{
-                background: "#007aff",
-                color: "white",
-                border: "none",
-                padding: "6px 12px",
-                borderRadius: "6px",
-                fontSize: "14px",
-                cursor: "pointer",
-              }}
+              className={shareButtonStyle}
             >
               Share
             </button>

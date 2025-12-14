@@ -1,42 +1,133 @@
 /** @jsxImportSource https://esm.sh/react@19.1.0 */
 import React, { useEffect, useState } from "https://esm.sh/react@19.1.0";
+import { css } from "https://esm.sh/@emotion/css@11.13.5";
+import {
+  buttonPrimaryLarge,
+  label,
+  spinnerWhite,
+} from "../styles/components.ts";
+import { injectGlobalStyles } from "../styles/globalStyles.ts";
+import {
+  colors,
+  radii,
+  shadows,
+  spacing,
+  transitions,
+  typography,
+} from "../styles/theme.ts";
+
+const pageStyle = css`
+  min-height: 100vh;
+  background: ${colors.background};
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: ${spacing.xl};
+`;
+
+const cardStyle = css`
+  background: ${colors.surface};
+  border-radius: ${radii.xxl};
+  padding: 60px ${spacing.xxxxl};
+  max-width: 400px;
+  width: 100%;
+  box-shadow: ${shadows.lg};
+  text-align: center;
+`;
+
+const logoContainerStyle = css`
+  width: 160px;
+  height: 160px;
+  margin: 0 auto ${spacing.xxl};
+  display: flex;
+  align-items: center;
+  justify-content: center;
+`;
+
+const logoStyle = css`
+  width: 160px;
+  height: 160px;
+  object-fit: contain;
+`;
+
+const titleStyle = css`
+  font-size: 28px;
+  font-weight: ${typography.weights.bold};
+  margin-bottom: ${spacing.sm};
+  color: ${colors.text};
+`;
+
+const subtitleStyle = css`
+  color: ${colors.textSecondary};
+  margin-bottom: ${spacing.xxxl};
+  font-size: ${typography.sizes.lg};
+  line-height: ${typography.lineHeights.normal};
+`;
+
+const errorStyle = css`
+  background: ${colors.error};
+  color: white;
+  padding: ${spacing.md};
+  border-radius: ${radii.md};
+  margin-bottom: ${spacing.xl};
+  font-size: ${typography.sizes.md};
+`;
+
+const formGroupStyle = css`
+  margin-bottom: ${spacing.xl};
+  text-align: left;
+`;
+
+const inputStyle = css`
+  width: 100%;
+  padding: ${spacing.lg};
+  border: 2px solid ${colors.background};
+  border-radius: ${radii.xl};
+  font-size: ${typography.sizes.lg};
+  background: #f9f9f9;
+  transition: all ${transitions.normal};
+  box-sizing: border-box;
+  color: ${colors.text};
+  outline: none;
+
+  &:focus {
+    border-color: ${colors.primary};
+    background: ${colors.surface};
+    box-shadow: 0 0 0 4px rgba(0, 122, 255, 0.1);
+  }
+
+  &::placeholder {
+    color: ${colors.textMuted};
+  }
+`;
+
+const buttonStyle = css`
+  ${buttonPrimaryLarge} width: 100%;
+  padding: ${spacing.lg};
+
+  &:hover:not(:disabled) {
+    transform: translateY(-1px);
+  }
+`;
+
+const footerStyle = css`
+  margin-top: ${spacing.xxxl};
+  padding-top: ${spacing.xxl};
+  border-top: 1px solid ${colors.background};
+  color: ${colors.textSecondary};
+  font-size: ${typography.sizes.md};
+`;
 
 export function MobileAuth() {
   const [handle, setHandle] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // Inject proper CSS styles for fonts and animations
   useEffect(() => {
-    const style = document.createElement("style");
-    style.textContent = `
-      * {
-        margin: 0;
-        padding: 0;
-        box-sizing: border-box;
-      }
-      
-      body {
-        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
-        line-height: 1.5;
-        color: #1c1c1e;
-      }
-
-      @keyframes spin {
-        to { transform: rotate(360deg); }
-      }
-    `;
-    document.head.appendChild(style);
-    return () => {
-      if (style.parentNode) {
-        document.head.removeChild(style);
-      }
-    };
+    injectGlobalStyles();
   }, []);
 
-  // Generate PKCE parameters for secure OAuth flow
   const generatePKCE = async () => {
-    // Generate code verifier (128 characters, URL-safe)
     const array = new Uint8Array(96);
     crypto.getRandomValues(array);
     const codeVerifier = btoa(String.fromCharCode(...array))
@@ -44,7 +135,6 @@ export function MobileAuth() {
       .replace(/\//g, "_")
       .replace(/=/g, "");
 
-    // Generate code challenge (SHA256 hash of verifier)
     const encoder = new TextEncoder();
     const data = encoder.encode(codeVerifier);
     const hashBuffer = await crypto.subtle.digest("SHA-256", data);
@@ -69,10 +159,7 @@ export function MobileAuth() {
     setLoading(true);
 
     try {
-      // Generate PKCE parameters for this OAuth flow
       const { codeVerifier, codeChallenge } = await generatePKCE();
-
-      // Store code verifier for later use (in sessionStorage for this tab)
       sessionStorage.setItem("pkce_code_verifier", codeVerifier);
 
       const response = await fetch("/api/auth/mobile-start", {
@@ -93,7 +180,6 @@ export function MobileAuth() {
       const data = await response.json();
 
       if (data.authUrl) {
-        // Redirect to OAuth authorization
         globalThis.location.href = data.authUrl;
       } else {
         throw new Error("No authorization URL received");
@@ -106,97 +192,25 @@ export function MobileAuth() {
   };
 
   return (
-    <div
-      style={{
-        minHeight: "100vh",
-        background: "#f2f2f7",
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "center",
-        padding: "20px",
-      }}
-    >
-      <div
-        style={{
-          background: "white",
-          borderRadius: "20px",
-          padding: "60px 40px",
-          maxWidth: "400px",
-          width: "100%",
-          boxShadow: "0 4px 20px rgba(0, 0, 0, 0.1)",
-          textAlign: "center",
-        }}
-      >
-        <div
-          style={{
-            width: "160px",
-            height: "160px",
-            margin: "0 auto 24px",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-          }}
-        >
+    <div className={pageStyle}>
+      <div className={cardStyle}>
+        <div className={logoContainerStyle}>
           <img
             src="https://cdn.dropanchor.app/images/anchor-logo.png"
             alt="Anchor Logo"
-            style={{
-              width: "160px",
-              height: "160px",
-              objectFit: "contain",
-            }}
+            className={logoStyle}
           />
         </div>
 
-        <h1
-          style={{
-            fontSize: "28px",
-            fontWeight: "700",
-            marginBottom: "8px",
-            color: "#1c1c1e",
-          }}
-        >
-          Sign in to Anchor
-        </h1>
+        <h1 className={titleStyle}>Sign in to Anchor</h1>
 
-        <p
-          style={{
-            color: "#8e8e93",
-            marginBottom: "32px",
-            fontSize: "16px",
-            lineHeight: "1.4",
-          }}
-        >
-          Connect with your Bluesky account
-        </p>
+        <p className={subtitleStyle}>Connect with your Bluesky account</p>
 
-        {error && (
-          <div
-            style={{
-              background: "#ff3b30",
-              color: "white",
-              padding: "12px",
-              borderRadius: "8px",
-              marginBottom: "20px",
-              fontSize: "14px",
-            }}
-          >
-            {error}
-          </div>
-        )}
+        {error && <div className={errorStyle}>{error}</div>}
 
         <form onSubmit={handleSubmit}>
-          <div style={{ marginBottom: "20px", textAlign: "left" }}>
-            <label
-              htmlFor="handle"
-              style={{
-                display: "block",
-                fontWeight: "600",
-                marginBottom: "8px",
-                color: "#1c1c1e",
-                fontSize: "14px",
-              }}
-            >
+          <div className={formGroupStyle}>
+            <label htmlFor="handle" className={label}>
               Bluesky Handle
             </label>
             <input
@@ -207,74 +221,19 @@ export function MobileAuth() {
               placeholder="alice.bsky.social"
               autoComplete="username"
               required
-              style={{
-                width: "100%",
-                padding: "16px",
-                border: "2px solid #f2f2f7",
-                borderRadius: "12px",
-                fontSize: "16px",
-                background: "#f9f9f9",
-                transition: "all 0.2s ease",
-                boxSizing: "border-box",
-              }}
-              onFocus={(e) => {
-                e.target.style.borderColor = "#007aff";
-                e.target.style.background = "white";
-                e.target.style.boxShadow = "0 0 0 4px rgba(0, 122, 255, 0.1)";
-              }}
-              onBlur={(e) => {
-                e.target.style.borderColor = "#f2f2f7";
-                e.target.style.background = "#f9f9f9";
-                e.target.style.boxShadow = "none";
-              }}
+              className={inputStyle}
             />
           </div>
 
           <button
             type="submit"
             disabled={loading}
-            style={{
-              width: "100%",
-              background: loading ? "#8e8e93" : "#007aff",
-              color: "white",
-              border: "none",
-              padding: "16px",
-              borderRadius: "12px",
-              fontSize: "16px",
-              fontWeight: "600",
-              cursor: loading ? "not-allowed" : "pointer",
-              transition: "all 0.2s ease",
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              gap: "8px",
-            }}
-            onMouseEnter={(e) => {
-              if (!loading) {
-                e.currentTarget.style.background = "#0056b3";
-                e.currentTarget.style.transform = "translateY(-1px)";
-              }
-            }}
-            onMouseLeave={(e) => {
-              if (!loading) {
-                e.currentTarget.style.background = "#007aff";
-                e.currentTarget.style.transform = "translateY(0)";
-              }
-            }}
+            className={buttonStyle}
           >
             {loading
               ? (
                 <>
-                  <div
-                    style={{
-                      width: "20px",
-                      height: "20px",
-                      border: "2px solid transparent",
-                      borderTop: "2px solid white",
-                      borderRadius: "50%",
-                      animation: "spin 1s linear infinite",
-                    }}
-                  />
+                  <div className={spinnerWhite(20)} />
                   Signing in...
                 </>
               )
@@ -284,17 +243,7 @@ export function MobileAuth() {
           </button>
         </form>
 
-        <div
-          style={{
-            marginTop: "32px",
-            paddingTop: "24px",
-            borderTop: "1px solid #f2f2f7",
-            color: "#8e8e93",
-            fontSize: "14px",
-          }}
-        >
-          Powered by AT Protocol
-        </div>
+        <div className={footerStyle}>Powered by AT Protocol</div>
       </div>
     </div>
   );

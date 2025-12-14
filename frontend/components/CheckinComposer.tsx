@@ -1,8 +1,30 @@
 /** @jsxImportSource https://esm.sh/react@19.1.0 */
 import { useState } from "https://esm.sh/react@19.1.0";
+import { css } from "https://esm.sh/@emotion/css@11.13.5";
 import imageCompression from "https://esm.sh/browser-image-compression@2.0.2";
 import type { Place } from "../types/index.ts";
 import { apiFetch } from "../utils/api.ts";
+import {
+  buttonPrimary,
+  buttonSecondary,
+  input,
+  modalBody,
+  modalContent,
+  modalFooter,
+  modalHeader,
+  modalOverlay,
+  spinner,
+  spinnerWhite,
+  textarea,
+} from "../styles/components.ts";
+import {
+  colors,
+  radii,
+  shadows,
+  spacing,
+  transitions,
+  typography,
+} from "../styles/theme.ts";
 
 interface CheckinComposerProps {
   isOpen: boolean;
@@ -12,6 +34,402 @@ interface CheckinComposerProps {
 
 type Step = "location" | "venue" | "compose";
 type VenueTab = "nearby" | "search";
+
+// ============ LOCAL STYLES ============
+
+const overlayStyle = css`
+  ${modalOverlay} @media (max-width: 768px) {
+    padding: 0;
+  }
+`;
+
+const dialogStyle = css`
+  ${modalContent} box-shadow: ${shadows.modal};
+`;
+
+const headerStyle = css`
+  ${modalHeader};
+`;
+
+const headerTitleStyle = css`
+  font-size: ${typography.sizes.xl};
+  font-weight: ${typography.weights.semibold};
+  color: ${colors.text};
+  margin: 0;
+`;
+
+const closeButtonStyle = css`
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: ${spacing.xs};
+  color: ${colors.textSecondary};
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: ${radii.md};
+  transition: all ${transitions.fast};
+
+  &:hover {
+    background: ${colors.surfaceHover};
+    color: ${colors.text};
+  }
+`;
+
+const bodyStyle = css`
+  ${modalBody};
+`;
+
+const footerStyle = css`
+  ${modalFooter};
+`;
+
+// Location Step Styles
+const locationStepStyle = css`
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: ${spacing.xxl};
+  text-align: center;
+`;
+
+const locationIconContainerStyle = css`
+  width: 80px;
+  height: 80px;
+  background: ${colors.primaryLight};
+  border-radius: 40px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+`;
+
+const locationTitleStyle = css`
+  font-size: ${typography.sizes.xl};
+  font-weight: ${typography.weights.semibold};
+  color: ${colors.text};
+  margin-bottom: ${spacing.sm};
+`;
+
+const locationDescStyle = css`
+  font-size: ${typography.sizes.base};
+  color: ${colors.textSecondary};
+  line-height: ${typography.lineHeights.relaxed};
+  max-width: 400px;
+  margin: 0 auto;
+`;
+
+const warningBoxStyle = css`
+  background: ${colors.warningBg};
+  border: 1px solid ${colors.warning};
+  border-radius: ${radii.md};
+  padding: ${spacing.md};
+  font-size: ${typography.sizes.md};
+  color: ${colors.warningText};
+`;
+
+const locationButtonStyle = css`
+  ${buttonPrimary} border-radius: ${radii.xl};
+  padding: 14px 32px;
+  font-size: ${typography.sizes.lg};
+  display: flex;
+  align-items: center;
+  gap: ${spacing.sm};
+`;
+
+// Venue Step Styles
+const venueStepStyle = css`
+  display: flex;
+  flex-direction: column;
+  gap: ${spacing.lg};
+`;
+
+const segmentedControlStyle = css`
+  display: flex;
+  background: ${colors.background};
+  padding: ${spacing.xs};
+  border-radius: ${radii.lg};
+  gap: ${spacing.xs};
+`;
+
+const segmentButtonStyle = (isActive: boolean) =>
+  css`
+    flex: 1;
+    padding: ${spacing.sm} ${spacing.lg};
+    border: none;
+    border-radius: ${radii.md};
+    background: ${isActive ? colors.surface : "transparent"};
+    color: ${isActive ? colors.primary : colors.textSecondary};
+    font-size: ${typography.sizes.base};
+    font-weight: ${isActive
+      ? typography.weights.semibold
+      : typography.weights.medium};
+    cursor: pointer;
+    transition: all ${transitions.normal};
+  `;
+
+const searchRowStyle = css`
+  display: flex;
+  gap: ${spacing.sm};
+`;
+
+const searchInputContainerStyle = css`
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: ${spacing.sm};
+  background: ${colors.background};
+  border-radius: ${radii.lg};
+  padding: ${spacing.md} ${spacing.md};
+`;
+
+const searchInputStyle = css`
+  flex: 1;
+  border: none;
+  background: transparent;
+  outline: none;
+  font-size: ${typography.sizes.base};
+  color: ${colors.text};
+
+  &::placeholder {
+    color: ${colors.textMuted};
+  }
+`;
+
+const searchButtonStyle = css`
+  ${buttonPrimary} border-radius: ${radii.lg};
+  padding: ${spacing.md} ${spacing.xl};
+  font-size: ${typography.sizes.base};
+`;
+
+const loadingContainerStyle = css`
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 40px;
+  gap: ${spacing.md};
+`;
+
+const loadingTextStyle = css`
+  font-size: ${typography.sizes.base};
+  color: ${colors.textSecondary};
+`;
+
+const venueListStyle = css`
+  display: flex;
+  flex-direction: column;
+  gap: ${spacing.sm};
+  max-height: 400px;
+  overflow-y: auto;
+`;
+
+const venueButtonStyle = css`
+  background: ${colors.surface};
+  border: 1px solid ${colors.border};
+  border-radius: ${radii.lg};
+  padding: ${spacing.md};
+  cursor: pointer;
+  text-align: left;
+  transition: all ${transitions.normal};
+
+  &:hover {
+    background: ${colors.surfaceHover};
+    border-color: ${colors.primary};
+  }
+`;
+
+const venueRowStyle = css`
+  display: flex;
+  align-items: center;
+  gap: ${spacing.md};
+`;
+
+const venueIconStyle = css`
+  width: 40px;
+  height: 40px;
+  background: ${colors.primaryLight};
+  border-radius: ${radii.md};
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: ${typography.sizes.xl};
+`;
+
+const venueNameStyle = css`
+  font-size: ${typography.sizes.base};
+  font-weight: ${typography.weights.semibold};
+  color: ${colors.text};
+  margin-bottom: 2px;
+`;
+
+const venueLocalityStyle = css`
+  font-size: ${typography.sizes.sm};
+  color: ${colors.textSecondary};
+`;
+
+// Compose Step Styles
+const composeStepStyle = css`
+  display: flex;
+  flex-direction: column;
+  gap: ${spacing.xl};
+`;
+
+const selectedVenueCardStyle = css`
+  background: ${colors.surfaceHover};
+  border: 1px solid ${colors.border};
+  border-radius: ${radii.lg};
+  padding: ${spacing.lg};
+`;
+
+const selectedVenueRowStyle = css`
+  display: flex;
+  align-items: center;
+  gap: ${spacing.md};
+`;
+
+const selectedVenueIconStyle = css`
+  width: 48px;
+  height: 48px;
+  background: ${colors.primaryLight};
+  border-radius: ${radii.lg};
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: ${typography.sizes.xxl};
+`;
+
+const selectedVenueNameStyle = css`
+  font-size: ${typography.sizes.lg};
+  font-weight: ${typography.weights.semibold};
+  color: ${colors.text};
+  margin-bottom: 2px;
+`;
+
+const selectedVenueAddressStyle = css`
+  font-size: ${typography.sizes.md};
+  color: ${colors.textSecondary};
+`;
+
+const changeVenueButtonStyle = css`
+  background: none;
+  border: none;
+  color: ${colors.primary};
+  font-size: ${typography.sizes.md};
+  font-weight: ${typography.weights.medium};
+  cursor: pointer;
+
+  &:hover {
+    text-decoration: underline;
+  }
+`;
+
+const formLabelStyle = css`
+  display: block;
+  font-size: ${typography.sizes.base};
+  font-weight: ${typography.weights.semibold};
+  color: ${colors.text};
+  margin-bottom: ${spacing.sm};
+`;
+
+const textareaStyle = css`
+  ${textarea} min-height: 120px;
+  font-size: ${typography.sizes.base};
+`;
+
+const charCountStyle = css`
+  font-size: ${typography.sizes.sm};
+  color: ${colors.textSecondary};
+  text-align: right;
+  margin-top: ${spacing.xs};
+`;
+
+const uploadLabelStyle = css`
+  display: inline-flex;
+  align-items: center;
+  gap: ${spacing.sm};
+  padding: ${spacing.md} ${spacing.lg};
+  background: ${colors.background};
+  border: 1px solid ${colors.border};
+  border-radius: ${radii.lg};
+  font-size: ${typography.sizes.base};
+  font-weight: ${typography.weights.medium};
+  color: ${colors.primary};
+  cursor: pointer;
+  transition: all ${transitions.fast};
+
+  &:hover {
+    background: ${colors.surfaceHover};
+    border-color: ${colors.primary};
+  }
+`;
+
+const uploadHintStyle = css`
+  font-size: ${typography.sizes.sm};
+  color: ${colors.textSecondary};
+  margin-top: ${spacing.sm};
+`;
+
+const imagePreviewContainerStyle = css`
+  border: 1px solid ${colors.border};
+  border-radius: ${radii.lg};
+  overflow: hidden;
+`;
+
+const imagePreviewStyle = css`
+  width: 100%;
+  height: auto;
+  max-height: 400px;
+  object-fit: contain;
+  display: block;
+`;
+
+const removeImageButtonStyle = css`
+  position: absolute;
+  top: ${spacing.md};
+  right: ${spacing.md};
+  width: 32px;
+  height: 32px;
+  background: rgba(0, 0, 0, 0.6);
+  border: none;
+  border-radius: 50%;
+  color: white;
+  font-size: ${typography.sizes.xl};
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all ${transitions.fast};
+
+  &:hover {
+    background: rgba(0, 0, 0, 0.8);
+    transform: scale(1.1);
+  }
+`;
+
+const imageAltContainerStyle = css`
+  padding: ${spacing.md};
+`;
+
+const imageAltInputStyle = css`
+  ${input} font-size: ${typography.sizes.md};
+  padding: ${spacing.sm} ${spacing.md};
+`;
+
+// Footer Buttons
+const backButtonStyle = css`
+  ${buttonSecondary} flex: 1;
+  border-radius: ${radii.lg};
+  padding: ${spacing.md};
+  font-size: ${typography.sizes.lg};
+`;
+
+const submitButtonStyle = css`
+  ${buttonPrimary} flex: 2;
+  border-radius: ${radii.lg};
+  padding: ${spacing.md};
+  font-size: ${typography.sizes.lg};
+`;
+
+// ============ COMPONENT ============
 
 export function CheckinComposer(
   { isOpen, onClose, onSuccess }: CheckinComposerProps,
@@ -41,12 +459,10 @@ export function CheckinComposer(
 
   if (!isOpen) return null;
 
-  // Get user's browser location
   const requestLocation = async () => {
     setLoadingLocation(true);
     setLocationError(null);
 
-    // Check if geolocation is available
     if (!navigator.geolocation) {
       setLocationError(
         "Geolocation is not supported by your browser. Please use a modern browser or enter your location manually.",
@@ -73,12 +489,9 @@ export function CheckinComposer(
 
       setUserLocation(location);
       setStep("venue");
-
-      // Automatically load nearby venues
       await loadNearbyVenues(location.lat, location.lng);
     } catch (error: any) {
       if (error.code === 1) {
-        // Permission denied
         const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
         const isSafari = /^((?!chrome|android).)*safari/i.test(
           navigator.userAgent,
@@ -107,7 +520,6 @@ export function CheckinComposer(
     }
   };
 
-  // Load nearby venues using Overpass API
   const loadNearbyVenues = async (lat: number, lng: number) => {
     setLoadingVenues(true);
     setVenuesError(null);
@@ -134,13 +546,12 @@ export function CheckinComposer(
       setVenuesError(
         "Nearby venues timed out. Please use search by name instead.",
       );
-      setVenueTab("search"); // Auto-switch to search on timeout
+      setVenueTab("search");
     } finally {
       setLoadingVenues(false);
     }
   };
 
-  // Search venues by name using Nominatim
   const searchVenuesByName = async () => {
     if (!searchQuery.trim() || !userLocation) return;
 
@@ -172,18 +583,15 @@ export function CheckinComposer(
     }
   };
 
-  // Handle image selection with client-side compression
   const handleImageSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
-    // Check file type
     if (!file.type.startsWith("image/")) {
       alert("Please select an image file");
       return;
     }
 
-    // Check file size (30MB max before compression)
     if (file.size > 30 * 1024 * 1024) {
       alert("Image too large. Please select an image under 30MB");
       return;
@@ -192,12 +600,9 @@ export function CheckinComposer(
     setProcessingImage(true);
 
     try {
-      // Always process images to fix orientation and strip location EXIF
-      // Compress if large (>5MB), otherwise just fix orientation
       const processed = await processImageWithOrientation(file);
       setSelectedImage(processed);
 
-      // Create preview from the processed image (with corrected orientation)
       const reader = new FileReader();
       reader.onload = (e) => {
         setImagePreview(e.target?.result as string);
@@ -211,9 +616,6 @@ export function CheckinComposer(
     }
   };
 
-  // Read EXIF orientation from image file
-  // Process image with browser-image-compression library
-  // Handles EXIF orientation automatically and compresses if needed
   const processImageWithOrientation = async (file: File): Promise<File> => {
     console.log(
       `📸 Processing image: ${file.name} (${file.size} bytes, ${file.type})`,
@@ -223,8 +625,7 @@ export function CheckinComposer(
       maxSizeMB: 5,
       maxWidthOrHeight: 2000,
       useWebWorker: true,
-      // Library automatically handles EXIF orientation
-      exifOrientation: undefined, // Let library detect automatically
+      exifOrientation: undefined,
       fileType: "image/jpeg",
       initialQuality: 0.9,
     };
@@ -243,21 +644,18 @@ export function CheckinComposer(
     }
   };
 
-  // Remove selected image
   const removeImage = () => {
     setSelectedImage(null);
     setImagePreview(null);
     setImageAlt("");
   };
 
-  // Submit check-in
   const submitCheckin = async () => {
     if (!selectedVenue) return;
 
     setSubmitting(true);
 
     try {
-      // Use FormData if image is present
       const formData = new FormData();
       formData.append("place", JSON.stringify(selectedVenue));
       formData.append("message", checkinMessage.trim());
@@ -281,8 +679,6 @@ export function CheckinComposer(
       }
 
       const result = await response.json();
-
-      // Redirect to checkin detail page
       const checkinUrl = `/checkins/${result.checkinUri.split("/")[2]}/${
         result.checkinUri.split("/").pop()
       }`;
@@ -294,58 +690,18 @@ export function CheckinComposer(
     }
   };
 
+  const handleOverlayClick = (e: React.MouseEvent) => {
+    if (e.target === e.currentTarget && globalThis.innerWidth > 768) {
+      onClose();
+    }
+  };
+
   return (
-    <div
-      style={{
-        position: "fixed",
-        top: 0,
-        left: 0,
-        right: 0,
-        bottom: 0,
-        background: "rgba(0, 0, 0, 0.5)",
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "center",
-        zIndex: 1000,
-        padding: globalThis.innerWidth <= 768 ? "0" : "20px",
-      }}
-      onClick={(e) => {
-        if (e.target === e.currentTarget && globalThis.innerWidth > 768) {
-          onClose();
-        }
-      }}
-    >
-      <div
-        style={{
-          background: "white",
-          borderRadius: globalThis.innerWidth <= 768 ? "0" : "16px",
-          maxWidth: "600px",
-          width: "100%",
-          height: globalThis.innerWidth <= 768 ? "100vh" : "auto",
-          maxHeight: globalThis.innerWidth <= 768 ? "100vh" : "90vh",
-          display: "flex",
-          flexDirection: "column",
-          boxShadow: "0 20px 60px rgba(0, 0, 0, 0.3)",
-        }}
-      >
+    <div className={overlayStyle} onClick={handleOverlayClick}>
+      <div className={dialogStyle}>
         {/* Header */}
-        <div
-          style={{
-            padding: "20px",
-            borderBottom: "1px solid #e5e5ea",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "space-between",
-          }}
-        >
-          <h2
-            style={{
-              fontSize: "20px",
-              fontWeight: "600",
-              color: "#1c1c1e",
-              margin: 0,
-            }}
-          >
+        <div className={headerStyle}>
+          <h2 className={headerTitleStyle}>
             {step === "location" && "Get Location"}
             {step === "venue" && "Choose Venue"}
             {step === "compose" && "Create Check-in"}
@@ -354,16 +710,7 @@ export function CheckinComposer(
           <button
             type="button"
             onClick={onClose}
-            style={{
-              background: "none",
-              border: "none",
-              cursor: "pointer",
-              padding: "4px",
-              color: "#8e8e93",
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-            }}
+            className={closeButtonStyle}
             title="Close"
           >
             <svg
@@ -383,41 +730,17 @@ export function CheckinComposer(
         </div>
 
         {/* Body */}
-        <div
-          style={{
-            flex: 1,
-            overflowY: "auto",
-            padding: "20px",
-          }}
-        >
+        <div className={bodyStyle}>
           {/* Step 1: Location */}
           {step === "location" && (
-            <div
-              style={{
-                display: "flex",
-                flexDirection: "column",
-                alignItems: "center",
-                gap: "24px",
-                textAlign: "center",
-              }}
-            >
-              <div
-                style={{
-                  width: "80px",
-                  height: "80px",
-                  background: "#f0f8ff",
-                  borderRadius: "40px",
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "center",
-                }}
-              >
+            <div className={locationStepStyle}>
+              <div className={locationIconContainerStyle}>
                 <svg
                   width="40"
                   height="40"
                   viewBox="0 0 24 24"
                   fill="none"
-                  stroke="#007aff"
+                  stroke={colors.primary}
                   strokeWidth="2"
                   strokeLinecap="round"
                   strokeLinejoin="round"
@@ -428,99 +751,42 @@ export function CheckinComposer(
               </div>
 
               <div>
-                <h3
-                  style={{
-                    fontSize: "18px",
-                    fontWeight: "600",
-                    color: "#1c1c1e",
-                    marginBottom: "8px",
-                  }}
-                >
-                  We need your location
-                </h3>
-                <p
-                  style={{
-                    fontSize: "15px",
-                    color: "#8e8e93",
-                    lineHeight: "1.4",
-                    maxWidth: "400px",
-                    margin: "0 auto",
-                  }}
-                >
+                <h3 className={locationTitleStyle}>We need your location</h3>
+                <p className={locationDescStyle}>
                   Allow location access to find nearby venues and create
                   check-ins.
                 </p>
               </div>
 
               {locationError && (
-                <div
-                  style={{
-                    background: "#fff3cd",
-                    border: "1px solid #ffc107",
-                    borderRadius: "8px",
-                    padding: "12px",
-                    fontSize: "14px",
-                    color: "#856404",
-                  }}
-                >
-                  {locationError}
-                </div>
+                <div className={warningBoxStyle}>{locationError}</div>
               )}
 
               <button
                 type="button"
                 onClick={requestLocation}
                 disabled={loadingLocation}
-                style={{
-                  background: loadingLocation ? "#c7c7cc" : "#007aff",
-                  color: "white",
-                  border: "none",
-                  borderRadius: "12px",
-                  padding: "14px 32px",
-                  fontSize: "16px",
-                  fontWeight: "600",
-                  cursor: loadingLocation ? "not-allowed" : "pointer",
-                  display: "flex",
-                  alignItems: "center",
-                  gap: "8px",
-                }}
+                className={locationButtonStyle}
               >
                 {loadingLocation
                   ? (
                     <>
-                      <div
-                        style={{
-                          width: "16px",
-                          height: "16px",
-                          border: "2px solid white",
-                          borderTop: "2px solid transparent",
-                          borderRadius: "50%",
-                          animation: "spin 1s linear infinite",
-                        }}
-                      />
+                      <div className={spinnerWhite(16)} />
                       Getting location...
                     </>
                   )
-                  : "Allow Location Access"}
+                  : (
+                    "Allow Location Access"
+                  )}
               </button>
             </div>
           )}
 
           {/* Step 2: Venue Selection */}
           {step === "venue" && (
-            <div
-              style={{ display: "flex", flexDirection: "column", gap: "16px" }}
-            >
+            <div className={venueStepStyle}>
               {/* Segmented Control */}
-              <div
-                style={{
-                  display: "flex",
-                  background: "#f2f2f7",
-                  padding: "4px",
-                  borderRadius: "10px",
-                  gap: "4px",
-                }}
-              >
+              <div className={segmentedControlStyle}>
                 <button
                   type="button"
                   onClick={() => {
@@ -529,61 +795,29 @@ export function CheckinComposer(
                       loadNearbyVenues(userLocation.lat, userLocation.lng);
                     }
                   }}
-                  style={{
-                    flex: 1,
-                    padding: "8px 16px",
-                    border: "none",
-                    borderRadius: "8px",
-                    background: venueTab === "nearby" ? "white" : "transparent",
-                    color: venueTab === "nearby" ? "#007aff" : "#8e8e93",
-                    fontSize: "15px",
-                    fontWeight: venueTab === "nearby" ? "600" : "500",
-                    cursor: "pointer",
-                    transition: "all 0.2s ease",
-                  }}
+                  className={segmentButtonStyle(venueTab === "nearby")}
                 >
                   Nearby
                 </button>
                 <button
                   type="button"
                   onClick={() => setVenueTab("search")}
-                  style={{
-                    flex: 1,
-                    padding: "8px 16px",
-                    border: "none",
-                    borderRadius: "8px",
-                    background: venueTab === "search" ? "white" : "transparent",
-                    color: venueTab === "search" ? "#007aff" : "#8e8e93",
-                    fontSize: "15px",
-                    fontWeight: venueTab === "search" ? "600" : "500",
-                    cursor: "pointer",
-                    transition: "all 0.2s ease",
-                  }}
+                  className={segmentButtonStyle(venueTab === "search")}
                 >
                   Search
                 </button>
               </div>
 
-              {/* Search Input (only for search tab) */}
+              {/* Search Input */}
               {venueTab === "search" && (
-                <div style={{ display: "flex", gap: "8px" }}>
-                  <div
-                    style={{
-                      flex: 1,
-                      display: "flex",
-                      alignItems: "center",
-                      gap: "8px",
-                      background: "#f2f2f7",
-                      borderRadius: "10px",
-                      padding: "10px 12px",
-                    }}
-                  >
+                <div className={searchRowStyle}>
+                  <div className={searchInputContainerStyle}>
                     <svg
                       width="20"
                       height="20"
                       viewBox="0 0 24 24"
                       fill="none"
-                      stroke="#8e8e93"
+                      stroke={colors.textSecondary}
                       strokeWidth="2"
                       strokeLinecap="round"
                       strokeLinejoin="round"
@@ -595,40 +829,20 @@ export function CheckinComposer(
                       type="text"
                       placeholder="Search for a venue..."
                       value={searchQuery}
-                      onChange={(e) =>
-                        setSearchQuery(e.target.value)}
+                      onChange={(e) => setSearchQuery(e.target.value)}
                       onKeyDown={(e) => {
                         if (e.key === "Enter") {
                           searchVenuesByName();
                         }
                       }}
-                      style={{
-                        flex: 1,
-                        border: "none",
-                        background: "transparent",
-                        outline: "none",
-                        fontSize: "15px",
-                        color: "#1c1c1e",
-                      }}
+                      className={searchInputStyle}
                     />
                   </div>
                   <button
                     type="button"
                     onClick={searchVenuesByName}
                     disabled={loadingVenues || !searchQuery.trim()}
-                    style={{
-                      background: "#007aff",
-                      color: "white",
-                      border: "none",
-                      borderRadius: "10px",
-                      padding: "10px 20px",
-                      fontSize: "15px",
-                      fontWeight: "600",
-                      cursor: loadingVenues || !searchQuery.trim()
-                        ? "not-allowed"
-                        : "pointer",
-                      opacity: loadingVenues || !searchQuery.trim() ? 0.5 : 1,
-                    }}
+                    className={searchButtonStyle}
                   >
                     Search
                   </button>
@@ -637,26 +851,9 @@ export function CheckinComposer(
 
               {/* Loading State */}
               {loadingVenues && (
-                <div
-                  style={{
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent: "center",
-                    padding: "40px",
-                    gap: "12px",
-                  }}
-                >
-                  <div
-                    style={{
-                      width: "20px",
-                      height: "20px",
-                      border: "2px solid #e5e5ea",
-                      borderTop: "2px solid #007aff",
-                      borderRadius: "50%",
-                      animation: "spin 1s ease-in-out infinite",
-                    }}
-                  />
-                  <span style={{ fontSize: "15px", color: "#8e8e93" }}>
+                <div className={loadingContainerStyle}>
+                  <div className={spinner(20)} />
+                  <span className={loadingTextStyle}>
                     {venueTab === "nearby"
                       ? "Finding nearby venues..."
                       : "Searching..."}
@@ -667,15 +864,8 @@ export function CheckinComposer(
               {/* Error State */}
               {venuesError && !loadingVenues && (
                 <div
-                  style={{
-                    background: "#fff3cd",
-                    border: "1px solid #ffc107",
-                    borderRadius: "8px",
-                    padding: "12px",
-                    fontSize: "14px",
-                    color: "#856404",
-                    textAlign: "center",
-                  }}
+                  className={warningBoxStyle}
+                  style={{ textAlign: "center" }}
                 >
                   {venuesError}
                 </div>
@@ -683,15 +873,7 @@ export function CheckinComposer(
 
               {/* Venues List */}
               {!loadingVenues && venues.length > 0 && (
-                <div
-                  style={{
-                    display: "flex",
-                    flexDirection: "column",
-                    gap: "8px",
-                    maxHeight: "400px",
-                    overflowY: "auto",
-                  }}
-                >
+                <div className={venueListStyle}>
                   {venues.map((venue) => (
                     <button
                       key={venue.id}
@@ -700,63 +882,16 @@ export function CheckinComposer(
                         setSelectedVenue(venue);
                         setStep("compose");
                       }}
-                      style={{
-                        background: "white",
-                        border: "1px solid #e5e5ea",
-                        borderRadius: "12px",
-                        padding: "12px",
-                        cursor: "pointer",
-                        textAlign: "left",
-                        transition: "all 0.2s ease",
-                      }}
-                      onMouseEnter={(e) => {
-                        e.currentTarget.style.background = "#f8f9fa";
-                        e.currentTarget.style.borderColor = "#007aff";
-                      }}
-                      onMouseLeave={(e) => {
-                        e.currentTarget.style.background = "white";
-                        e.currentTarget.style.borderColor = "#e5e5ea";
-                      }}
+                      className={venueButtonStyle}
                     >
-                      <div
-                        style={{
-                          display: "flex",
-                          alignItems: "center",
-                          gap: "12px",
-                        }}
-                      >
-                        <div
-                          style={{
-                            width: "40px",
-                            height: "40px",
-                            background: "#f0f8ff",
-                            borderRadius: "8px",
-                            display: "flex",
-                            alignItems: "center",
-                            justifyContent: "center",
-                            fontSize: "20px",
-                          }}
-                        >
+                      <div className={venueRowStyle}>
+                        <div className={venueIconStyle}>
                           {venue.icon || "📍"}
                         </div>
                         <div style={{ flex: 1 }}>
-                          <div
-                            style={{
-                              fontSize: "15px",
-                              fontWeight: "600",
-                              color: "#1c1c1e",
-                              marginBottom: "2px",
-                            }}
-                          >
-                            {venue.name}
-                          </div>
+                          <div className={venueNameStyle}>{venue.name}</div>
                           {venue.address?.locality && (
-                            <div
-                              style={{
-                                fontSize: "13px",
-                                color: "#8e8e93",
-                              }}
-                            >
+                            <div className={venueLocalityStyle}>
                               {venue.address.locality}
                             </div>
                           )}
@@ -766,7 +901,7 @@ export function CheckinComposer(
                           height="20"
                           viewBox="0 0 24 24"
                           fill="none"
-                          stroke="#c7c7cc"
+                          stroke={colors.textMuted}
                           strokeWidth="2"
                           strokeLinecap="round"
                           strokeLinejoin="round"
@@ -783,61 +918,25 @@ export function CheckinComposer(
 
           {/* Step 3: Compose Check-in */}
           {step === "compose" && selectedVenue && (
-            <div
-              style={{ display: "flex", flexDirection: "column", gap: "20px" }}
-            >
+            <div className={composeStepStyle}>
               {/* Selected Venue Preview */}
-              <div
-                style={{
-                  background: "#f8f9fa",
-                  border: "1px solid #e5e5ea",
-                  borderRadius: "12px",
-                  padding: "16px",
-                }}
-              >
-                <div
-                  style={{
-                    display: "flex",
-                    alignItems: "center",
-                    gap: "12px",
-                  }}
-                >
-                  <div
-                    style={{
-                      width: "48px",
-                      height: "48px",
-                      background: "#f0f8ff",
-                      borderRadius: "10px",
-                      display: "flex",
-                      alignItems: "center",
-                      justifyContent: "center",
-                      fontSize: "24px",
-                    }}
-                  >
+              <div className={selectedVenueCardStyle}>
+                <div className={selectedVenueRowStyle}>
+                  <div className={selectedVenueIconStyle}>
                     {selectedVenue.icon || "📍"}
                   </div>
                   <div style={{ flex: 1 }}>
-                    <div
-                      style={{
-                        fontSize: "16px",
-                        fontWeight: "600",
-                        color: "#1c1c1e",
-                        marginBottom: "2px",
-                      }}
-                    >
+                    <div className={selectedVenueNameStyle}>
                       {selectedVenue.name}
                     </div>
                     {selectedVenue.address && (
-                      <div
-                        style={{
-                          fontSize: "14px",
-                          color: "#8e8e93",
-                        }}
-                      >
+                      <div className={selectedVenueAddressStyle}>
                         {[
                           selectedVenue.address.street,
                           selectedVenue.address.locality,
-                        ].filter(Boolean).join(", ")}
+                        ]
+                          .filter(Boolean)
+                          .join(", ")}
                       </div>
                     )}
                   </div>
@@ -847,14 +946,7 @@ export function CheckinComposer(
                       setSelectedVenue(null);
                       setStep("venue");
                     }}
-                    style={{
-                      background: "none",
-                      border: "none",
-                      color: "#007aff",
-                      fontSize: "14px",
-                      fontWeight: "500",
-                      cursor: "pointer",
-                    }}
+                    className={changeVenueButtonStyle}
                   >
                     Change
                   </button>
@@ -863,66 +955,25 @@ export function CheckinComposer(
 
               {/* Message Input */}
               <div>
-                <label
-                  style={{
-                    display: "block",
-                    fontSize: "15px",
-                    fontWeight: "600",
-                    color: "#1c1c1e",
-                    marginBottom: "8px",
-                  }}
-                >
+                <label className={formLabelStyle}>
                   What's happening? (optional)
                 </label>
                 <textarea
                   value={checkinMessage}
-                  onChange={(e) => setCheckinMessage(e.target.value)}
+                  onChange={(e) =>
+                    setCheckinMessage(e.target.value)}
                   placeholder="Share your thoughts..."
                   maxLength={280}
-                  style={{
-                    width: "100%",
-                    minHeight: "120px",
-                    padding: "12px",
-                    border: "1px solid #e5e5ea",
-                    borderRadius: "10px",
-                    fontSize: "15px",
-                    color: "#1c1c1e",
-                    fontFamily: "inherit",
-                    resize: "vertical",
-                    outline: "none",
-                  }}
-                  onFocus={(e) => {
-                    e.currentTarget.style.borderColor = "#007aff";
-                  }}
-                  onBlur={(e) => {
-                    e.currentTarget.style.borderColor = "#e5e5ea";
-                  }}
+                  className={textareaStyle}
                 />
-                <div
-                  style={{
-                    fontSize: "13px",
-                    color: "#8e8e93",
-                    textAlign: "right",
-                    marginTop: "4px",
-                  }}
-                >
+                <div className={charCountStyle}>
                   {checkinMessage.length}/280
                 </div>
               </div>
 
               {/* Image Attachment */}
               <div>
-                <label
-                  style={{
-                    display: "block",
-                    fontSize: "15px",
-                    fontWeight: "600",
-                    color: "#1c1c1e",
-                    marginBottom: "8px",
-                  }}
-                >
-                  Add a photo (optional)
-                </label>
+                <label className={formLabelStyle}>Add a photo (optional)</label>
 
                 {!selectedImage && (
                   <div>
@@ -936,111 +987,49 @@ export function CheckinComposer(
                     />
                     <label
                       htmlFor="image-upload"
+                      className={uploadLabelStyle}
                       style={{
-                        display: "inline-flex",
-                        alignItems: "center",
-                        gap: "8px",
-                        padding: "12px 16px",
-                        background: "#f2f2f7",
-                        border: "1px solid #e5e5ea",
-                        borderRadius: "10px",
-                        fontSize: "15px",
-                        fontWeight: "500",
-                        color: "#007aff",
                         cursor: processingImage ? "not-allowed" : "pointer",
                         opacity: processingImage ? 0.5 : 1,
                       }}
                     >
-                      <span style={{ fontSize: "20px" }}>📷</span>
+                      <span style={{ fontSize: typography.sizes.xl }}>📷</span>
                       {processingImage ? "Processing..." : "Choose Photo"}
                     </label>
-                    <div
-                      style={{
-                        fontSize: "13px",
-                        color: "#8e8e93",
-                        marginTop: "6px",
-                      }}
-                    >
+                    <div className={uploadHintStyle}>
                       Max 30MB • JPEG, PNG, WebP, or GIF
                     </div>
                   </div>
                 )}
 
                 {selectedImage && imagePreview && (
-                  <div
-                    style={{
-                      border: "1px solid #e5e5ea",
-                      borderRadius: "10px",
-                      overflow: "hidden",
-                    }}
-                  >
+                  <div className={imagePreviewContainerStyle}>
                     <div style={{ position: "relative" }}>
                       <img
                         src={imagePreview}
                         alt="Preview"
-                        style={{
-                          width: "100%",
-                          height: "auto",
-                          maxHeight: "400px",
-                          objectFit: "contain",
-                          display: "block",
-                        }}
+                        className={imagePreviewStyle}
                       />
                       <button
                         type="button"
                         onClick={removeImage}
-                        style={{
-                          position: "absolute",
-                          top: "12px",
-                          right: "12px",
-                          width: "32px",
-                          height: "32px",
-                          background: "rgba(0, 0, 0, 0.6)",
-                          border: "none",
-                          borderRadius: "50%",
-                          color: "white",
-                          fontSize: "18px",
-                          cursor: "pointer",
-                          display: "flex",
-                          alignItems: "center",
-                          justifyContent: "center",
-                        }}
+                        className={removeImageButtonStyle}
                         aria-label="Remove image"
                       >
                         ×
                       </button>
                     </div>
-                    <div style={{ padding: "12px" }}>
+                    <div className={imageAltContainerStyle}>
                       <input
                         type="text"
                         value={imageAlt}
-                        onChange={(e) => setImageAlt(e.target.value)}
+                        onChange={(e) =>
+                          setImageAlt(e.target.value)}
                         placeholder="Describe this image (for accessibility)"
                         maxLength={200}
-                        style={{
-                          width: "100%",
-                          padding: "8px 12px",
-                          border: "1px solid #e5e5ea",
-                          borderRadius: "8px",
-                          fontSize: "14px",
-                          color: "#1c1c1e",
-                          fontFamily: "inherit",
-                          outline: "none",
-                        }}
-                        onFocus={(e) => {
-                          e.currentTarget.style.borderColor = "#007aff";
-                        }}
-                        onBlur={(e) => {
-                          e.currentTarget.style.borderColor = "#e5e5ea";
-                        }}
+                        className={imageAltInputStyle}
                       />
-                      <div
-                        style={{
-                          fontSize: "12px",
-                          color: "#8e8e93",
-                          marginTop: "4px",
-                        }}
-                      >
+                      <div className={charCountStyle}>
                         {imageAlt.length}/200
                       </div>
                     </div>
@@ -1053,31 +1042,14 @@ export function CheckinComposer(
 
         {/* Footer */}
         {step === "compose" && (
-          <div
-            style={{
-              padding: "16px 20px",
-              borderTop: "1px solid #e5e5ea",
-              display: "flex",
-              gap: "12px",
-            }}
-          >
+          <div className={footerStyle}>
             <button
               type="button"
               onClick={() => {
                 setSelectedVenue(null);
                 setStep("venue");
               }}
-              style={{
-                flex: 1,
-                background: "#f2f2f7",
-                color: "#1c1c1e",
-                border: "none",
-                borderRadius: "10px",
-                padding: "12px",
-                fontSize: "16px",
-                fontWeight: "600",
-                cursor: "pointer",
-              }}
+              className={backButtonStyle}
             >
               Back
             </button>
@@ -1085,43 +1057,18 @@ export function CheckinComposer(
               type="button"
               onClick={submitCheckin}
               disabled={submitting || !selectedVenue}
-              style={{
-                flex: 2,
-                background: submitting || !selectedVenue
-                  ? "#c7c7cc"
-                  : "#007aff",
-                color: "white",
-                border: "none",
-                borderRadius: "10px",
-                padding: "12px",
-                fontSize: "16px",
-                fontWeight: "600",
-                cursor: submitting || !selectedVenue
-                  ? "not-allowed"
-                  : "pointer",
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                gap: "8px",
-              }}
+              className={submitButtonStyle}
             >
               {submitting
                 ? (
                   <>
-                    <div
-                      style={{
-                        width: "16px",
-                        height: "16px",
-                        border: "2px solid white",
-                        borderTop: "2px solid transparent",
-                        borderRadius: "50%",
-                        animation: "spin 1s linear infinite",
-                      }}
-                    />
+                    <div className={spinnerWhite(16)} />
                     Posting...
                   </>
                 )
-                : "Post Check-in"}
+                : (
+                  "Post Check-in"
+                )}
             </button>
           </div>
         )}

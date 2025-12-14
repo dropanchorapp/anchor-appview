@@ -1,7 +1,17 @@
 /** @jsxImportSource https://esm.sh/react@19.1.0 */
 import { useState } from "https://esm.sh/react@19.1.0";
+import { css } from "https://esm.sh/@emotion/css@11.13.5";
 import { AuthState, CheckinData } from "../types/index.ts";
 import { apiDelete } from "../utils/api.ts";
+import { avatar, avatarFallback, locationBadge } from "../styles/components.ts";
+import {
+  colors,
+  radii,
+  shadows,
+  spacing,
+  transitions,
+  typography,
+} from "../styles/theme.ts";
 
 interface CheckinCardProps {
   checkin: CheckinData;
@@ -9,16 +19,150 @@ interface CheckinCardProps {
   onDelete?: (checkinId: string) => void;
 }
 
+const cardStyle = css`
+  background: ${colors.surface};
+  border-radius: ${radii.xl};
+  box-shadow: ${shadows.sm};
+  padding: ${spacing.lg};
+  cursor: pointer;
+  transition: transform ${transitions.fast}, box-shadow ${transitions.fast};
+  position: relative;
+
+  &:hover {
+    transform: translateY(-1px);
+    box-shadow: ${shadows.lg};
+  }
+
+  &:hover .arrow-indicator {
+    color: ${colors.primary};
+  }
+`;
+
+const headerStyle = css`
+  display: flex;
+  align-items: center;
+  gap: ${spacing.md};
+  margin-bottom: ${spacing.md};
+`;
+
+const authorInfoStyle = css`
+  flex: 1;
+`;
+
+const displayNameStyle = css`
+  font-weight: ${typography.weights.semibold};
+  font-size: ${typography.sizes.base};
+  color: ${colors.text};
+  display: flex;
+  align-items: center;
+  gap: ${spacing.xs};
+`;
+
+const handleStyle = css`
+  font-size: ${typography.sizes.sm};
+  color: ${colors.textSecondary};
+`;
+
+const metaStyle = css`
+  display: flex;
+  align-items: center;
+  gap: ${spacing.sm};
+`;
+
+const timeStyle = css`
+  font-size: ${typography.sizes.sm};
+  color: ${colors.textSecondary};
+`;
+
+const arrowStyle = css`
+  font-size: ${typography.sizes.xs};
+  color: ${colors.textMuted};
+  transition: color ${transitions.fast};
+`;
+
+const contentStyle = css`
+  margin-bottom: ${spacing.md};
+`;
+
+const textStyle = css`
+  font-size: ${typography.sizes.base};
+  line-height: ${typography.lineHeights.normal};
+  color: ${colors.text};
+  margin-bottom: ${spacing.md};
+`;
+
+const imageContainerStyle = css`
+  margin-bottom: ${spacing.md};
+  width: 120px;
+  height: 120px;
+  border-radius: ${radii.md};
+  overflow: hidden;
+  border: 1px solid ${colors.border};
+`;
+
+const imageStyle = css`
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+`;
+
+const likesStyle = css`
+  display: flex;
+  align-items: center;
+  gap: ${spacing.xs};
+  font-size: ${typography.sizes.sm};
+  color: ${colors.textSecondary};
+  margin-top: ${spacing.sm};
+`;
+
+const deleteButtonStyle = css`
+  position: absolute;
+  bottom: ${spacing.md};
+  right: ${spacing.md};
+  background: rgba(255, 255, 255, 0.95);
+  border: 1px solid rgba(0, 0, 0, 0.1);
+  cursor: pointer;
+  color: ${colors.error};
+  padding: ${spacing.sm};
+  border-radius: ${radii.sm};
+  transition: all ${transitions.normal};
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  box-shadow: ${shadows.sm};
+
+  &:hover:not(:disabled) {
+    background: ${colors.errorLight};
+    transform: scale(1.05);
+  }
+
+  &:disabled {
+    cursor: not-allowed;
+    opacity: 0.5;
+    color: ${colors.textMuted};
+  }
+`;
+
+const beaconBitsLinkStyle = css`
+  display: flex;
+
+  &:hover svg {
+    opacity: 0.8;
+  }
+`;
+
 export function CheckinCard({ checkin, auth, onDelete }: CheckinCardProps) {
   const [isDeleting, setIsDeleting] = useState(false);
 
   const handleClick = () => {
-    // Use DID-based URL for consistency with share URL
     globalThis.location.href = `/checkins/${checkin.author.did}/${checkin.id}`;
   };
 
   const handleDelete = async (e: React.MouseEvent) => {
-    e.stopPropagation(); // Prevent card click
+    e.stopPropagation();
 
     if (!confirm("Are you sure you want to delete this check-in?")) {
       return;
@@ -34,7 +178,6 @@ export function CheckinCard({ checkin, auth, onDelete }: CheckinCardProps) {
         if (onDelete) {
           onDelete(checkin.id);
         } else {
-          // Refresh the page if no callback provided
           globalThis.location.reload();
         }
       } else {
@@ -49,92 +192,44 @@ export function CheckinCard({ checkin, auth, onDelete }: CheckinCardProps) {
     }
   };
 
-  // Check if current user can delete this checkin
   const canDelete = auth.isAuthenticated && auth.userDid === checkin.author.did;
 
+  const formatTime = () => {
+    const date = new Date(checkin.createdAt);
+    const now = new Date();
+    const diffMs = now.getTime() - date.getTime();
+    const diffSecs = Math.floor(diffMs / 1000);
+    const diffMins = Math.floor(diffSecs / 60);
+    const diffHours = Math.floor(diffMins / 60);
+    const diffDays = Math.floor(diffHours / 24);
+
+    if (diffSecs < 60) return "now";
+    if (diffMins < 60) return diffMins + "m";
+    if (diffHours < 24) return diffHours + "h";
+    if (diffDays < 7) return diffDays + "d";
+    return date.toLocaleDateString();
+  };
+
   return (
-    <div
-      onClick={handleClick}
-      style={{
-        background: "white",
-        borderRadius: "12px",
-        boxShadow: "0 1px 3px rgba(0,0,0,0.1)",
-        padding: "16px",
-        cursor: "pointer",
-        transition: "transform 0.1s ease-in-out, box-shadow 0.1s ease-in-out",
-        position: "relative",
-      }}
-      onMouseEnter={(e) => {
-        e.currentTarget.style.transform = "translateY(-1px)";
-        e.currentTarget.style.boxShadow = "0 4px 12px rgba(0,0,0,0.15)";
-        // Change arrow color on hover
-        const arrow = e.currentTarget.querySelector(
-          "[data-arrow]",
-        ) as HTMLElement;
-        if (arrow) arrow.style.color = "#007aff";
-      }}
-      onMouseLeave={(e) => {
-        e.currentTarget.style.transform = "translateY(0)";
-        e.currentTarget.style.boxShadow = "0 1px 3px rgba(0,0,0,0.1)";
-        // Reset arrow color
-        const arrow = e.currentTarget.querySelector(
-          "[data-arrow]",
-        ) as HTMLElement;
-        if (arrow) arrow.style.color = "#c7c7cc";
-      }}
-    >
-      <div
-        style={{
-          display: "flex",
-          alignItems: "center",
-          gap: "12px",
-          marginBottom: "12px",
-        }}
-      >
+    <div onClick={handleClick} className={cardStyle}>
+      <div className={headerStyle}>
         {checkin.author.avatar
           ? (
             <img
               src={checkin.author.avatar}
               alt={checkin.author.displayName || checkin.author.handle}
-              style={{
-                width: "40px",
-                height: "40px",
-                borderRadius: "20px",
-                objectFit: "cover",
-              }}
+              className={avatar(40)}
             />
           )
           : (
-            <div
-              style={{
-                width: "40px",
-                height: "40px",
-                background: "linear-gradient(135deg, #667eea 0%, #764ba2 100%)",
-                borderRadius: "20px",
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                fontSize: "16px",
-                fontWeight: "600",
-                color: "white",
-              }}
-            >
+            <div className={avatarFallback(40, 16)}>
               {(checkin.author.displayName || checkin.author.handle)?.[0]
                 ?.toUpperCase() || "?"}
             </div>
           )}
 
-        <div style={{ flex: "1" }}>
-          <div
-            style={{
-              fontWeight: "600",
-              fontSize: "15px",
-              color: "#1c1c1e",
-              display: "flex",
-              alignItems: "center",
-              gap: "4px",
-            }}
-          >
+        <div className={authorInfoStyle}>
+          <div className={displayNameStyle}>
             {checkin.author.displayName || checkin.author.handle}
             {checkin.source === "beaconbits" && (
               <a
@@ -142,16 +237,10 @@ export function CheckinCard({ checkin, auth, onDelete }: CheckinCardProps) {
                 target="_blank"
                 rel="noopener noreferrer"
                 title="View on BeaconBits"
-                style={{ display: "flex" }}
+                className={beaconBitsLinkStyle}
                 onClick={(e) => e.stopPropagation()}
               >
-                <svg
-                  viewBox="0 0 705 704"
-                  width="14"
-                  height="14"
-                  fill="none"
-                  style={{ flexShrink: 0 }}
-                >
+                <svg viewBox="0 0 705 704" width="14" height="14" fill="none">
                   <path
                     fill="#E24630"
                     fillRule="evenodd"
@@ -168,117 +257,36 @@ export function CheckinCard({ checkin, auth, onDelete }: CheckinCardProps) {
               </a>
             )}
           </div>
-          <div
-            style={{
-              fontSize: "13px",
-              color: "#8e8e93",
-            }}
-          >
-            @{checkin.author.handle}
-          </div>
+          <div className={handleStyle}>@{checkin.author.handle}</div>
         </div>
 
-        <div
-          style={{
-            display: "flex",
-            alignItems: "center",
-            gap: "8px",
-          }}
-        >
-          <time
-            style={{
-              fontSize: "13px",
-              color: "#8e8e93",
-            }}
-          >
-            {(() => {
-              const date = new Date(checkin.createdAt);
-              const now = new Date();
-              const diffMs = now.getTime() - date.getTime();
-              const diffSecs = Math.floor(diffMs / 1000);
-              const diffMins = Math.floor(diffSecs / 60);
-              const diffHours = Math.floor(diffMins / 60);
-              const diffDays = Math.floor(diffHours / 24);
-
-              if (diffSecs < 60) return "now";
-              if (diffMins < 60) return diffMins + "m";
-              if (diffHours < 24) return diffHours + "h";
-              if (diffDays < 7) return diffDays + "d";
-              return date.toLocaleDateString();
-            })()}
-          </time>
-          <span
-            data-arrow
-            style={{
-              fontSize: "12px",
-              color: "#c7c7cc",
-              transition: "color 0.1s ease-in-out",
-            }}
-          >
-            →
-          </span>
+        <div className={metaStyle}>
+          <time className={timeStyle}>{formatTime()}</time>
+          <span className={`${arrowStyle} arrow-indicator`}>→</span>
         </div>
       </div>
 
-      <div style={{ marginBottom: "12px" }}>
-        {checkin.text && (
-          <div
-            style={{
-              fontSize: "15px",
-              lineHeight: "1.4",
-              color: "#1c1c1e",
-              marginBottom: "12px",
-            }}
-          >
-            {checkin.text}
-          </div>
-        )}
+      <div className={contentStyle}>
+        {checkin.text && <div className={textStyle}>{checkin.text}</div>}
 
         {checkin.image && (
-          <div
-            style={{
-              marginBottom: "12px",
-              width: "120px",
-              height: "120px",
-              borderRadius: "8px",
-              overflow: "hidden",
-              border: "1px solid #e5e5ea",
-            }}
-          >
+          <div className={imageContainerStyle}>
             <img
               src={checkin.image.thumbUrl}
               alt={checkin.image.alt || "Check-in photo"}
-              style={{
-                width: "100%",
-                height: "100%",
-                objectFit: "cover",
-                display: "block",
-              }}
+              className={imageStyle}
             />
           </div>
         )}
 
         {(checkin.address || checkin.coordinates) && (
-          <div
-            style={{
-              display: "flex",
-              alignItems: "center",
-              gap: "6px",
-              fontSize: "14px",
-              color: "#007aff",
-              background: "#f0f8ff",
-              padding: "6px 10px",
-              borderRadius: "8px",
-              width: "fit-content",
-            }}
-          >
-            <span style={{ fontSize: "12px" }}>📍</span>
+          <div className={locationBadge}>
+            <span style={{ fontSize: typography.sizes.xs }}>📍</span>
             <span>
               {checkin.address
-                ? [
-                  checkin.address.name,
-                  checkin.address.locality,
-                ].filter(Boolean).join(", ")
+                ? [checkin.address.name, checkin.address.locality]
+                  .filter(Boolean)
+                  .join(", ")
                 : checkin.coordinates
                 ? `${checkin.coordinates.latitude.toFixed(4)}, ${
                   checkin.coordinates.longitude.toFixed(4)
@@ -289,16 +297,7 @@ export function CheckinCard({ checkin, auth, onDelete }: CheckinCardProps) {
         )}
 
         {checkin.likesCount && checkin.likesCount > 0 && (
-          <div
-            style={{
-              display: "flex",
-              alignItems: "center",
-              gap: "4px",
-              fontSize: "13px",
-              color: "#8e8e93",
-              marginTop: "8px",
-            }}
-          >
+          <div className={likesStyle}>
             <svg
               width="14"
               height="14"
@@ -318,35 +317,7 @@ export function CheckinCard({ checkin, auth, onDelete }: CheckinCardProps) {
           type="button"
           onClick={handleDelete}
           disabled={isDeleting}
-          style={{
-            position: "absolute",
-            bottom: "12px",
-            right: "12px",
-            background: "rgba(255, 255, 255, 0.95)",
-            border: "1px solid rgba(0, 0, 0, 0.1)",
-            cursor: isDeleting ? "not-allowed" : "pointer",
-            color: isDeleting ? "#c7c7cc" : "#ff3b30",
-            padding: "6px",
-            borderRadius: "6px",
-            transition: "all 0.2s ease-in-out",
-            opacity: isDeleting ? 0.5 : 1,
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            width: "28px",
-            height: "28px",
-            boxShadow: "0 1px 3px rgba(0, 0, 0, 0.1)",
-          }}
-          onMouseEnter={(e) => {
-            if (!isDeleting) {
-              e.currentTarget.style.background = "#ffebee";
-              e.currentTarget.style.transform = "scale(1.05)";
-            }
-          }}
-          onMouseLeave={(e) => {
-            e.currentTarget.style.background = "rgba(255, 255, 255, 0.95)";
-            e.currentTarget.style.transform = "scale(1)";
-          }}
+          className={deleteButtonStyle}
           title={isDeleting ? "Deleting..." : "Delete check-in"}
         >
           <svg
@@ -359,21 +330,15 @@ export function CheckinCard({ checkin, auth, onDelete }: CheckinCardProps) {
             strokeLinecap="round"
             strokeLinejoin="round"
           >
-            {isDeleting
-              ? (
-                // Loader icon (rotating circle)
-                <circle cx="12" cy="12" r="10" opacity="0.25" />
-              )
-              : (
-                // Trash icon (lucide-trash-2)
-                <>
-                  <path d="M3 6h18" />
-                  <path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6" />
-                  <path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2" />
-                  <line x1="10" x2="10" y1="11" y2="17" />
-                  <line x1="14" x2="14" y1="11" y2="17" />
-                </>
-              )}
+            {isDeleting ? <circle cx="12" cy="12" r="10" opacity="0.25" /> : (
+              <>
+                <path d="M3 6h18" />
+                <path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6" />
+                <path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2" />
+                <line x1="10" x2="10" y1="11" y2="17" />
+                <line x1="14" x2="14" y1="11" y2="17" />
+              </>
+            )}
           </svg>
         </button>
       )}

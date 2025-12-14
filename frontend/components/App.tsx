@@ -4,6 +4,7 @@ import React, {
   useRef,
   useState,
 } from "https://esm.sh/react@19.1.0";
+import { css } from "https://esm.sh/@emotion/css@11.13.5";
 import { Header } from "./Header.tsx";
 import { Feed } from "./Feed.tsx";
 import { About } from "./About.tsx";
@@ -14,6 +15,17 @@ import { CheckinDetail } from "./CheckinDetail.tsx";
 import { CheckinComposer } from "./CheckinComposer.tsx";
 import { AuthState, CheckinData } from "../types/index.ts";
 import { apiFetch } from "../utils/api.ts";
+import { injectGlobalStyles } from "../styles/globalStyles.ts";
+import { alertError, container, fab } from "../styles/components.ts";
+import { spacing } from "../styles/theme.ts";
+
+const appContainerStyle = css`
+  min-height: 100vh;
+`;
+
+const mainContentStyle = css`
+  ${container} padding-top: ${spacing.xl};
+`;
 
 export function App() {
   // Check if we're on the mobile-auth route first, before any hooks
@@ -43,7 +55,7 @@ export function App() {
     if (restMatch) {
       [, checkinDid, checkinRkey] = restMatch;
       isCheckinDetail = true;
-      checkinId = `${checkinDid}/${checkinRkey}`; // For CheckinDetail component
+      checkinId = `${checkinDid}/${checkinRkey}`;
     } else {
       // Fallback to legacy URL: /checkin/:id
       checkinMatch = pathname.match(/^\/checkin\/(.+)$/);
@@ -68,8 +80,8 @@ export function App() {
     return <CheckinDetail checkinId={checkinId} />;
   }
 
-  const [allCheckins, setAllCheckins] = useState<CheckinData[]>([]); // All checkins, sorted by date
-  const [displayedCount, setDisplayedCount] = useState(20); // How many to show
+  const [allCheckins, setAllCheckins] = useState<CheckinData[]>([]);
+  const [displayedCount, setDisplayedCount] = useState(20);
   const [loading, setLoading] = useState(false);
   const [auth, setAuth] = useState<AuthState>({ isAuthenticated: false });
   const [error, setError] = useState<string | null>(null);
@@ -80,45 +92,12 @@ export function App() {
   const userDropdownRef = useRef<HTMLDivElement>(null);
   const [showCheckinComposer, setShowCheckinComposer] = useState(false);
 
-  // Inject proper CSS styles on mount
+  // Inject global styles on mount
   useEffect(() => {
-    const style = document.createElement("style");
-    style.textContent = `
-      * {
-        margin: 0;
-        padding: 0;
-        box-sizing: border-box;
-      }
-      
-      body {
-        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
-        line-height: 1.5;
-        color: #1c1c1e;
-        background: #f2f2f7;
-        min-height: 100vh;
-      }
-
-      @keyframes spin {
-        to { transform: rotate(360deg); }
-      }
-
-      /* Mobile responsive styles */
-      @media (max-width: 768px) {
-        body {
-          font-size: 16px; /* Prevent iOS zoom on input focus */
-        }
-      }
-    `;
-    document.head.appendChild(style);
-    return () => {
-      if (style.parentNode) {
-        document.head.removeChild(style);
-      }
-    };
+    injectGlobalStyles();
   }, []);
 
   // Check authentication status on load
-  // NOTE: Use regular fetch() here, not apiFetch(), to avoid redirect loops
   useEffect(() => {
     const checkAuth = async () => {
       try {
@@ -163,7 +142,6 @@ export function App() {
   }, [showUserDropdown]);
 
   // Load all checkins, sort by date, paginate client-side
-  // (AT Protocol listRecords only sorts by rkey, not by createdAt)
   useEffect(() => {
     const loadFeed = async () => {
       setLoading(true);
@@ -171,21 +149,18 @@ export function App() {
       setDisplayedCount(20);
 
       try {
-        // For timeline feed, require authentication
         if (!auth.isAuthenticated) {
           setAllCheckins([]);
           setLoading(false);
           return;
         }
 
-        // If no valid user DID, don't fetch
         if (!auth.userDid) {
           setAllCheckins([]);
           setLoading(false);
           return;
         }
 
-        // Fetch ALL checkins by following pagination cursors
         const allFetchedCheckins: CheckinData[] = [];
         let cursor: string | null = null;
 
@@ -214,7 +189,6 @@ export function App() {
           }
         } while (cursor);
 
-        // Sort all checkins by createdAt descending (newest first)
         const sortedCheckins = allFetchedCheckins.sort(
           (a: CheckinData, b: CheckinData) => {
             const dateA = new Date(a.createdAt || 0).getTime();
@@ -237,12 +211,10 @@ export function App() {
     loadFeed();
   }, [auth.isAuthenticated, auth.userDid]);
 
-  // Derived state: checkins to display and pagination info
   const checkins = allCheckins.slice(0, displayedCount);
   const hasMore = displayedCount < allCheckins.length;
-  const loadingMore = false; // No async loading for client-side pagination
+  const loadingMore = false;
 
-  // Load more checkins (client-side pagination)
   const loadMore = () => {
     if (displayedCount >= allCheckins.length) return;
     setDisplayedCount((prev) => Math.min(prev + 20, allCheckins.length));
@@ -257,7 +229,6 @@ export function App() {
     setLoginLoading(true);
 
     try {
-      // Iron Session OAuth: direct redirect to /login with handle parameter
       globalThis.location.href = `/login?handle=${
         encodeURIComponent(loginHandle)
       }`;
@@ -282,7 +253,6 @@ export function App() {
 
       setAuth({ isAuthenticated: false });
       setShowUserDropdown(false);
-      // Refresh page to clear any cached state
       globalThis.location.reload();
     } catch (error) {
       console.error("Logout failed:", error);
@@ -290,7 +260,7 @@ export function App() {
   };
 
   return (
-    <div style={{ minHeight: "100vh" }}>
+    <div className={appContainerStyle}>
       <Header
         auth={auth}
         onLogin={handleLogin}
@@ -299,13 +269,7 @@ export function App() {
         setShowUserDropdown={setShowUserDropdown}
       />
 
-      <div
-        style={{
-          padding: "20px 20px 0 20px",
-          maxWidth: "1200px",
-          margin: "0 auto",
-        }}
-      >
+      <div className={mainContentStyle}>
         {auth.isAuthenticated
           ? (
             <Feed
@@ -331,62 +295,21 @@ export function App() {
       />
 
       {error && (
-        <div
-          style={{
-            position: "fixed",
-            bottom: "20px",
-            right: "20px",
-            background: "#ff3b30",
-            color: "white",
-            borderRadius: "12px",
-            boxShadow: "0 4px 12px rgba(255, 59, 48, 0.3)",
-            padding: "12px 16px",
-            maxWidth: "300px",
-            fontSize: "14px",
-            zIndex: "1000",
-          }}
-        >
+        <div className={alertError}>
           <strong>Error:</strong> {error}
         </div>
       )}
 
-      {/* Floating Action Button (FAB) - only for authenticated users */}
       {auth.isAuthenticated && (
         <button
           type="button"
           onClick={() => setShowCheckinComposer(true)}
-          style={{
-            position: "fixed",
-            bottom: globalThis.innerWidth <= 768 ? "16px" : "24px",
-            right: globalThis.innerWidth <= 768 ? "16px" : "24px",
-            width: globalThis.innerWidth <= 768 ? "60px" : "56px",
-            height: globalThis.innerWidth <= 768 ? "60px" : "56px",
-            borderRadius: globalThis.innerWidth <= 768 ? "30px" : "28px",
-            background: "#007aff",
-            border: "none",
-            boxShadow: "0 4px 12px rgba(0, 122, 255, 0.4)",
-            cursor: "pointer",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            transition: "all 0.2s ease",
-            zIndex: "100",
-          }}
-          onMouseEnter={(e) => {
-            e.currentTarget.style.transform = "scale(1.1)";
-            e.currentTarget.style.boxShadow =
-              "0 6px 16px rgba(0, 122, 255, 0.5)";
-          }}
-          onMouseLeave={(e) => {
-            e.currentTarget.style.transform = "scale(1)";
-            e.currentTarget.style.boxShadow =
-              "0 4px 12px rgba(0, 122, 255, 0.4)";
-          }}
+          className={fab}
           title="Create check-in"
         >
           <svg
-            width={globalThis.innerWidth <= 768 ? "32" : "28"}
-            height={globalThis.innerWidth <= 768 ? "32" : "28"}
+            width="28"
+            height="28"
             viewBox="0 0 24 24"
             fill="none"
             stroke="white"
@@ -400,13 +323,11 @@ export function App() {
         </button>
       )}
 
-      {/* Check-in Composer Modal */}
       <CheckinComposer
         isOpen={showCheckinComposer}
         onClose={() => setShowCheckinComposer(false)}
         onSuccess={(checkinUrl) => {
           setShowCheckinComposer(false);
-          // Redirect to checkin detail page
           globalThis.location.href = checkinUrl;
         }}
       />
