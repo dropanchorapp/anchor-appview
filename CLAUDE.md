@@ -52,7 +52,7 @@ Local database storage:
 
 **OAuth Authentication** (`backend/routes/oauth.ts`, `backend/oauth/`):
 
-- Uses custom package `jsr:@tijs/atproto-oauth@2.3.0`
+- Uses custom package `jsr:@tijs/atproto-oauth@2.4.0`
 - Provides web and mobile (iOS) authentication flows
 - Mobile: Custom URL scheme `anchor-app://auth-callback`
 - Session storage via Drizzle ORM with SQLite
@@ -217,7 +217,7 @@ The OAuth system uses a custom package that handles:
 ### Usage Pattern
 
 ```typescript
-import { createATProtoOAuth } from "jsr:@tijs/atproto-oauth@2.3.0";
+import { createATProtoOAuth } from "jsr:@tijs/atproto-oauth@2.4.0";
 
 const oauth = createATProtoOAuth({
   baseUrl: BASE_URL,
