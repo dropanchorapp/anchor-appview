@@ -12,6 +12,7 @@ import { CheckinDetail } from "./CheckinDetail.tsx";
 import { CheckinComposer } from "./CheckinComposer.tsx";
 import { AuthState, CheckinData } from "../types/index.ts";
 import { apiFetch } from "../utils/api.ts";
+import { checkinCache } from "../utils/checkin-cache.ts";
 import { injectGlobalStyles } from "../styles/globalStyles.ts";
 import { alertError } from "../styles/components.ts";
 
@@ -62,6 +63,7 @@ export function App() {
   const [displayedCount, setDisplayedCount] = useState(20);
   const [loading, setLoading] = useState(false);
   const [auth, setAuth] = useState<AuthState>({ isAuthenticated: false });
+  const [authLoading, setAuthLoading] = useState(true); // Track initial auth check
   const [error, setError] = useState<string | null>(null);
   const [showLoginForm, setShowLoginForm] = useState(false);
   const [loginHandle, setLoginHandle] = useState("");
@@ -91,68 +93,94 @@ export function App() {
         }
       } catch (error) {
         console.error("Auth check failed:", error);
+      } finally {
+        setAuthLoading(false);
       }
     };
 
     checkAuth();
   }, []);
 
-  // Load all checkins, sort by date, paginate client-side
+  // Fetch checkins from API and cache them
+  const fetchAndCacheCheckins = async (
+    userDid: string,
+  ): Promise<CheckinData[]> => {
+    const allFetchedCheckins: CheckinData[] = [];
+    let cursor: string | null = null;
+
+    do {
+      const url = cursor
+        ? `/api/checkins/${userDid}?limit=100&cursor=${
+          encodeURIComponent(cursor)
+        }`
+        : `/api/checkins/${userDid}?limit=100`;
+
+      const response = await apiFetch(url);
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error("API error response:", errorText);
+        throw new Error(`Failed to fetch: ${response.status} - ${errorText}`);
+      }
+
+      const data = await response.json();
+      if (data && typeof data === "object") {
+        allFetchedCheckins.push(...(data.checkins || []));
+        cursor = data.cursor || null;
+      } else {
+        throw new Error("Unexpected response format from server");
+      }
+    } while (cursor);
+
+    const sortedCheckins = allFetchedCheckins.sort(
+      (a: CheckinData, b: CheckinData) => {
+        const dateA = new Date(a.createdAt || 0).getTime();
+        const dateB = new Date(b.createdAt || 0).getTime();
+        return dateB - dateA;
+      },
+    );
+
+    // Cache the fresh data
+    await checkinCache.setFeed(userDid, sortedCheckins);
+
+    return sortedCheckins;
+  };
+
+  // Load checkins with cache-first strategy (stale-while-revalidate)
   useEffect(() => {
     const loadFeed = async () => {
-      setLoading(true);
       setError(null);
       setDisplayedCount(20);
 
+      if (!auth.isAuthenticated || !auth.userDid) {
+        setAllCheckins([]);
+        setLoading(false);
+        return;
+      }
+
+      const userDid = auth.userDid;
+
       try {
-        if (!auth.isAuthenticated) {
-          setAllCheckins([]);
+        // Try cache first
+        const cached = await checkinCache.getFeed(userDid);
+
+        if (cached && checkinCache.isCacheValid(cached.timestamp)) {
+          // Use cached data immediately
+          setAllCheckins(cached.checkins);
           setLoading(false);
+
+          // Background revalidate if cache is getting stale
+          if (checkinCache.needsRevalidation(cached.timestamp)) {
+            fetchAndCacheCheckins(userDid)
+              .then(setAllCheckins)
+              .catch((err) => console.warn("Background refresh failed:", err));
+          }
           return;
         }
 
-        if (!auth.userDid) {
-          setAllCheckins([]);
-          setLoading(false);
-          return;
-        }
-
-        const allFetchedCheckins: CheckinData[] = [];
-        let cursor: string | null = null;
-
-        do {
-          const url = cursor
-            ? `/api/checkins/${auth.userDid}?limit=100&cursor=${
-              encodeURIComponent(cursor)
-            }`
-            : `/api/checkins/${auth.userDid}?limit=100`;
-
-          const response = await apiFetch(url);
-          if (!response.ok) {
-            const errorText = await response.text();
-            console.error("API error response:", errorText);
-            throw new Error(
-              `Failed to fetch: ${response.status} - ${errorText}`,
-            );
-          }
-
-          const data = await response.json();
-          if (data && typeof data === "object") {
-            allFetchedCheckins.push(...(data.checkins || []));
-            cursor = data.cursor || null;
-          } else {
-            throw new Error("Unexpected response format from server");
-          }
-        } while (cursor);
-
-        const sortedCheckins = allFetchedCheckins.sort(
-          (a: CheckinData, b: CheckinData) => {
-            const dateA = new Date(a.createdAt || 0).getTime();
-            const dateB = new Date(b.createdAt || 0).getTime();
-            return dateB - dateA;
-          },
-        );
-        setAllCheckins(sortedCheckins);
+        // No cache or expired - fetch fresh with loading state
+        setLoading(true);
+        const checkins = await fetchAndCacheCheckins(userDid);
+        setAllCheckins(checkins);
       } catch (error) {
         console.error("Failed to load feed:", error);
         setError(
@@ -198,6 +226,9 @@ export function App() {
   const handleLogout = async () => {
     try {
       if (auth.userDid) {
+        // Clear cache before logout
+        await checkinCache.clearAll(auth.userDid);
+
         await apiFetch("/api/auth/logout", {
           method: "POST",
           headers: {
@@ -240,7 +271,11 @@ export function App() {
       return <CheckinDetail checkinId={checkinId} auth={auth} />;
     }
 
-    // Home/Feed page
+    // Home/Feed page - show loading state while checking auth
+    if (authLoading) {
+      return null; // Minimal loading - just empty content, layout still shows
+    }
+
     if (auth.isAuthenticated) {
       return (
         <Feed
@@ -299,8 +334,12 @@ export function App() {
       <CheckinComposer
         isOpen={showCheckinComposer}
         onClose={() => setShowCheckinComposer(false)}
-        onSuccess={(checkinUrl) => {
+        onSuccess={async (checkinUrl) => {
           setShowCheckinComposer(false);
+          // Invalidate cache so feed refreshes with new checkin
+          if (auth.userDid) {
+            await checkinCache.invalidateFeed(auth.userDid);
+          }
           globalThis.location.href = checkinUrl;
         }}
       />

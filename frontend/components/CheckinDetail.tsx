@@ -4,6 +4,7 @@ import { css } from "https://esm.sh/@emotion/css@11.13.5";
 import { AuthState, CheckinData } from "../types/index.ts";
 import { ImageLightbox } from "./ImageLightbox.tsx";
 import { apiDelete, apiFetch } from "../utils/api.ts";
+import { checkinCache } from "../utils/checkin-cache.ts";
 import { injectGlobalStyles } from "../styles/globalStyles.ts";
 import { avatar, avatarFallback, flexCenter } from "../styles/components.ts";
 import {
@@ -492,7 +493,7 @@ export function CheckinDetail({ checkinId, auth }: CheckinDetailProps) {
 
   // Handle like/unlike
   const handleLike = async () => {
-    if (!currentAuth.isAuthenticated) return;
+    if (!currentAuth.isAuthenticated || !currentAuth.userDid) return;
     if (!checkin || !checkinId.includes("/")) return;
 
     try {
@@ -510,8 +511,18 @@ export function CheckinDetail({ checkinId, auth }: CheckinDetailProps) {
           throw new Error(`Failed to unlike: ${response.status}`);
         }
 
+        const newCount = Math.max(0, likesCount - 1);
         setIsLiked(false);
-        setLikesCount((prev) => Math.max(0, prev - 1));
+        setLikesCount(newCount);
+
+        // Update cache with new like count
+        if (checkin.uri) {
+          await checkinCache.updateCheckinLikes(
+            currentAuth.userDid,
+            checkin.uri,
+            newCount,
+          );
+        }
       } else {
         const response = await apiFetch(
           `/api/checkins/${checkinDid}/${checkinRkey}/likes`,
@@ -525,8 +536,18 @@ export function CheckinDetail({ checkinId, auth }: CheckinDetailProps) {
           throw new Error(`Failed to like: ${response.status}`);
         }
 
+        const newCount = likesCount + 1;
         setIsLiked(true);
-        setLikesCount((prev) => prev + 1);
+        setLikesCount(newCount);
+
+        // Update cache with new like count
+        if (checkin.uri) {
+          await checkinCache.updateCheckinLikes(
+            currentAuth.userDid,
+            checkin.uri,
+            newCount,
+          );
+        }
       }
     } catch (error) {
       console.error("Failed to toggle like:", error);
