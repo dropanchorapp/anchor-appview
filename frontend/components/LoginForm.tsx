@@ -80,7 +80,7 @@ export function LoginForm({
       setLoginHandle((e.target as HTMLInputElement).value);
     el.addEventListener("input", handler);
     return () => el.removeEventListener("input", handler);
-  }, [setLoginHandle]);
+  }, [showLoginForm, setLoginHandle]);
 
   if (!showLoginForm) return null;
 
