@@ -59,7 +59,6 @@
     "test:integration": "TURSO_DATABASE_URL=file::memory: COOKIE_SECRET=test-cookie-secret-32-characters-minimum deno test --allow-all tests/integration/",
     "test:watch": "TURSO_DATABASE_URL=file::memory: COOKIE_SECRET=test-cookie-secret-32-characters-minimum deno test --allow-all --watch tests/",
     "quality": "deno fmt && deno lint && deno check --allow-import main.ts && TURSO_DATABASE_URL=file::memory: COOKIE_SECRET=test-cookie-secret-32-characters-minimum deno test --allow-all tests/",
-    "quality-no-check": "deno fmt && deno lint && TURSO_DATABASE_URL=file::memory: COOKIE_SECRET=test-cookie-secret-32-characters-minimum deno test --allow-all tests/",
-    "deploy": "deno task build && deployctl deploy --prod --entrypoint=main.ts --exclude=node_modules/.deno/libsql*"
+    "quality-no-check": "deno fmt && deno lint && TURSO_DATABASE_URL=file::memory: COOKIE_SECRET=test-cookie-secret-32-characters-minimum deno test --allow-all tests/"
   }
 }
