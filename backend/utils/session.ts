@@ -137,7 +137,7 @@ export async function getSessionFromRequest(
     });
 
     // Send alert for unexpected errors
-    await sendSessionErrorAlert(errorType, errorMessage, {
+    sendSessionErrorAlert(errorType, errorMessage, {
       url: request.url,
       hasCookie: request.headers.get("cookie")?.includes("sid="),
       stack: error instanceof Error ? error.stack : undefined,

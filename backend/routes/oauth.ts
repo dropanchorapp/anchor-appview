@@ -34,16 +34,6 @@ let oauth: ATProtoOAuthInstance | null = null;
 let baseUrl: string | null = null;
 
 /**
- * Get the base URL. Must be called after initOAuth().
- */
-export function getBaseUrl(): string {
-  if (!baseUrl) {
-    throw new Error("OAuth not initialized — call initOAuth first");
-  }
-  return baseUrl;
-}
-
-/**
  * Initialize OAuth with the given request.
  * If ANCHOR_BASE_URL env var is set, uses that. Otherwise derives from request.
  * Safe to call multiple times — only initializes once.
@@ -105,6 +95,3 @@ export function getOAuth(): ATProtoOAuthInstance {
 export function getSessions() {
   return getOAuth().sessions;
 }
-
-// Re-export oauth for backward compatibility (will be null until initOAuth is called)
-export { oauth };

@@ -171,21 +171,15 @@ export function registerFrontendRoutes(
 
   // Individual checkin pages - /checkins/:did/:rkey (new format)
   app = app.get("/checkins/:did/:rkey", async (ctx) => {
-    const url = new URL(ctx.req.url);
-    const parts = url.pathname.split("/");
-    const did = parts[2];
-    const rkey = parts[3];
-    const checkinId = `${did}/${rkey}`;
+    const parts = new URL(ctx.req.url).pathname.split("/");
+    const checkinId = `${parts[2]}/${parts[3]}`;
     return await renderCheckinPage(ctx.req.url, checkinId, moduleUrl);
   });
 
   // Legacy checkin URL format - /checkin/:identifier/:rkey (singular)
   app = app.get("/checkin/:identifier/:rkey", async (ctx) => {
-    const url = new URL(ctx.req.url);
-    const parts = url.pathname.split("/");
-    const identifier = parts[2];
-    const rkey = parts[3];
-    const checkinId = `${identifier}/${rkey}`;
+    const parts = new URL(ctx.req.url).pathname.split("/");
+    const checkinId = `${parts[2]}/${parts[3]}`;
     return await renderCheckinPage(ctx.req.url, checkinId, moduleUrl);
   });
 
@@ -205,8 +199,14 @@ export function registerFrontendRoutes(
 async function renderCheckinPage(
   requestUrl: string,
   checkinId: string,
-  _moduleUrl: string,
+  moduleUrl: string,
 ) {
+  // Resolve hashed bundle filename for the script tag
+  if (!cachedBundleFileName) {
+    cachedBundleFileName = await getBundleFileName(moduleUrl);
+  }
+  const bundleSrc = `/static/${cachedBundleFileName}`;
+
   let metaTitle = "Anchor Check-in";
   let metaDescription = "View this check-in on Anchor";
   let metaImage = "https://cdn.dropanchor.app/images/anchor-logo.png";
@@ -395,7 +395,7 @@ async function renderCheckinPage(
         <noscript>${noscriptContent}</noscript>
 
         <!-- Load React app -->
-        <script type="module" src="/static/bundle.js"></script>
+        <script type="module" src="${bundleSrc}"></script>
       </body>
       </html>`,
     {
