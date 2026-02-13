@@ -42,11 +42,10 @@ Local database storage:
 
 ### Entry Point
 
-- **Main file**: `main.tsx` (deployed to Val Town with
-  `// @val-town anchordashboard` comment)
+- **Main file**: `main.tsx`
 - **Base URL**: `https://dropanchor.app` (configurable via `ANCHOR_BASE_URL`)
 - **Framework**: Hono web server serving unified API, OAuth, and React frontend
-- **Runtime**: Deno on Val Town platform
+- **Runtime**: Deno Deploy (auto-deploys on push to main via GitHub integration)
 
 ### Key Components
 
@@ -126,38 +125,12 @@ deno check --allow-import   # Type check
 
 ### Deployment
 
-```bash
-# Deploy to Val Town (runs quality checks first)
-deno task deploy
+Deploys automatically on push to `main` via Deno Deploy GitHub integration. No
+manual deploy step needed.
 
-# Manual deployment
-vt push
-```
+### Database
 
-## Val Town Platform Guidelines
-
-### SQLite Usage
-
-**CRITICAL**: Always use `sqlite2`, not the deprecated `sqlite` module.
-
-```typescript
-// ✅ CORRECT
-import { sqlite } from "https://esm.town/v/std/sqlite2";
-
-const result = await sqlite.execute({
-  sql: "SELECT * FROM users WHERE id = ?",
-  args: [userId],
-});
-
-// ❌ WRONG - old deprecated module
-import { sqlite } from "https://esm.town/v/std/sqlite";
-await sqlite.execute("SELECT * FROM users", [userId]);
-```
-
-### Drizzle ORM with sqlite-proxy
-
-This project uses Drizzle ORM with the `sqlite-proxy` adapter to wrap Val Town's
-sqlite2:
+Drizzle ORM with `sqlite-proxy` adapter using libSQL/Turso:
 
 ```typescript
 // See backend/database/db.ts for the adapter implementation
@@ -185,7 +158,8 @@ const secret = Deno.env.get("COOKIE_SECRET");
 const baseUrl = Deno.env.get("ANCHOR_BASE_URL") || "https://dropanchor.app";
 ```
 
-Key environment variables (stored in `.env` locally, Val Town secrets in prod):
+Key environment variables (stored in `.env` locally, Deno Deploy env vars in
+prod):
 
 - `COOKIE_SECRET` - Iron Session encryption key
 - `ANCHOR_BASE_URL` - Public URL (defaults to `https://dropanchor.app`)
@@ -198,7 +172,6 @@ Key environment variables (stored in `.env` locally, Val Town secrets in prod):
 
 - Use `https://esm.sh` for npm packages
 - Use `jsr:` for JSR packages (Hono, atproto-oauth)
-- Use `https://esm.town/v/std/` for Val Town utilities
 
 ## OAuth Authentication Flow
 
@@ -383,7 +356,7 @@ The project has comprehensive test coverage with two categories:
 **Integration tests** (`tests/integration/`):
 
 - Test full request/response cycles
-- Mock Val Town services (sqlite, blob storage) but test real code paths
+- Mock external services but test real code paths
 - Validate API contract and error handling
 
 Key testing patterns:
@@ -505,14 +478,13 @@ console.log("PDS request:", {
 });
 ```
 
-### Val Town Deployment Issues
+### Deployment Issues
 
 If deployment fails:
 
-1. Check Val Town CLI is authenticated: `vt whoami`
+1. Check Deno Deploy dashboard for build/runtime errors
 2. Verify deno.json tasks work locally: `deno task quality`
-3. Check Val Town dashboard for runtime errors
-4. Verify environment variables are set correctly
+3. Verify environment variables are set in Deno Deploy dashboard
 
 ## Important Technical Constraints
 
@@ -525,7 +497,7 @@ architecture is intentional:
 - AppView reads on-demand (no sync lag, no stale data)
 - Only OAuth sessions stored locally (for authentication)
 
-If you need to cache data, use Val Town blob storage with TTL, not SQLite.
+If you need to cache data, use Deno KV or a TTL-based approach, not SQLite.
 
 ### AT Protocol Compliance
 
@@ -622,6 +594,6 @@ database caching. Now migrated to **PDS-only architecture** where:
 Comments and variable names may reference old architecture - these are safe to
 update.
 
-- to deploy new updates use `deno task deploy`
+- Deploys happen automatically on push to main via Deno Deploy
 - code files should never be more than 500 lines, once you hit this size you
   know it's time to break up your file in smaller modules
