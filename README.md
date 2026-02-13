@@ -2,9 +2,10 @@
 
 [![ko-fi](https://ko-fi.com/img/githubbutton_sm.svg)](https://ko-fi.com/tijsteulings)
 
-A complete location-based social feed generator and web interface built on the
-AT Protocol for decentralized social networking. Provides both API endpoints for
-mobile clients and a web interface for viewing and sharing check-ins.
+A personal location journal built on the AT Protocol. Log your visits and
+check-ins to your own Personal Data Server (PDS), with optional sharing on
+Bluesky. Provides both API endpoints for mobile clients and a web interface for
+viewing your location history.
 
 ## 🏗️ Architecture
 
@@ -86,12 +87,14 @@ tests/
 
 ### Deployment
 
+Anchor deploys automatically to Deno Deploy when changes are pushed to `main`.
+
 ```bash
-deno task deploy              # Runs quality checks and pushes to Val Town
+git push origin main          # Triggers automatic deploy
 ```
 
 > **Note**: No manual database setup required! Tables are created automatically
-> when functions first run.
+> on startup.
 
 ## 🔌 API Endpoints
 
@@ -239,8 +242,8 @@ management (encrypted with Iron Session).
 - **Shareable Checkin Pages**: Individual checkin detail pages with interactive
   maps and full-size images
 - **Interactive Maps**: OpenStreetMap integration via Leaflet with CartoDB tiles
-- **Social Sharing**: Optimized sharing with Web Share API and copy
-  functionality
+- **Optional Sharing**: Share individual check-ins via Web Share API or copy
+  link
 - **Responsive Design**: Mobile-friendly interface using system fonts
 - **Open Graph Tags**: Rich social media previews for shared checkin URLs
 - **Delete Support**: Users can delete their own check-ins
@@ -280,12 +283,9 @@ deno task test:watch
 deno task quality
 ```
 
-### Val Town Best Practices
+### Development Practices
 
-- Use TypeScript for all functions
-- **Import SQLite**: `import { sqlite } from "https://esm.town/v/std/sqlite2"`
-  - ⚠️ **IMPORTANT**: Always use `sqlite2`, not `sqlite` (deprecated)
-  - Use object format: `await sqlite.execute({ sql: "...", args: [...] })`
+- Use TypeScript for all code
 - Use `https://esm.sh` for npm packages, `jsr:` for JSR packages
 - Never hardcode secrets - use `Deno.env.get('keyname')`
 - Let errors bubble up with full context rather than catching and logging
@@ -294,7 +294,6 @@ deno task quality
 
 - **PDS-First**: All checkin data lives in users' Personal Data Servers
 - **SQLite**: Only OAuth session storage (`iron_session_storage`)
-- **Drizzle ORM**: sqlite-proxy adapter for Val Town sqlite2
 - **AT Protocol**: `com.atproto.repo.createRecord` for writes,
   `com.atproto.repo.getRecord`/`listRecords` for reads
 - **Image Blobs**: Uploaded to user's PDS via `uploadBlob`, served via `getBlob`
@@ -303,7 +302,7 @@ deno task quality
 
 - Monitor `/api/stats` endpoint for system health
 - Use `scripts/debug-oauth-sessions.ts` to inspect OAuth session status
-- Val Town dashboard for runtime errors and logs
+- Check Deno Deploy dashboard for runtime errors and logs
 - Check environment variables are set correctly
 
 ## 🔒 Security
@@ -361,5 +360,5 @@ can [buy me a coffee on Ko-fi](https://ko-fi.com/tijsteulings).
 
 ## 📄 License
 
-This implementation is part of the Anchor project for location-based social
-networking on the AT Protocol.
+This implementation is part of the Anchor project — a personal location journal
+built on the AT Protocol.

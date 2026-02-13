@@ -179,14 +179,14 @@ export function About({ onLogin }: AboutProps) {
       <div className={sectionStyle}>
         <h2 className={sectionTitleStyle}>What is Anchor?</h2>
         <p className={paragraphStyle}>
-          Anchor is a personal location logging app that stores your check-ins
+          Anchor is a personal location journal that stores your check-ins
           directly on{" "}
-          <strong>your own Personal Data Server (PDS)</strong>. Unlike
-          traditional social networks, you own and control your data completely.
+          <strong>your own Personal Data Server (PDS)</strong>. Your location
+          history is yours to keep and control.
         </p>
         <p className={paragraphStyle} style={{ marginBottom: 0 }}>
-          Share your favorite places with friends on Bluesky or any other social
-          network when you want to, but your location history remains yours.
+          Optionally share individual check-ins with friends on Bluesky when you
+          want to, but by default your journal is just for you.
         </p>
       </div>
 
@@ -202,8 +202,8 @@ export function About({ onLogin }: AboutProps) {
             - Built on the decentralized AT Protocol network
           </li>
           <li className={listItemStyle}>
-            <strong>Social Integration</strong>{" "}
-            - Connect with friends through Bluesky's social network
+            <strong>Optional Sharing</strong>{" "}
+            - Share individual check-ins on Bluesky when you choose to
           </li>
           <li className={listItemStyle}>
             <strong>Rich Location Data</strong>{" "}

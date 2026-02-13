@@ -5,10 +5,10 @@ code in this repository.
 
 ## Project Overview
 
-Anchor AppView is a location-based social feed generator built on AT Protocol.
-The system uses a **PDS-only architecture** where all checkin data is read
-directly from users' Personal Data Servers, with minimal local storage used only
-for OAuth session management.
+Anchor AppView is a personal location journal built on AT Protocol. The system
+uses a **PDS-only architecture** where all checkin data is read directly from
+users' Personal Data Servers, with minimal local storage used only for OAuth
+session management.
 
 ## Architecture
 

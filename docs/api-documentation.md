@@ -1,7 +1,7 @@
 # Anchor AppView API Documentation
 
-The Anchor AppView provides a RESTful API for accessing location-based social
-check-ins from the AT Protocol network.
+The Anchor AppView provides a RESTful API for accessing location check-ins
+stored on the AT Protocol network.
 
 ## Base URL
 

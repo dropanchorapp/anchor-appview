@@ -122,10 +122,10 @@ export function TermsOfService() {
             the service.
           </p>
           <p className={paragraphStyle}>
-            Anchor is a location check-in application built on the AT Protocol
-            (the decentralized social network that powers Bluesky). Your use of
-            Anchor also means you accept the terms of your AT Protocol identity
-            provider (such as Bluesky).
+            Anchor is a personal location journal built on the AT Protocol (the
+            decentralized network that powers Bluesky). Your use of Anchor also
+            means you accept the terms of your AT Protocol identity provider
+            (such as Bluesky).
           </p>
         </section>
 
