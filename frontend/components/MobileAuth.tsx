@@ -1,5 +1,9 @@
 /** @jsxImportSource https://esm.sh/react@19.1.0 */
-import React, { useEffect, useState } from "https://esm.sh/react@19.1.0";
+import React, {
+  useEffect,
+  useRef,
+  useState,
+} from "https://esm.sh/react@19.1.0";
 import { css } from "https://esm.sh/@emotion/css@11.13.5";
 import {
   buttonPrimaryLarge,
@@ -118,13 +122,32 @@ const footerStyle = css`
   font-size: ${typography.sizes.md};
 `;
 
+const typeaheadStyle = css`
+  --color-background: ${colors.surface};
+  --color-border: ${colors.border};
+  --color-hover: ${colors.surfaceHover};
+  --color-avatar-fallback: ${colors.surfaceActive};
+  --radius: ${radii.xl};
+  --padding-menu: ${spacing.xs};
+`;
+
 export function MobileAuth() {
   const [handle, setHandle] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     injectGlobalStyles();
+  }, []);
+
+  useEffect(() => {
+    const el = inputRef.current;
+    if (!el) return;
+    const handler = (e: Event) =>
+      setHandle((e.target as HTMLInputElement).value);
+    el.addEventListener("input", handler);
+    return () => el.removeEventListener("input", handler);
   }, []);
 
   const generatePKCE = async () => {
@@ -213,16 +236,18 @@ export function MobileAuth() {
             <label htmlFor="handle" className={label}>
               Bluesky Handle
             </label>
-            <input
-              type="text"
-              id="handle"
-              value={handle}
-              onChange={(e) => setHandle(e.target.value)}
-              placeholder="alice.bsky.social"
-              autoComplete="username"
-              required
-              className={inputStyle}
-            />
+            <actor-typeahead className={typeaheadStyle}>
+              <input
+                ref={inputRef}
+                type="text"
+                id="handle"
+                defaultValue={handle}
+                placeholder="alice.bsky.social"
+                autoComplete="username"
+                required
+                className={inputStyle}
+              />
+            </actor-typeahead>
           </div>
 
           <button

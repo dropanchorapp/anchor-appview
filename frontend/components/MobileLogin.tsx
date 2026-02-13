@@ -1,5 +1,9 @@
 /** @jsxImportSource https://esm.sh/react@19.1.0 */
-import React, { useEffect, useState } from "https://esm.sh/react@19.1.0";
+import React, {
+  useEffect,
+  useRef,
+  useState,
+} from "https://esm.sh/react@19.1.0";
 import { css } from "https://esm.sh/@emotion/css@11.13.5";
 import {
   buttonPrimaryLarge,
@@ -121,13 +125,32 @@ const securityTextStyle = css`
   line-height: ${typography.lineHeights.normal};
 `;
 
+const typeaheadStyle = css`
+  --color-background: ${colors.surface};
+  --color-border: ${colors.border};
+  --color-hover: ${colors.surfaceHover};
+  --color-avatar-fallback: ${colors.surfaceActive};
+  --radius: ${radii.xl};
+  --padding-menu: ${spacing.xs};
+`;
+
 export function MobileLogin({ redirectUri }: MobileLoginProps) {
   const [handle, setHandle] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const inputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     injectGlobalStyles();
+  }, []);
+
+  useEffect(() => {
+    const el = inputRef.current;
+    if (!el) return;
+    const handler = (e: Event) =>
+      setHandle((e.target as HTMLInputElement).value);
+    el.addEventListener("input", handler);
+    return () => el.removeEventListener("input", handler);
   }, []);
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -174,19 +197,21 @@ export function MobileLogin({ redirectUri }: MobileLoginProps) {
             <label htmlFor="handle" className={label}>
               Bluesky Handle
             </label>
-            <input
-              type="text"
-              id="handle"
-              name="handle"
-              value={handle}
-              onChange={(e) => setHandle(e.target.value)}
-              placeholder="username.bsky.social or your.domain"
-              autoComplete="username"
-              autoCapitalize="none"
-              autoCorrect="off"
-              disabled={loading}
-              className={inputLargeStyle}
-            />
+            <actor-typeahead className={typeaheadStyle}>
+              <input
+                ref={inputRef}
+                type="text"
+                id="handle"
+                name="handle"
+                defaultValue={handle}
+                placeholder="username.bsky.social or your.domain"
+                autoComplete="username"
+                autoCapitalize="none"
+                autoCorrect="off"
+                disabled={loading}
+                className={inputLargeStyle}
+              />
+            </actor-typeahead>
           </div>
 
           <button

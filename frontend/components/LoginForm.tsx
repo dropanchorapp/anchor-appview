@@ -1,4 +1,5 @@
 /** @jsxImportSource https://esm.sh/react@19.1.0 */
+import { useEffect, useRef } from "https://esm.sh/react@19.1.0";
 import { css } from "https://esm.sh/@emotion/css@11.13.5";
 import {
   buttonPrimary,
@@ -53,6 +54,15 @@ const footerStyle = css`
   justify-content: flex-end;
 `;
 
+const typeaheadStyle = css`
+  --color-background: ${colors.surface};
+  --color-border: ${colors.border};
+  --color-hover: ${colors.surfaceHover};
+  --color-avatar-fallback: ${colors.surfaceActive};
+  --radius: ${radii.md};
+  --padding-menu: ${spacing.xs};
+`;
+
 export function LoginForm({
   showLoginForm,
   setShowLoginForm,
@@ -61,6 +71,17 @@ export function LoginForm({
   loginLoading,
   onSubmitLogin,
 }: LoginFormProps) {
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    const el = inputRef.current;
+    if (!el) return;
+    const handler = (e: Event) =>
+      setLoginHandle((e.target as HTMLInputElement).value);
+    el.addEventListener("input", handler);
+    return () => el.removeEventListener("input", handler);
+  }, [setLoginHandle]);
+
   if (!showLoginForm) return null;
 
   return (
@@ -90,14 +111,16 @@ export function LoginForm({
         <form onSubmit={onSubmitLogin}>
           <div className={formGroupStyle}>
             <label className={label}>Bluesky Handle</label>
-            <input
-              type="text"
-              value={loginHandle}
-              onChange={(e) => setLoginHandle(e.target.value)}
-              placeholder="your-handle.bsky.social"
-              required
-              className={input}
-            />
+            <actor-typeahead className={typeaheadStyle}>
+              <input
+                ref={inputRef}
+                type="text"
+                defaultValue={loginHandle}
+                placeholder="your-handle.bsky.social"
+                required
+                className={input}
+              />
+            </actor-typeahead>
             <p className={helperText}>
               Enter your Bluesky handle (e.g., alice.bsky.social)
             </p>

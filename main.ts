@@ -12,7 +12,9 @@ Sentry.init({
   dsn:
     "https://0794447a4665743cb632450a266948de@o4510481285185536.ingest.de.sentry.io/4510879854755920",
   tracesSampleRate: 0.2,
-  environment: Deno.env.get("DENO_DEPLOYMENT_ID") ? "production" : "development",
+  environment: Deno.env.get("DENO_DEPLOYMENT_ID")
+    ? "production"
+    : "development",
 });
 
 import { App, staticFiles } from "@fresh/core";
