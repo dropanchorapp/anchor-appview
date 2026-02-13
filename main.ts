@@ -6,6 +6,15 @@ try {
   await load({ export: true });
 } catch { /* .env file not required */ }
 
+// Initialize Sentry error tracking (before other imports)
+import * as Sentry from "@sentry/deno";
+Sentry.init({
+  dsn:
+    "https://0794447a4665743cb632450a266948de@o4510481285185536.ingest.de.sentry.io/4510879854755920",
+  tracesSampleRate: 0.2,
+  environment: Deno.env.get("DENO_DEPLOYMENT_ID") ? "production" : "development",
+});
+
 import { App, staticFiles } from "@fresh/core";
 import { initializeTables } from "./backend/database/db.ts";
 import { initOAuth } from "./backend/routes/oauth.ts";
@@ -24,11 +33,12 @@ let app = new App();
 // Middleware
 // ============================================================================
 
-// Error handling middleware
+// Error handling middleware — report to Sentry
 app = app.use(async (ctx) => {
   try {
     return await ctx.next();
   } catch (err) {
+    Sentry.captureException(err);
     console.error("Unhandled error:", err);
     throw err;
   }

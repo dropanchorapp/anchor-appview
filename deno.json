@@ -9,6 +9,7 @@
     "@std/encoding": "jsr:@std/encoding@1",
     "@libsql/client": "npm:@libsql/client@0.17.0",
     "@libsql/client/web": "npm:@libsql/client@0.17.0/web",
+    "@sentry/deno": "npm:@sentry/deno",
     "@std/dotenv": "jsr:@std/dotenv@0.225",
     "@std/media-types": "jsr:@std/media-types@1",
     "@std/path": "jsr:@std/path@1"
