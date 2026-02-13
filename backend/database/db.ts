@@ -1,27 +1,50 @@
-// Drizzle ORM database module using Val Town's sqlite
+// Database module using Turso/libSQL
+// Works on Deno Deploy (web client) and local development (native client)
+
 import { drizzle } from "https://esm.sh/drizzle-orm@0.44.5/sqlite-proxy";
-import { sqlite } from "https://esm.town/v/std/sqlite2";
 import * as schema from "./schema.ts";
+
+const dbUrl = Deno.env.get("TURSO_DATABASE_URL") || "file:.local/anchor.db";
+const isLocal = dbUrl.startsWith("file:");
+
+// Use native client for local file: URLs, web client for remote Turso/Deploy
+const { createClient } = isLocal
+  ? await import("@libsql/client")
+  : await import("@libsql/client/web");
+
+const client = createClient({
+  url: dbUrl,
+  authToken: Deno.env.get("TURSO_AUTH_TOKEN"),
+});
+
+// Wrap the client to provide a consistent interface
+// The libSQL client returns Row objects, we convert to arrays for compatibility
+export const rawDb = {
+  execute: async (
+    query: { sql: string; args: unknown[] },
+  ): Promise<{ rows: unknown[][] }> => {
+    const result = await client.execute({
+      sql: query.sql,
+      args: query.args as any,
+    });
+    const rows = result.rows.map((row) => Object.values(row));
+    return { rows };
+  },
+};
 
 // Create Drizzle database instance with schema using sqlite-proxy adapter
 export const db = drizzle(
   async (sql, params) => {
-    const result = await sqlite.execute({ sql, args: params || [] });
+    const result = await rawDb.execute({ sql, args: params || [] });
     return { rows: result.rows };
   },
   { schema },
 );
 
-// Export raw sqlite for migrations and schema operations
-export const rawDb = sqlite;
-
 // Initialize all tables using Drizzle migrations
 export async function initializeTables() {
-  // Run proper Drizzle-based migrations
   const { runMigrations } = await import("./migrations.ts");
   await runMigrations();
-
-  // No user tracking needed - PDS-only architecture
 }
 
 // Test the database connection
@@ -39,3 +62,5 @@ export async function testDatabase() {
     return false;
   }
 }
+
+console.log(`✅ Using ${isLocal ? "local" : "Turso"} database`);

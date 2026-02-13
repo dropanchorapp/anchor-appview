@@ -1,5 +1,5 @@
 /**
- * Session utilities with comprehensive error logging and email alerting.
+ * Session utilities with comprehensive error logging.
  * Wraps OAuth session methods to provide detailed diagnostics.
  */
 
@@ -7,7 +7,6 @@ import type {
   OAuthSessionFromRequestResult,
   SessionInterface,
 } from "jsr:@tijs/atproto-oauth@2.4.0";
-import { email } from "https://esm.town/v/std/email";
 import { oauth } from "../routes/oauth.ts";
 
 export interface SessionResult {
@@ -21,53 +20,35 @@ export interface SessionResult {
   };
 }
 
-// Rate limit email alerts to avoid spam (max 1 per hour per error type)
-const emailRateLimits = new Map<string, number>();
-const EMAIL_RATE_LIMIT_MS = 60 * 60 * 1000; // 1 hour
+// Rate limit error alerts to avoid log spam (max 1 per hour per error type)
+const alertRateLimits = new Map<string, number>();
+const ALERT_RATE_LIMIT_MS = 60 * 60 * 1000; // 1 hour
 
 /**
  * Send email alert for unexpected session errors.
  * Rate-limited to prevent spam.
  */
-async function sendSessionErrorAlert(
+function sendSessionErrorAlert(
   errorType: string,
   errorMessage: string,
   context: Record<string, unknown>,
-): Promise<void> {
+): void {
   const rateKey = `session_error:${errorType}`;
-  const lastSent = emailRateLimits.get(rateKey) || 0;
+  const lastSent = alertRateLimits.get(rateKey) || 0;
   const now = Date.now();
 
-  if (now - lastSent < EMAIL_RATE_LIMIT_MS) {
-    console.log(
-      `[Session] Skipping email alert (rate limited): ${errorType}`,
-    );
+  if (now - lastSent < ALERT_RATE_LIMIT_MS) {
     return;
   }
 
-  try {
-    emailRateLimits.set(rateKey, now);
+  alertRateLimits.set(rateKey, now);
 
-    await email({
-      subject: `[Anchor] Session Error: ${errorType}`,
-      text: `
-Session Error Alert
-===================
-Time: ${new Date().toISOString()}
-Type: ${errorType}
-Message: ${errorMessage}
-
-Context:
-${JSON.stringify(context, null, 2)}
-
-This email is rate-limited to once per hour per error type.
-      `,
-    });
-
-    console.log(`[Session] Sent email alert for: ${errorType}`);
-  } catch (emailError) {
-    console.error("[Session] Failed to send email alert:", emailError);
-  }
+  console.error(`[Session] Error alert: ${errorType}`, {
+    time: new Date().toISOString(),
+    type: errorType,
+    message: errorMessage,
+    context,
+  });
 }
 
 /**
@@ -105,7 +86,7 @@ export async function getSessionFromRequest(
         result.error?.type === "OAUTH_ERROR" ||
         result.error?.type === "UNKNOWN"
       ) {
-        await sendSessionErrorAlert(errorType, errorMessage, {
+        sendSessionErrorAlert(errorType, errorMessage, {
           url: request.url,
           hasCookie: request.headers.get("cookie")?.includes("sid="),
           details: result.error?.details,

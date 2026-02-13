@@ -154,7 +154,7 @@ export default async function (req: Request): Promise<Response> {
           return await getCheckinByDidAndRkey(identifier, rkey, corsHeaders);
         }
 
-        // POST and DELETE are handled directly by main.tsx routes
+        // POST and DELETE are handled directly by main.ts routes
       }
 
       // Handle /api/checkins/:identifier pattern
@@ -200,7 +200,7 @@ export default async function (req: Request): Promise<Response> {
           return await getUserCheckinsByDid(did, corsHeaders, pagination);
         }
 
-        // POST is handled directly by main.tsx routes
+        // POST is handled directly by main.ts routes
       }
 
       // Handle likes endpoints: /api/checkins/:identifier/:rkey/likes

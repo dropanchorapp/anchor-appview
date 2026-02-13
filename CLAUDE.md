@@ -189,8 +189,6 @@ Key environment variables (stored in `.env` locally, Val Town secrets in prod):
 
 - `COOKIE_SECRET` - Iron Session encryption key
 - `ANCHOR_BASE_URL` - Public URL (defaults to `https://dropanchor.app`)
-- `HANDLE` - AT Protocol handle for lexicon publishing (e.g., `tijs.org`)
-- `APP_PASSWORD` - App password for lexicon publishing
 - `BUNNY_STORAGE_ZONE` - Bunny CDN storage zone name
 - `BUNNY_STORAGE_KEY` - Bunny CDN API key
 - `BUNNY_STORAGE_REGION` - Bunny CDN region (e.g., `storage.bunnycdn.com`)
@@ -549,8 +547,8 @@ Always follow AT Protocol patterns:
 
 ### Lexicon Publishing
 
-Lexicons are published as `com.atproto.lexicon.schema` records on hamster.farm
-(tijs.org's PDS), following the official AT Protocol spec.
+Lexicons are published as `com.atproto.lexicon.schema` records on the
+dropanchor.app account, following the official AT Protocol spec.
 
 **Published lexicons**:
 
@@ -562,25 +560,37 @@ Lexicons are published as `com.atproto.lexicon.schema` records on hamster.farm
 
 1. NSID `app.dropanchor.checkin`
 2. Reverse domain → `dropanchor.app`
-3. DNS TXT `_lexicon.dropanchor.app` → `did:plc:aq7owa5y7ndc2hzjz37wy7ma`
-4. DID resolves to PDS `https://hamster.farm`
+3. DNS TXT `_lexicon.dropanchor.app` → `did:plc:wxex3wx5k4ctciupsv5m5stb`
+4. DID resolves to PDS `https://leccinum.us-west.host.bsky.network`
 5. Fetch record from PDS
 
-**Republishing lexicons** (after modifying `lexicons/` files):
+**Validation and publishing** (using goat CLI):
 
 ```bash
-source .env
-deno run --allow-net --allow-read --allow-env scripts/publish-lexicons.ts
+# Validate schemas
+goat lex parse ./lexicons/app/dropanchor/*.json
+
+# Lint for best practices
+goat lex lint ./lexicons/app/dropanchor/*.json
+
+# Check DNS resolution
+goat lex check-dns ./lexicons/
+
+# Check sync status (🟢 = in sync, 🟠 = needs publish)
+goat lex status ./lexicons/
+
+# Publish (requires goat login as dropanchor.app first)
+goat account login -u dropanchor.app -p <app-password>
+goat lex publish ./lexicons/
+goat account logout
 ```
 
 **Verification**:
 
 ```bash
-~/go/bin/glot status lexicons/
+goat lex resolve app.dropanchor.checkin
 dig TXT _lexicon.dropanchor.app +short
 ```
-
-See `docs/lexicon-publishing.md` for full details.
 
 ### Static Assets (Bunny CDN)
 

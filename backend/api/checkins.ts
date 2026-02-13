@@ -1,5 +1,4 @@
 // Checkin creation API endpoint for Anchor
-import type { Context } from "jsr:@hono/hono@4.9.6";
 import { OverpassService } from "../services/overpass-service.ts";
 import type { Place } from "../models/place-models.ts";
 import {
@@ -190,20 +189,20 @@ interface PlaceInput {
   icon?: string;
 }
 
-// Create a checkin with address using StrongRef architecture
-export async function createCheckin(c: Context): Promise<Response> {
+// Create a checkin with address using embedded architecture
+export async function createCheckin(req: Request): Promise<Response> {
   try {
     // Authenticate user with session refresh support
     const { session: oauthSession, setCookieHeader, error } =
-      await getSessionFromRequest(c.req.raw);
+      await getSessionFromRequest(req);
     if (!oauthSession) {
-      const response = c.json(
+      const response = Response.json(
         {
           error: "Authentication required",
           message: error?.message || "Please log in again",
           code: error?.type || "SESSION_EXPIRED",
         },
-        401,
+        { status: 401 },
       );
       response.headers.set("Set-Cookie", getClearSessionCookie());
       return response;
@@ -212,24 +211,24 @@ export async function createCheckin(c: Context): Promise<Response> {
     const did = oauthSession.did;
 
     // Detect content type and parse accordingly
-    const contentType = c.req.header("content-type") || "";
+    const contentType = req.headers.get("content-type") || "";
     let body: any;
     let imageFile: File | null = null;
     let imageAlt: string | undefined;
 
     if (contentType.includes("multipart/form-data")) {
       // Parse multipart form data
-      const formData = await c.req.formData();
+      const formData = await req.formData();
 
       // Get place data (sent as JSON string in multipart)
       const placeData = formData.get("place");
       if (typeof placeData === "string") {
         body = { place: JSON.parse(placeData) };
       } else {
-        return c.json({
+        return Response.json({
           success: false,
           error: "Invalid place data in form",
-        }, 400);
+        }, { status: 400 });
       }
 
       // Get message
@@ -251,7 +250,7 @@ export async function createCheckin(c: Context): Promise<Response> {
       }
     } else {
       // Parse JSON body (backward compatible)
-      body = await c.req.json();
+      body = await req.json();
     }
 
     // Validate required fields
@@ -259,11 +258,11 @@ export async function createCheckin(c: Context): Promise<Response> {
       !body.place || !body.place.name || !body.place.latitude ||
       !body.place.longitude
     ) {
-      return c.json({
+      return Response.json({
         success: false,
         error:
           "Invalid request: place with name, latitude, and longitude required",
-      }, 400);
+      }, { status: 400 });
     }
 
     const { message } = body;
@@ -278,10 +277,10 @@ export async function createCheckin(c: Context): Promise<Response> {
       isNaN(lat) || isNaN(lng) ||
       Math.abs(lat) > 90 || Math.abs(lng) > 180
     ) {
-      return c.json({
+      return Response.json({
         success: false,
         error: "Invalid coordinates",
-      }, 400);
+      }, { status: 400 });
     }
 
     console.log("🚀 Starting checkin creation process...");
@@ -306,10 +305,10 @@ export async function createCheckin(c: Context): Promise<Response> {
           `✅ Image processed: thumb ${processedImage.thumb.length} bytes, fullsize ${processedImage.fullsize.length} bytes`,
         );
       } catch (imageError) {
-        return c.json({
+        return Response.json({
           success: false,
           error: `Image processing failed: ${imageError.message}`,
-        }, 400);
+        }, { status: 400 });
       }
     }
 
@@ -327,10 +326,10 @@ export async function createCheckin(c: Context): Promise<Response> {
     );
 
     if (!createResult.success) {
-      return c.json({
+      return Response.json({
         success: false,
         error: createResult.error,
-      }, 500);
+      }, { status: 500 });
     }
 
     console.log("✅ Checkin created successfully");
@@ -340,7 +339,7 @@ export async function createCheckin(c: Context): Promise<Response> {
     const shareableId = rkey;
 
     return setSessionCookie(
-      c.json({
+      Response.json({
         success: true,
         checkinUri: createResult.checkinUri,
         shareableId: shareableId,
@@ -351,10 +350,10 @@ export async function createCheckin(c: Context): Promise<Response> {
     );
   } catch (err) {
     console.error("❌ Checkin creation failed:", err);
-    return c.json({
+    return Response.json({
       success: false,
       error: "Internal server error",
-    }, 500);
+    }, { status: 500 });
   }
 }
 
@@ -572,19 +571,23 @@ async function createCheckinWithEmbeddedAddress(
 }
 
 // Delete a checkin record (address is now embedded, no separate record to delete)
-export async function deleteCheckin(c: Context): Promise<Response> {
+export async function deleteCheckin(
+  req: Request,
+  targetDid: string,
+  rkey: string,
+): Promise<Response> {
   try {
     // Authenticate user with session refresh support
     const { session: oauthSession, setCookieHeader, error } =
-      await getSessionFromRequest(c.req.raw);
+      await getSessionFromRequest(req);
     if (!oauthSession) {
-      const response = c.json(
+      const response = Response.json(
         {
           error: "Authentication required",
           message: error?.message || "Please log in again",
           code: error?.type || "SESSION_EXPIRED",
         },
-        401,
+        { status: 401 },
       );
       response.headers.set("Set-Cookie", getClearSessionCookie());
       return response;
@@ -592,23 +595,19 @@ export async function deleteCheckin(c: Context): Promise<Response> {
 
     const did = oauthSession.did;
 
-    // Get checkin DID and rkey from URL params
-    const targetDid = c.req.param("did");
-    const rkey = c.req.param("rkey");
-
     if (!targetDid || !rkey) {
-      return c.json({
+      return Response.json({
         success: false,
         error: "Missing required parameters: did and rkey",
-      }, 400);
+      }, { status: 400 });
     }
 
     // Verify that the authenticated user owns the checkin
     if (did !== targetDid) {
-      return c.json({
+      return Response.json({
         success: false,
         error: "Forbidden: Can only delete your own checkins",
-      }, 403);
+      }, { status: 403 });
     }
 
     console.log(`🗑️ Starting checkin deletion: ${targetDid}/${rkey}`);
@@ -624,26 +623,24 @@ export async function deleteCheckin(c: Context): Promise<Response> {
     );
 
     if (!deleteResult.success) {
-      return c.json({
+      return Response.json({
         success: false,
         error: deleteResult.error,
-      }, 500);
+      }, { status: 500 });
     }
 
     console.log("✅ Checkin deleted successfully");
 
     return setSessionCookie(
-      c.json({
-        success: true,
-      }),
+      Response.json({ success: true }),
       setCookieHeader,
     );
   } catch (err) {
     console.error("❌ Checkin deletion failed:", err);
-    return c.json({
+    return Response.json({
       success: false,
       error: "Internal server error",
-    }, 500);
+    }, { status: 500 });
   }
 }
 

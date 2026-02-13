@@ -5,13 +5,14 @@ the AT Protocol's repository-based lexicon resolution.
 
 ## Current Status
 
-The Anchor lexicons are **published** as AT Protocol records on hamster.farm:
+The Anchor lexicons are **published** as AT Protocol records on the
+dropanchor.app account:
 
 ```bash
-~/go/bin/glot status lexicons/
-# 🟣 app.dropanchor.checkin
-# 🟣 app.dropanchor.comment
-# 🟣 app.dropanchor.like
+goat lex status ./lexicons/
+# 🟢 app.dropanchor.checkin
+# 🟢 app.dropanchor.comment
+# 🟢 app.dropanchor.like
 ```
 
 ## How It Works
@@ -24,52 +25,62 @@ repository, following the official spec.
 1. **NSID**: `app.dropanchor.checkin`
 2. **Reverse domain**: `dropanchor.app`
 3. **DNS TXT lookup**: `_lexicon.dropanchor.app` →
-   `did:plc:aq7owa5y7ndc2hzjz37wy7ma`
-4. **DID resolves to PDS**: `https://hamster.farm`
+   `did:plc:wxex3wx5k4ctciupsv5m5stb`
+4. **DID resolves to PDS**: `https://leccinum.us-west.host.bsky.network`
 5. **Fetch record**:
-   `at://did:plc:aq7owa5y7ndc2hzjz37wy7ma/com.atproto.lexicon.schema/app.dropanchor.checkin`
+   `at://did:plc:wxex3wx5k4ctciupsv5m5stb/com.atproto.lexicon.schema/app.dropanchor.checkin`
 
 ### Published Records
 
 | Lexicon                  | AT-URI                                                                                    |
 | ------------------------ | ----------------------------------------------------------------------------------------- |
-| `app.dropanchor.checkin` | `at://did:plc:aq7owa5y7ndc2hzjz37wy7ma/com.atproto.lexicon.schema/app.dropanchor.checkin` |
-| `app.dropanchor.like`    | `at://did:plc:aq7owa5y7ndc2hzjz37wy7ma/com.atproto.lexicon.schema/app.dropanchor.like`    |
-| `app.dropanchor.comment` | `at://did:plc:aq7owa5y7ndc2hzjz37wy7ma/com.atproto.lexicon.schema/app.dropanchor.comment` |
+| `app.dropanchor.checkin` | `at://did:plc:wxex3wx5k4ctciupsv5m5stb/com.atproto.lexicon.schema/app.dropanchor.checkin` |
+| `app.dropanchor.like`    | `at://did:plc:wxex3wx5k4ctciupsv5m5stb/com.atproto.lexicon.schema/app.dropanchor.like`    |
+| `app.dropanchor.comment` | `at://did:plc:wxex3wx5k4ctciupsv5m5stb/com.atproto.lexicon.schema/app.dropanchor.comment` |
 
 ## Publishing Updates
 
-To republish lexicons after making changes:
+To republish lexicons after making changes, use the goat CLI:
 
 ```bash
-# Set credentials
-export HANDLE=tijs.org
-export APP_PASSWORD=your-app-password
+# Validate schemas first
+goat lex parse ./lexicons/app/dropanchor/*.json
 
-# Run the publish script
-deno run --allow-net --allow-read --allow-env scripts/publish-lexicons.ts
+# Lint for best practices
+goat lex lint ./lexicons/app/dropanchor/*.json
+
+# Check current status
+goat lex status ./lexicons/
+
+# Login to dropanchor.app (create app password at bsky.app → Settings)
+goat account login -u dropanchor.app -p <app-password>
+
+# Publish
+goat lex publish ./lexicons/
+
+# Logout and revoke the app password
+goat account logout
 ```
-
-The script uses `putRecord` so it will update existing records.
 
 ## DNS Configuration
 
 The DNS TXT record maps the `app.dropanchor` namespace to a DID:
 
 ```
-_lexicon.dropanchor.app. IN TXT "did=did:plc:aq7owa5y7ndc2hzjz37wy7ma"
+_lexicon.dropanchor.app. IN TXT "did=did:plc:wxex3wx5k4ctciupsv5m5stb"
 ```
 
-This DID (`tijs.org` on hamster.farm) hosts the lexicon schema records.
+This DID (`dropanchor.app` on Bluesky's hosted PDS) hosts the lexicon schema
+records.
 
 ## Why This Approach?
 
 The repository-based approach (vs HTTP file hosting) provides:
 
-- **Self-hosted**: Lexicons live on hamster.farm, fully under our control
 - **AT Protocol native**: Uses standard record types and resolution
 - **Change detection**: Updates visible via the firehose
 - **Portable**: Can migrate to another PDS if needed
+- **Tooling**: Works with goat CLI for validation, linting, and publishing
 
 ## Verification
 
@@ -77,15 +88,21 @@ The repository-based approach (vs HTTP file hosting) provides:
 # Check DNS resolution
 dig TXT _lexicon.dropanchor.app +short
 
-# Check glot can find them
-~/go/bin/glot status lexicons/
-~/go/bin/glot check-dns lexicons/
+# Check goat can resolve them
+goat lex resolve app.dropanchor.checkin
+
+# Check sync status
+goat lex status ./lexicons/
+goat lex check-dns ./lexicons/
 
 # Fetch directly from PDS
-curl -s "https://hamster.farm/xrpc/com.atproto.repo.getRecord?repo=did:plc:aq7owa5y7ndc2hzjz37wy7ma&collection=com.atproto.lexicon.schema&rkey=app.dropanchor.checkin" | jq .value.id
+curl -s "https://leccinum.us-west.host.bsky.network/xrpc/com.atproto.repo.getRecord?repo=did:plc:wxex3wx5k4ctciupsv5m5stb&collection=com.atproto.lexicon.schema&rkey=app.dropanchor.checkin" | jq .value.id
 ```
 
 ## References
 
 - [AT Protocol Lexicon Spec](https://atproto.com/specs/lexicon)
-- [Lexicon Resolution RFC](https://github.com/bluesky-social/atproto/discussions/3074)
+- [Lexicon Garden](https://lexicon.garden) - Browse and discover AT Protocol
+  lexicons
+- [goat CLI](https://github.com/bluesky-social/indigo/tree/main/cmd/goat) -
+  Official AT Protocol CLI tool

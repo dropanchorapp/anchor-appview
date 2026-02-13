@@ -1,12 +1,19 @@
 {
   "$schema": "https://raw.githubusercontent.com/denoland/deno/348900b8b79f4a434cab4c74b3bc8d4d2fa8ee74/cli/schemas/config-file.v1.json",
   "lock": false,
+  "imports": {
+    "@fresh/core": "jsr:@fresh/core@^2.2.0",
+    "fresh/dev": "jsr:@fresh/core@^2.2.0/dev",
+    "fresh/internal": "jsr:@fresh/core@^2.2.0/internal",
+    "@libsql/client": "npm:@libsql/client@0.17.0",
+    "@libsql/client/web": "npm:@libsql/client@0.17.0/web",
+    "@std/dotenv": "jsr:@std/dotenv@0.225",
+    "@std/media-types": "jsr:@std/media-types@1",
+    "@std/path": "jsr:@std/path@1"
+  },
   "compilerOptions": {
     "noImplicitAny": false,
     "strict": false,
-    "types": [
-      "./types/valtown-fallback.d.ts"
-    ],
     "lib": [
       "dom",
       "dom.iterable",
@@ -26,22 +33,25 @@
   "include": [
     "backend/",
     "frontend/",
-    "tests/"
+    "tests/",
+    "main.ts",
+    "dev.ts"
+  ],
+  "exclude": [
+    "**/_fresh/*"
   ],
   "node_modules_dir": false,
-  "experimental": {
-    "unstable-node-globals": true,
-    "unstable-temporal": true,
-    "unstable-worker-options": true,
-    "unstable-sloppy-imports": true
-  },
   "tasks": {
-    "test": "deno test --allow-all tests/",
-    "test:unit": "deno test --allow-all tests/unit/",
-    "test:integration": "deno test --allow-all tests/integration/",
-    "test:watch": "deno test --allow-all --watch tests/",
-    "quality": "deno fmt && deno lint && deno check --allow-import && deno test --allow-all tests/",
-    "quality-no-check": "deno fmt && deno lint && deno test --allow-all tests/",
-    "deploy": "deno task quality && vt push"
+    "dev": "deno run -A --watch=backend/,frontend/ dev.ts",
+    "build": "deno run -A dev.ts build",
+    "start": "deno serve -A _fresh/server.js",
+    "preview": "deno run -A main.ts",
+    "test": "TURSO_DATABASE_URL=file::memory: COOKIE_SECRET=test-cookie-secret-32-characters-minimum deno test --allow-all tests/",
+    "test:unit": "TURSO_DATABASE_URL=file::memory: COOKIE_SECRET=test-cookie-secret-32-characters-minimum deno test --allow-all tests/unit/",
+    "test:integration": "TURSO_DATABASE_URL=file::memory: COOKIE_SECRET=test-cookie-secret-32-characters-minimum deno test --allow-all tests/integration/",
+    "test:watch": "TURSO_DATABASE_URL=file::memory: COOKIE_SECRET=test-cookie-secret-32-characters-minimum deno test --allow-all --watch tests/",
+    "quality": "deno fmt && deno lint && deno check --allow-import main.ts && TURSO_DATABASE_URL=file::memory: COOKIE_SECRET=test-cookie-secret-32-characters-minimum deno test --allow-all tests/",
+    "quality-no-check": "deno fmt && deno lint && TURSO_DATABASE_URL=file::memory: COOKIE_SECRET=test-cookie-secret-32-characters-minimum deno test --allow-all tests/",
+    "deploy": "deno task build && deployctl deploy --prod --entrypoint=main.ts --exclude=node_modules/.deno/libsql*"
   }
 }

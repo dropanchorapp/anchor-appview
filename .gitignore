@@ -21,10 +21,11 @@ deno.lock
 valtown-cache/
 
 # === Database ===
-# Local SQLite databases (Val Town uses hosted SQLite)
+# Local SQLite databases
 *.db
 *.sqlite
 *.sqlite3
+.local/
 data/
 db/
 

@@ -1,6 +1,6 @@
 // Frontend and static content routes
-import { Hono } from "jsr:@hono/hono@4.9.6";
-import { serveFile } from "https://esm.town/v/std/utils@85-main/index.ts";
+import type { App } from "@fresh/core";
+import { serveFile } from "../utils/file-server.ts";
 import {
   resolveHandleToDid,
   resolvePdsUrl,
@@ -111,181 +111,222 @@ async function fetchCheckinData(identifier: string, rkey: string) {
   }
 }
 
-export function createFrontendRoutes() {
-  const app = new Hono();
-
+export function registerFrontendRoutes(
+  app: App<any>,
+  moduleUrl: string,
+): App<any> {
   // Static file serving
-  app.get("/frontend/*", (c) => serveFile(c.req.path, import.meta.url));
-  app.get("/shared/*", (c) => serveFile(c.req.path, import.meta.url));
-
-  // Terms of Service - serve React app
-  app.get("/terms", (_c) => serveFile("/frontend/index.html", import.meta.url));
-
-  // Privacy Policy - redirect to the full React privacy policy page
-  app.get("/privacy", (c) => {
-    return c.redirect("/privacy-policy", 301);
+  app = app.get("/frontend/:path*", (ctx) => {
+    const url = new URL(ctx.req.url);
+    return serveFile(url.pathname, moduleUrl);
+  });
+  app = app.get("/shared/:path*", (ctx) => {
+    const url = new URL(ctx.req.url);
+    return serveFile(url.pathname, moduleUrl);
   });
 
-  // Helper function to render checkin page with meta tags
-  async function renderCheckinPage(c: any, checkinId: string) {
-    // Fetch checkin data to populate meta tags
-    let metaTitle = "Anchor Check-in";
-    let metaDescription = "View this check-in on Anchor";
-    let metaImage = "https://cdn.dropanchor.app/images/anchor-logo.png";
-    let metaImageType = "image/png";
-    let checkinData = null; // Store for reuse in noscript
+  // Terms of Service - serve React app
+  app = app.get(
+    "/terms",
+    () => serveFile("/frontend/index.html", moduleUrl),
+  );
 
-    // Parse checkinId into identifier and rkey
-    const parts = checkinId.split("/");
-    if (parts.length === 2) {
-      const [identifier, rkey] = parts;
-      checkinData = await fetchCheckinData(identifier, rkey);
+  // Privacy Policy - redirect to the full React privacy policy page
+  app = app.get("/privacy", () => {
+    return new Response(null, {
+      status: 301,
+      headers: { Location: "/privacy-policy" },
+    });
+  });
+
+  // Individual checkin pages - /checkins/:did/:rkey (new format)
+  app = app.get("/checkins/:did/:rkey", async (ctx) => {
+    const url = new URL(ctx.req.url);
+    const parts = url.pathname.split("/");
+    const did = parts[2];
+    const rkey = parts[3];
+    const checkinId = `${did}/${rkey}`;
+    return await renderCheckinPage(ctx.req.url, checkinId, moduleUrl);
+  });
+
+  // Legacy checkin URL format - /checkin/:identifier/:rkey (singular)
+  app = app.get("/checkin/:identifier/:rkey", async (ctx) => {
+    const url = new URL(ctx.req.url);
+    const parts = url.pathname.split("/");
+    const identifier = parts[2];
+    const rkey = parts[3];
+    const checkinId = `${identifier}/${rkey}`;
+    return await renderCheckinPage(ctx.req.url, checkinId, moduleUrl);
+  });
+
+  // Mobile auth page
+  app = app.get(
+    "/mobile-auth",
+    () => serveFile("/frontend/mobile-auth-simple.html", moduleUrl),
+  );
+
+  // Catch-all route for SPA
+  app = app.get("*", () => serveFile("/frontend/index.html", moduleUrl));
+
+  return app;
+}
+
+// Helper function to render checkin page with meta tags
+async function renderCheckinPage(
+  requestUrl: string,
+  checkinId: string,
+  _moduleUrl: string,
+) {
+  let metaTitle = "Anchor Check-in";
+  let metaDescription = "View this check-in on Anchor";
+  let metaImage = "https://cdn.dropanchor.app/images/anchor-logo.png";
+  let metaImageType = "image/png";
+  let checkinData = null;
+
+  // Parse checkinId into identifier and rkey
+  const parts = checkinId.split("/");
+  if (parts.length === 2) {
+    const [identifier, rkey] = parts;
+    checkinData = await fetchCheckinData(identifier, rkey);
+  }
+
+  if (checkinData) {
+    const checkin = checkinData;
+
+    const authorName = checkin.author?.displayName ||
+      checkin.author?.handle || "Someone";
+    const locationName = checkin.address?.name ||
+      checkin.address?.locality || "a location";
+
+    if (checkin.text) {
+      metaTitle = checkin.text;
+    } else {
+      metaTitle = `${authorName} dropped anchor at ${locationName}`;
     }
 
-    if (checkinData) {
-      const checkin = checkinData;
+    const locationParts = [
+      checkin.address?.name,
+      checkin.address?.locality,
+      checkin.address?.region,
+      checkin.address?.country,
+    ].filter(Boolean);
+    metaDescription = locationParts.length > 0
+      ? `${authorName} at ${locationParts.join(", ")}`
+      : `Check-in by ${authorName}`;
 
-      const authorName = checkin.author?.displayName ||
-        checkin.author?.handle || "Someone";
-      const locationName = checkin.address?.name ||
-        checkin.address?.locality || "a location";
-
-      // Build title from checkin text if available, otherwise use "dropped anchor" format
-      if (checkin.text) {
-        metaTitle = checkin.text;
+    if (checkin.image?.fullsizeUrl) {
+      metaImage = checkin.image.fullsizeUrl;
+      if (checkin.image.fullsizeUrl.includes("image/jpeg")) {
+        metaImageType = "image/jpeg";
+      } else if (checkin.image.fullsizeUrl.includes("image/png")) {
+        metaImageType = "image/png";
+      } else if (checkin.image.fullsizeUrl.includes("image/webp")) {
+        metaImageType = "image/webp";
       } else {
-        metaTitle = `${authorName} dropped anchor at ${locationName}`;
-      }
-
-      // Build description from location info
-      const locationParts = [
-        checkin.address?.name,
-        checkin.address?.locality,
-        checkin.address?.region,
-        checkin.address?.country,
-      ].filter(Boolean);
-      metaDescription = locationParts.length > 0
-        ? `${authorName} at ${locationParts.join(", ")}`
-        : `Check-in by ${authorName}`;
-
-      // Use checkin image if available
-      if (checkin.image?.fullsizeUrl) {
-        metaImage = checkin.image.fullsizeUrl;
-        // Infer mime type from URL or use generic image type
-        // AT Protocol blobs can be jpeg, png, or webp
-        if (checkin.image.fullsizeUrl.includes("image/jpeg")) {
-          metaImageType = "image/jpeg";
-        } else if (checkin.image.fullsizeUrl.includes("image/png")) {
-          metaImageType = "image/png";
-        } else if (checkin.image.fullsizeUrl.includes("image/webp")) {
-          metaImageType = "image/webp";
-        } else {
-          metaImageType = "image/jpeg"; // Most common for photos
-        }
+        metaImageType = "image/jpeg";
       }
     }
+  }
 
-    // Escape all meta tag content for safety
-    const safeTitle = escapeHtml(metaTitle);
-    const safeDescription = escapeHtml(metaDescription);
+  const safeTitle = escapeHtml(metaTitle);
+  const safeDescription = escapeHtml(metaDescription);
 
-    // Build noscript content with checkin details
-    let noscriptContent = `
+  // Build noscript content with checkin details
+  let noscriptContent = `
       <div style="max-width: 600px; margin: 2rem auto; padding: 2rem; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: white; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.1);">
         <h1 style="font-size: 1.5rem; margin: 0 0 1rem 0; color: #1a1a1a;">${safeTitle}</h1>`;
 
-    // Add checkin details if available
-    if (checkinData) {
-      const checkin = checkinData;
+  if (checkinData) {
+    const checkin = checkinData;
 
-      if (checkin.text) {
-        noscriptContent += `
+    if (checkin.text) {
+      noscriptContent += `
         <p style="margin: 0 0 1.5rem 0; color: #333; line-height: 1.6;">${
-          escapeHtml(checkin.text)
-        }</p>`;
-      }
+        escapeHtml(checkin.text)
+      }</p>`;
+    }
 
-      if (checkin.image?.fullsizeUrl) {
-        noscriptContent += `
+    if (checkin.image?.fullsizeUrl) {
+      noscriptContent += `
         <img src="${checkin.image.fullsizeUrl}" alt="${safeDescription}" style="width: 100%; height: auto; border-radius: 4px; margin-bottom: 1.5rem;">`;
-      }
-
-      noscriptContent += `
-        <div style="padding: 1rem; background: #f5f5f5; border-radius: 4px; margin-bottom: 1rem;">
-          <h2 style="font-size: 0.875rem; font-weight: 600; margin: 0 0 0.5rem 0; color: #666; text-transform: uppercase;">Location</h2>`;
-
-      if (checkin.address?.name) {
-        noscriptContent += `
-          <p style="margin: 0 0 0.25rem 0; font-weight: 600; color: #1a1a1a;">${
-          escapeHtml(checkin.address.name)
-        }</p>`;
-      }
-
-      const addressParts = [
-        checkin.address?.street,
-        checkin.address?.locality,
-        checkin.address?.region,
-        checkin.address?.country,
-      ].filter(Boolean);
-
-      if (addressParts.length > 0) {
-        noscriptContent += `
-          <p style="margin: 0; color: #666; font-size: 0.875rem;">${
-          escapeHtml(addressParts.join(", "))
-        }</p>`;
-      }
-
-      if (checkin.coordinates) {
-        noscriptContent += `
-          <p style="margin: 0.5rem 0 0 0; color: #999; font-size: 0.75rem;">📍 ${
-          checkin.coordinates.latitude.toFixed(6)
-        }, ${checkin.coordinates.longitude.toFixed(6)}</p>`;
-      }
-
-      noscriptContent += `
-        </div>`;
-
-      if (checkin.author) {
-        noscriptContent += `
-        <div style="display: flex; align-items: center; padding-top: 1rem; border-top: 1px solid #e5e5e5;">`;
-
-        if (checkin.author.avatar) {
-          noscriptContent += `
-          <img src="${checkin.author.avatar}" alt="${
-            escapeHtml(checkin.author.displayName || checkin.author.handle)
-          }" style="width: 40px; height: 40px; border-radius: 50%; margin-right: 0.75rem;">`;
-        }
-
-        noscriptContent += `
-          <div>
-            <p style="margin: 0; font-weight: 600; color: #1a1a1a;">${
-          escapeHtml(
-            checkin.author.displayName || checkin.author.handle,
-          )
-        }</p>
-            <p style="margin: 0; color: #666; font-size: 0.875rem;">@${
-          escapeHtml(checkin.author.handle)
-        }</p>
-          </div>
-        </div>`;
-      }
-
-      if (checkin.createdAt) {
-        const date = new Date(checkin.createdAt);
-        noscriptContent += `
-        <p style="margin: 1rem 0 0 0; color: #999; font-size: 0.875rem;">${date.toLocaleDateString()} at ${date.toLocaleTimeString()}</p>`;
-      }
     }
 
     noscriptContent += `
+        <div style="padding: 1rem; background: #f5f5f5; border-radius: 4px; margin-bottom: 1rem;">
+          <h2 style="font-size: 0.875rem; font-weight: 600; margin: 0 0 0.5rem 0; color: #666; text-transform: uppercase;">Location</h2>`;
+
+    if (checkin.address?.name) {
+      noscriptContent += `
+          <p style="margin: 0 0 0.25rem 0; font-weight: 600; color: #1a1a1a;">${
+        escapeHtml(checkin.address.name)
+      }</p>`;
+    }
+
+    const addressParts = [
+      checkin.address?.street,
+      checkin.address?.locality,
+      checkin.address?.region,
+      checkin.address?.country,
+    ].filter(Boolean);
+
+    if (addressParts.length > 0) {
+      noscriptContent += `
+          <p style="margin: 0; color: #666; font-size: 0.875rem;">${
+        escapeHtml(addressParts.join(", "))
+      }</p>`;
+    }
+
+    if (checkin.coordinates) {
+      noscriptContent += `
+          <p style="margin: 0.5rem 0 0 0; color: #999; font-size: 0.75rem;">📍 ${
+        checkin.coordinates.latitude.toFixed(6)
+      }, ${checkin.coordinates.longitude.toFixed(6)}</p>`;
+    }
+
+    noscriptContent += `
+        </div>`;
+
+    if (checkin.author) {
+      noscriptContent += `
+        <div style="display: flex; align-items: center; padding-top: 1rem; border-top: 1px solid #e5e5e5;">`;
+
+      if (checkin.author.avatar) {
+        noscriptContent += `
+          <img src="${checkin.author.avatar}" alt="${
+          escapeHtml(checkin.author.displayName || checkin.author.handle)
+        }" style="width: 40px; height: 40px; border-radius: 50%; margin-right: 0.75rem;">`;
+      }
+
+      noscriptContent += `
+          <div>
+            <p style="margin: 0; font-weight: 600; color: #1a1a1a;">${
+        escapeHtml(
+          checkin.author.displayName || checkin.author.handle,
+        )
+      }</p>
+            <p style="margin: 0; color: #666; font-size: 0.875rem;">@${
+        escapeHtml(checkin.author.handle)
+      }</p>
+          </div>
+        </div>`;
+    }
+
+    if (checkin.createdAt) {
+      const date = new Date(checkin.createdAt);
+      noscriptContent += `
+        <p style="margin: 1rem 0 0 0; color: #999; font-size: 0.875rem;">${date.toLocaleDateString()} at ${date.toLocaleTimeString()}</p>`;
+    }
+  }
+
+  noscriptContent += `
         <p style="margin: 1.5rem 0 0 0; padding-top: 1rem; border-top: 1px solid #e5e5e5; color: #666; font-size: 0.875rem;">
           This page requires JavaScript for the full interactive experience. Please enable JavaScript in your browser.
         </p>
         <a href="/" style="display: inline-block; margin-top: 1rem; padding: 0.75rem 1.5rem; background: #007aff; color: white; text-decoration: none; border-radius: 4px; font-weight: 600;">← View All Check-ins</a>
       </div>`;
 
-    return new Response(
-      `<!DOCTYPE html>
+  return new Response(
+    `<!DOCTYPE html>
       <html lang="en">
       <head>
         <meta charset="UTF-8">
@@ -296,7 +337,7 @@ export function createFrontendRoutes() {
         <meta property="og:title" content="${safeTitle}">
         <meta property="og:description" content="${safeDescription}">
         <meta property="og:type" content="article">
-        <meta property="og:url" content="${c.req.url}">
+        <meta property="og:url" content="${requestUrl}">
         <meta property="og:site_name" content="Anchor">
         <meta property="og:image" content="${metaImage}">
         <meta property="og:image:type" content="${metaImageType}">
@@ -314,7 +355,7 @@ export function createFrontendRoutes() {
         <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
         <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;700;800&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Epilogue:wght@400;600;700;800;900&display=swap" rel="stylesheet">
         <script src="https://cdn.twind.style" crossorigin></script>
-        <script src="https://esm.town/v/std/catch"></script>
+
       </head>
       <body style="margin: 0; background: #f8fafc;">
         <!-- React app root -->
@@ -327,38 +368,8 @@ export function createFrontendRoutes() {
         <script type="module" src="/frontend/index.tsx"></script>
       </body>
       </html>`,
-      {
-        headers: { "Content-Type": "text/html" },
-      },
-    );
-  }
-
-  // Individual checkin pages - /checkins/:did/:rkey (new format)
-  app.get("/checkins/:did/:rkey", async (c) => {
-    const did = c.req.param("did");
-    const rkey = c.req.param("rkey");
-    const checkinId = `${did}/${rkey}`;
-    return await renderCheckinPage(c, checkinId);
-  });
-
-  // Legacy checkin URL format - /checkin/:identifier/:rkey (singular)
-  // Used by mobile app and older links
-  app.get("/checkin/:identifier/:rkey", async (c) => {
-    const identifier = c.req.param("identifier");
-    const rkey = c.req.param("rkey");
-    const checkinId = `${identifier}/${rkey}`;
-    return await renderCheckinPage(c, checkinId);
-  });
-
-  // Mobile auth page - serves simple standalone HTML without ES modules
-  // This is required because ASWebAuthenticationSession doesn't support ES module loading from external URLs
-  app.get(
-    "/mobile-auth",
-    (_c) => serveFile("/frontend/mobile-auth-simple.html", import.meta.url),
+    {
+      headers: { "Content-Type": "text/html" },
+    },
   );
-
-  // Catch-all route for SPA
-  app.get("*", (_c) => serveFile("/frontend/index.html", import.meta.url));
-
-  return app;
 }
