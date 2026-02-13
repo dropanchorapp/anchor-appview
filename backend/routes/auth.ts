@@ -4,7 +4,7 @@
 
 import type { App } from "@fresh/core";
 import { isValidHandle } from "npm:@atproto/syntax@0.3.0";
-import { getOAuth } from "./getOAuth().ts";
+import { getOAuth } from "./oauth.ts";
 import { getSessionFromRequest } from "../utils/session.ts";
 import { migrateUserCheckinsInBackground } from "../services/checkin-migration-service.ts";
 import { resolveProfileFromPds } from "../utils/atproto-resolver.ts";

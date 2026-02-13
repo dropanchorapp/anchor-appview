@@ -7,7 +7,7 @@ import type {
   OAuthSessionFromRequestResult,
   SessionInterface,
 } from "jsr:@tijs/atproto-oauth@2.4.0";
-import { getOAuth } from "../routes/getOAuth().ts";
+import { getOAuth } from "../routes/oauth.ts";
 
 export interface SessionResult {
   session: SessionInterface | null;
