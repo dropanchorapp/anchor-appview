@@ -247,6 +247,7 @@ export const modalContentSmall = css`
   ${modalContent} max-width: 400px;
   border-radius: ${radii.xxl};
   padding: ${spacing.xxxl};
+  overflow: visible;
 
   @media (max-width: 768px) {
     border-radius: ${radii.xxl};
