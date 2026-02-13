@@ -66,7 +66,7 @@ export async function getSessionFromRequest(
 ): Promise<SessionResult> {
   try {
     // Use the new method that returns Set-Cookie header for session refresh
-    const result: OAuthSessionFromRequestResult = await oauth
+    const result: OAuthSessionFromRequestResult = await getOAuth()
       .getSessionFromRequest(request);
 
     if (!result.session) {
