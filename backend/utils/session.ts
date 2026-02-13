@@ -7,7 +7,7 @@ import type {
   OAuthSessionFromRequestResult,
   SessionInterface,
 } from "jsr:@tijs/atproto-oauth@2.4.0";
-import { oauth } from "../routes/oauth.ts";
+import { getOAuth } from "../routes/getOAuth().ts";
 
 export interface SessionResult {
   session: SessionInterface | null;
@@ -193,7 +193,7 @@ export async function getSessionFromRequest(
  * Get clear cookie header for session cleanup.
  */
 export function getClearSessionCookie(): string {
-  return oauth.getClearCookieHeader();
+  return getOAuth().getClearCookieHeader();
 }
 
 /**

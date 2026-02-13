@@ -8,6 +8,7 @@ try {
 
 import { App, staticFiles } from "@fresh/core";
 import { initializeTables } from "./backend/database/db.ts";
+import { initOAuth } from "./backend/routes/oauth.ts";
 import { registerAuthRoutes } from "./backend/routes/auth.ts";
 import { registerFrontendRoutes } from "./backend/routes/frontend.ts";
 import anchorApiHandler from "./backend/api/anchor-api.ts";
@@ -31,6 +32,12 @@ app = app.use(async (ctx) => {
     console.error("Unhandled error:", err);
     throw err;
   }
+});
+
+// Initialize OAuth on first request (derives BASE_URL from request if not set)
+app = app.use(async (ctx) => {
+  initOAuth(ctx.req);
+  return await ctx.next();
 });
 
 // Security headers middleware
@@ -145,10 +152,10 @@ app = app.get("/api/debug/oauth-sessions", async () => {
       .where(like(ironSessionStorageTable.key, targetSessionKey))
       .limit(1);
 
-    const { sessions } = await import("./backend/routes/oauth.ts");
+    const { getSessions } = await import("./backend/routes/oauth.ts");
     let apiResult = null;
     try {
-      const oauthSession = await sessions.getOAuthSession(FAILING_DID);
+      const oauthSession = await getSessions().getOAuthSession(FAILING_DID);
       apiResult = oauthSession
         ? {
           found: true,

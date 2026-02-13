@@ -5,6 +5,8 @@
     "@fresh/core": "jsr:@fresh/core@^2.2.0",
     "fresh/dev": "jsr:@fresh/core@^2.2.0/dev",
     "fresh/internal": "jsr:@fresh/core@^2.2.0/internal",
+    "esbuild": "npm:esbuild@0.27.2",
+    "@std/encoding": "jsr:@std/encoding@1",
     "@libsql/client": "npm:@libsql/client@0.17.0",
     "@libsql/client/web": "npm:@libsql/client@0.17.0/web",
     "@std/dotenv": "jsr:@std/dotenv@0.225",
@@ -36,16 +38,19 @@
     "backend/",
     "frontend/",
     "tests/",
+    "scripts/",
     "main.ts",
     "dev.ts"
   ],
   "exclude": [
-    "**/_fresh/*"
+    "**/_fresh/*",
+    "static/"
   ],
   "node_modules_dir": false,
   "tasks": {
-    "dev": "deno run -A --watch=backend/,frontend/ dev.ts",
-    "build": "deno run -A dev.ts build",
+    "build:frontend": "deno run -A scripts/build-frontend.ts",
+    "dev": "deno task build:frontend && deno run -A --watch=backend/,frontend/ dev.ts",
+    "build": "deno task build:frontend && deno run -A dev.ts build",
     "start": "deno serve -A _fresh/server.js",
     "preview": "deno run -A main.ts",
     "test": "TURSO_DATABASE_URL=file::memory: COOKIE_SECRET=test-cookie-secret-32-characters-minimum deno test --allow-all tests/",

@@ -1,6 +1,10 @@
 // Frontend and static content routes
 import type { App } from "@fresh/core";
-import { serveFile } from "../utils/file-server.ts";
+import {
+  getBundleFileName,
+  readFile,
+  serveFile,
+} from "../utils/file-server.ts";
 import {
   resolveHandleToDid,
   resolvePdsUrl,
@@ -111,11 +115,40 @@ async function fetchCheckinData(identifier: string, rkey: string) {
   }
 }
 
+// Cache the bundle filename
+let cachedBundleFileName: string | null = null;
+
+/**
+ * Get the HTML template with the correct hashed bundle filename injected.
+ */
+async function getHtmlWithBundle(moduleUrl: string): Promise<string> {
+  if (!cachedBundleFileName) {
+    cachedBundleFileName = await getBundleFileName(moduleUrl);
+  }
+  let html = await readFile("frontend/index.html", moduleUrl);
+  html = html.replace(
+    /src="\/static\/bundle\.js"/,
+    `src="/static/${cachedBundleFileName}"`,
+  );
+  return html;
+}
+
+async function serveHtml(moduleUrl: string): Promise<Response> {
+  const html = await getHtmlWithBundle(moduleUrl);
+  return new Response(html, {
+    headers: { "Content-Type": "text/html; charset=utf-8" },
+  });
+}
+
 export function registerFrontendRoutes(
   app: App<any>,
   moduleUrl: string,
 ): App<any> {
   // Static file serving
+  app = app.get("/static/:path*", (ctx) => {
+    const url = new URL(ctx.req.url);
+    return serveFile(url.pathname, moduleUrl);
+  });
   app = app.get("/frontend/:path*", (ctx) => {
     const url = new URL(ctx.req.url);
     return serveFile(url.pathname, moduleUrl);
@@ -126,10 +159,7 @@ export function registerFrontendRoutes(
   });
 
   // Terms of Service - serve React app
-  app = app.get(
-    "/terms",
-    () => serveFile("/frontend/index.html", moduleUrl),
-  );
+  app = app.get("/terms", () => serveHtml(moduleUrl));
 
   // Privacy Policy - redirect to the full React privacy policy page
   app = app.get("/privacy", () => {
@@ -159,14 +189,14 @@ export function registerFrontendRoutes(
     return await renderCheckinPage(ctx.req.url, checkinId, moduleUrl);
   });
 
-  // Mobile auth page
+  // Mobile auth page (standalone HTML, no bundle needed)
   app = app.get(
     "/mobile-auth",
     () => serveFile("/frontend/mobile-auth-simple.html", moduleUrl),
   );
 
   // Catch-all route for SPA
-  app = app.get("*", () => serveFile("/frontend/index.html", moduleUrl));
+  app = app.get("*", () => serveHtml(moduleUrl));
 
   return app;
 }
@@ -365,7 +395,7 @@ async function renderCheckinPage(
         <noscript>${noscriptContent}</noscript>
 
         <!-- Load React app -->
-        <script type="module" src="/frontend/index.tsx"></script>
+        <script type="module" src="/static/bundle.js"></script>
       </body>
       </html>`,
     {

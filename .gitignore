@@ -70,6 +70,8 @@ yarn.lock
 dist/
 build/
 out/
+static/
+_fresh/
 
 # === Backup files ===
 *.bak

@@ -4,7 +4,7 @@
 
 import type { App } from "@fresh/core";
 import { isValidHandle } from "npm:@atproto/syntax@0.3.0";
-import { oauth } from "./oauth.ts";
+import { getOAuth } from "./getOAuth().ts";
 import { getSessionFromRequest } from "../utils/session.ts";
 import { migrateUserCheckinsInBackground } from "../services/checkin-migration-service.ts";
 import { resolveProfileFromPds } from "../utils/atproto-resolver.ts";
@@ -17,13 +17,13 @@ interface MobileStartRequest {
 export function registerAuthRoutes(app: App<any>): App<any> {
   // === Core OAuth routes (from library) ===
 
-  app = app.get("/login", (ctx) => oauth.handleLogin(ctx.req));
-  app = app.get("/oauth/callback", (ctx) => oauth.handleCallback(ctx.req));
+  app = app.get("/login", (ctx) => getOAuth().handleLogin(ctx.req));
+  app = app.get("/oauth/callback", (ctx) => getOAuth().handleCallback(ctx.req));
   app = app.get(
     "/oauth-client-metadata.json",
-    () => oauth.handleClientMetadata(),
+    () => getOAuth().handleClientMetadata(),
   );
-  app = app.post("/api/auth/logout", (ctx) => oauth.handleLogout(ctx.req));
+  app = app.post("/api/auth/logout", (ctx) => getOAuth().handleLogout(ctx.req));
 
   // === App-specific session endpoint ===
 

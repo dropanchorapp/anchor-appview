@@ -60,6 +60,20 @@ export async function readFile(
 }
 
 /**
+ * Get the content-hashed bundle filename from the build manifest.
+ * Falls back to "bundle.js" if manifest not found.
+ */
+export async function getBundleFileName(baseUrl: string): Promise<string> {
+  try {
+    const manifestContent = await readFile("static/manifest.json", baseUrl);
+    const manifest = JSON.parse(manifestContent);
+    return manifest["bundle.js"] || "bundle.js";
+  } catch {
+    return "bundle.js";
+  }
+}
+
+/**
  * Serve a file with appropriate content-type and cache headers.
  * Drop-in replacement for Val Town's serveFile.
  */

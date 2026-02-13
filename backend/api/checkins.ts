@@ -8,6 +8,7 @@ import {
 } from "../utils/session.ts";
 // No database imports needed - all data read from PDS
 import type { OAuthSessionsInterface } from "jsr:@tijs/atproto-oauth@2.4.0";
+import { getSessions } from "../routes/oauth.ts";
 
 // Global service instance for address enhancement
 const overpassService = new OverpassService();
@@ -313,7 +314,7 @@ export async function createCheckin(req: Request): Promise<Response> {
     }
 
     // Get sessions instance for clean OAuth API access
-    const { sessions } = await import("../routes/oauth.ts");
+    const sessions = getSessions();
 
     // Create checkin record with embedded address via AT Protocol
     const createResult = await createCheckinWithEmbeddedAddress(
@@ -613,7 +614,7 @@ export async function deleteCheckin(
     console.log(`🗑️ Starting checkin deletion: ${targetDid}/${rkey}`);
 
     // Get sessions instance for clean OAuth API access
-    const { sessions } = await import("../routes/oauth.ts");
+    const sessions = getSessions();
 
     // Delete checkin record via AT Protocol
     const deleteResult = await deleteCheckinRecord(
