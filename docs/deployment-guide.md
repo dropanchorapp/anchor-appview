@@ -8,7 +8,7 @@
 
 ## Architecture
 
-Anchor is a single Hono web server (`main.tsx`) that serves both the API and the
+Anchor is a Fresh 2 application (`main.ts`) that serves both the API and the
 React frontend. It deploys to Deno Deploy and auto-deploys on push to `main`.
 
 ## Deployment
@@ -32,6 +32,7 @@ Set these in the Deno Deploy dashboard:
 | `BUNNY_STORAGE_KEY`    | Bunny CDN API key                                 |
 | `BUNNY_STORAGE_REGION` | Bunny CDN region                                  |
 | `BUNNY_CDN_URL`        | CDN base URL (e.g., `https://cdn.dropanchor.app`) |
+| `TURSO_DATABASE_URL`   | Turso/libSQL database URL                         |
 | `SENTRY_DSN`           | Sentry error tracking DSN (optional)              |
 
 ## Quality Checks

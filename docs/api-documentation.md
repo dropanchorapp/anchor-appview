@@ -305,7 +305,7 @@ curl "https://dropanchor.app/api/following?user=did:plc:example123&limit=10"
 }
 ```
 
-**Note:** Social graph data is synced daily from Bluesky. If no follows are
+**Note:** Social graph is read from the Bluesky API on demand. If no follows are
 found, returns an empty array.
 
 ### 5. Place Discovery

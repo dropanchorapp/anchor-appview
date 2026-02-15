@@ -57,7 +57,7 @@ Local database (Turso/libSQL) only stores:
 | `backend/routes/auth.ts` | Login, session, logout endpoints |
 | `backend/routes/frontend.ts` | HTML shell serving with SSR |
 | `backend/api/anchor-api.ts` | Main API router — dispatches by URL pattern |
-| `backend/api/checkins.ts` | Checkin creation (two-record pattern: address + checkin with StrongRef) |
+| `backend/api/checkins.ts` | Checkin creation (embedded address/geo format) |
 | `backend/api/user-checkins.ts` | Read checkins from PDS |
 | `backend/api/likes.ts` | Like endpoints with local index |
 | `backend/api/comments.ts` | Comment endpoints with local index |
@@ -131,58 +131,22 @@ TURSO_DATABASE_URL=file::memory: COOKIE_SECRET=test-cookie-secret-32-characters-
 
 ## AT Protocol Record Types
 
-**Checkin** (`app.dropanchor.checkin`): text, createdAt, addressRef (StrongRef),
-coordinates, optional category/categoryIcon/categoryGroup
+Checkins use an **embedded format** — address and geo are objects within the
+checkin record (no separate address records, no StrongRefs for addresses).
 
-**Address** (`community.lexicon.location.address`): name, street, locality,
-region, country, postalCode
+- **Checkin** (`app.dropanchor.checkin`): text, createdAt, embedded `address`
+  (country required), embedded `geo` (lat/lng as strings for DAG-CBOR), optional
+  category, image, fsq
+- **Like** (`app.dropanchor.like`): createdAt, checkinRef (StrongRef to checkin)
+- **Comment** (`app.dropanchor.comment`): text (max 1000 chars), createdAt,
+  checkinRef (StrongRef)
 
-**Like** (`app.dropanchor.like`): createdAt, checkinRef (StrongRef)
+Lexicon schemas are in `lexicons/app/dropanchor/`. See
+[docs/lexicon-publishing.md](docs/lexicon-publishing.md) for publishing with
+`goat` CLI.
 
-**Comment** (`app.dropanchor.comment`): text (max 1000 chars), createdAt,
-checkinRef (StrongRef)
-
-Checkins use a **two-record pattern**: create address record first, then checkin
-record referencing it via StrongRef (CID + AT URI).
-
-Lexicons are published on the dropanchor.app PDS account. Validate/publish with
-`goat` CLI:
-
-```bash
-goat lex parse ./lexicons/app/dropanchor/*.json
-goat lex status ./lexicons/
-```
-
-## API Endpoints
-
-```
-POST   /api/checkins                          Create checkin
-GET    /api/checkins/:did                     User's checkins (paginated)
-GET    /api/checkins/:did/:rkey               Single checkin
-DELETE /api/checkins/:did/:rkey               Delete checkin
-
-GET    /api/checkins/:did/:rkey/likes         Likes for checkin
-POST   /api/checkins/:did/:rkey/likes         Like (auth required)
-DELETE /api/checkins/:did/:rkey/likes         Unlike (auth required)
-
-GET    /api/checkins/:did/:rkey/comments      Comments for checkin
-POST   /api/checkins/:did/:rkey/comments      Comment (auth required)
-DELETE /api/checkins/:did/:rkey/comments      Delete comment (auth required)
-
-GET    /api/nearby?lat=&lng=&radius=&limit=   Spatial query
-GET    /api/user?did=                         User checkins (legacy)
-GET    /api/following?user=                   Following feed
-GET    /api/stats                             System metrics
-GET    /api/places/nearby                     POI search (Overpass)
-GET    /api/places/search                     Place search (Nominatim)
-GET    /api/places/categories                 Category list
-POST   /api/migrate-checkins                  DAG-CBOR migration (auth required)
-
-GET    /login                                 OAuth web flow
-GET    /oauth/callback                        OAuth redirect
-GET    /api/auth/session                      Session validation
-POST   /api/auth/logout                       Logout
-```
+Full data model with TypeScript interfaces:
+[docs/api-documentation.md](docs/api-documentation.md#data-model).
 
 ## Testing
 
@@ -197,14 +161,14 @@ Tests use Deno's built-in test framework with in-memory SQLite
 CI (`.github/workflows/deno.yml`) runs lint + unit tests only (integration tests
 excluded).
 
-## Deployment
+## Further Documentation
 
-Auto-deploys on push to `main` via Deno Deploy GitHub integration. No manual
-deploy step. Environment variables configured in Deno Deploy dashboard.
-
-Key env vars: `COOKIE_SECRET`, `ANCHOR_BASE_URL`, `BUNNY_STORAGE_ZONE`,
-`BUNNY_STORAGE_KEY`, `BUNNY_STORAGE_REGION`, `BUNNY_CDN_URL`,
-`TURSO_DATABASE_URL`.
+| Topic | Doc |
+| --- | --- |
+| API endpoints, request/response formats, data model | [docs/api-documentation.md](docs/api-documentation.md) |
+| OAuth setup, auth methods, mobile auth flow | [docs/authentication.md](docs/authentication.md) |
+| Deployment, env vars, monitoring | [docs/deployment-guide.md](docs/deployment-guide.md) |
+| Lexicon publishing and DNS resolution | [docs/lexicon-publishing.md](docs/lexicon-publishing.md) |
 
 ## Adding New Database Tables
 
@@ -212,17 +176,9 @@ Key env vars: `COOKIE_SECRET`, `ANCHOR_BASE_URL`, `BUNNY_STORAGE_ZONE`,
 2. Add migration SQL in `backend/database/migrations.ts`
 3. Tables auto-create on startup via `initializeTables()`
 
-## Mobile Integration (iOS)
-
-OAuth flow: iOS WebView opens `/login?handle=...` → user completes OAuth →
-success redirects to `anchor-app://auth-callback` with session data. iOS app
-uses Bearer token auth (`Authorization: Bearer {session_id}`). Set WebView
-User-Agent to "AnchorApp" for detection.
-
 ## Constraints
 
 - **No local checkin storage** — PDS-only architecture is intentional
 - **500 line file limit** — break up files that exceed this
-- Code files should never be more than 500 lines
 - Use `https://esm.sh` for npm packages, `jsr:` for JSR packages
 - Deploys happen automatically on push to main via Deno Deploy
