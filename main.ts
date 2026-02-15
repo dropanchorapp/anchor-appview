@@ -78,12 +78,12 @@ app = registerAuthRoutes(app);
 // API routes — anchor-api handler takes raw Request
 app = app.get("/api/nearby", (ctx) => anchorApiHandler(ctx.req));
 
-// REST-style checkin endpoints
+// Checkin CRUD — exact paths registered before parameterized routes
+// to prevent Fresh's router from matching POST /api/checkins against
+// GET /api/checkins/:did and returning 405 Method Not Allowed
+app = app.post("/api/checkins", (ctx) => createCheckin(ctx.req));
 app = app.get("/api/checkins/:did", (ctx) => anchorApiHandler(ctx.req));
 app = app.get("/api/checkins/:did/:rkey", (ctx) => anchorApiHandler(ctx.req));
-
-// Checkin CRUD
-app = app.post("/api/checkins", (ctx) => createCheckin(ctx.req));
 app = app.delete("/api/checkins/:did/:rkey", (ctx) => {
   const url = new URL(ctx.req.url);
   const parts = url.pathname.split("/");
