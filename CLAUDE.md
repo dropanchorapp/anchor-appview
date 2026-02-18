@@ -112,11 +112,14 @@ deno task test:integration
 # Watch mode for TDD
 deno task test:watch
 
-# Full quality check (fmt + lint + type check + tests)
+# Full quality check (fmt + lint + audit + type check + tests)
 deno task quality
 
 # Quick quality (no type check)
 deno task quality-no-check
+
+# Dependency security audit (checks npm + JSR against GitHub CVE database)
+deno audit
 
 # Build frontend bundle only
 deno task build:frontend
@@ -158,8 +161,9 @@ Tests use Deno's built-in test framework with in-memory SQLite
 - **Fixtures**: `tests/fixtures/test-data.ts`
 - **Mocks**: `tests/mocks/sqlite-mock.ts`
 
-CI (`.github/workflows/deno.yml`) runs lint + unit tests only (integration tests
-excluded).
+CI (`.github/workflows/deno.yml`) runs audit + lint + unit tests (integration
+tests excluded). Dependabot monitors npm and GitHub Actions dependencies for
+security advisories.
 
 ## Further Documentation
 
