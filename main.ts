@@ -46,6 +46,19 @@ app = app.use(async (ctx) => {
   }
 });
 
+// Trailing slash normalization — redirect /path/ to /path (308 preserves method+body).
+// Fresh's static route lookup uses exact pathname matching, so "/api/checkins/"
+// misses the registered "/api/checkins" route and falls through to the catch-all
+// GET * handler, which returns 405 for POST requests.
+app = app.use(async (ctx) => {
+  const url = new URL(ctx.req.url);
+  if (url.pathname !== "/" && url.pathname.endsWith("/")) {
+    url.pathname = url.pathname.slice(0, -1);
+    return Response.redirect(url.toString(), 308);
+  }
+  return await ctx.next();
+});
+
 // Initialize OAuth on first request (derives BASE_URL from request if not set)
 app = app.use(async (ctx) => {
   initOAuth(ctx.req);
@@ -78,9 +91,7 @@ app = registerAuthRoutes(app);
 // API routes — anchor-api handler takes raw Request
 app = app.get("/api/nearby", (ctx) => anchorApiHandler(ctx.req));
 
-// Checkin CRUD — exact paths registered before parameterized routes
-// to prevent Fresh's router from matching POST /api/checkins against
-// GET /api/checkins/:did and returning 405 Method Not Allowed
+// Checkin CRUD
 app = app.post("/api/checkins", (ctx) => createCheckin(ctx.req));
 app = app.get("/api/checkins/:did", (ctx) => anchorApiHandler(ctx.req));
 app = app.get("/api/checkins/:did/:rkey", (ctx) => anchorApiHandler(ctx.req));
