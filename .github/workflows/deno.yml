@@ -20,6 +20,9 @@ jobs:
       - name: Setup Deno
         uses: denoland/setup-deno@v2
 
+      - name: Audit dependencies
+        run: deno audit
+
       - name: Run linter
         run: deno lint
 
