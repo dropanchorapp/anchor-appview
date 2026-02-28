@@ -78,9 +78,6 @@ app = app.use(async (ctx) => {
   return response;
 });
 
-// Serve static files from /static directory
-app.use(staticFiles());
-
 // ============================================================================
 // Register routes
 // ============================================================================
@@ -152,6 +149,9 @@ app = app.get("/api/places/categories", (ctx) => anchorApiHandler(ctx.req));
 
 // Legacy /api/checkin/* endpoint for backward compatibility
 app = app.get("/api/checkin/:path*", (ctx) => anchorApiHandler(ctx.req));
+
+// Serve static files (must be after API routes to prevent 405 on POST/PUT/DELETE)
+app.use(staticFiles());
 
 // Frontend routes LAST (contains catch-all route)
 app = registerFrontendRoutes(app, import.meta.url);
