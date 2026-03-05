@@ -85,51 +85,58 @@ app = app.use(async (ctx) => {
 // Auth routes (OAuth, session, mobile auth)
 app = registerAuthRoutes(app);
 
-// API routes — anchor-api handler takes raw Request
-app = app.get("/api/nearby", (ctx) => anchorApiHandler(ctx.req));
-
-// Checkin CRUD
-app = app.post("/api/checkins", (ctx) => createCheckin(ctx.req));
-app = app.get("/api/checkins/:did", (ctx) => anchorApiHandler(ctx.req));
-app = app.get("/api/checkins/:did/:rkey", (ctx) => anchorApiHandler(ctx.req));
-app = app.delete("/api/checkins/:did/:rkey", (ctx) => {
+// API write operations (POST/DELETE) — registered as middleware so they always
+// execute regardless of Fresh's URLPattern router method matching. This prevents
+// 405 errors when the catch-all GET * in frontend routes matches the path but
+// not the method. See: Sentry #96584021.
+app = app.use(async (ctx) => {
   const url = new URL(ctx.req.url);
-  const parts = url.pathname.split("/");
-  // /api/checkins/:did/:rkey → parts[3] = did, parts[4] = rkey
-  const did = parts[3];
-  const rkey = parts[4];
-  return deleteCheckin(ctx.req, did, rkey);
+  const method = ctx.req.method;
+
+  if (
+    !url.pathname.startsWith("/api/") ||
+    (method !== "POST" && method !== "DELETE")
+  ) {
+    return await ctx.next();
+  }
+
+  // POST /api/checkins
+  if (method === "POST" && url.pathname === "/api/checkins") {
+    return createCheckin(ctx.req);
+  }
+
+  // DELETE /api/checkins/:did/:rkey
+  if (method === "DELETE") {
+    const deleteParts = url.pathname.split("/");
+    if (
+      deleteParts.length === 5 && deleteParts[1] === "api" &&
+      deleteParts[2] === "checkins"
+    ) {
+      return deleteCheckin(ctx.req, deleteParts[3], deleteParts[4]);
+    }
+  }
+
+  // POST/DELETE for likes, comments, migrate — handled by anchor-api
+  if (
+    url.pathname.startsWith("/api/checkins/") ||
+    url.pathname === "/api/migrate-checkins"
+  ) {
+    return anchorApiHandler(ctx.req);
+  }
+
+  return await ctx.next();
 });
 
-// Likes and comments endpoints — handled by anchor-api
+// API read routes (GET) — method-specific routing works fine with catch-all GET *
+app = app.get("/api/nearby", (ctx) => anchorApiHandler(ctx.req));
+app = app.get("/api/checkins/:did", (ctx) => anchorApiHandler(ctx.req));
+app = app.get("/api/checkins/:did/:rkey", (ctx) => anchorApiHandler(ctx.req));
 app = app.get(
-  "/api/checkins/:did/:rkey/likes",
-  (ctx) => anchorApiHandler(ctx.req),
-);
-app = app.post(
-  "/api/checkins/:did/:rkey/likes",
-  (ctx) => anchorApiHandler(ctx.req),
-);
-app = app.delete(
   "/api/checkins/:did/:rkey/likes",
   (ctx) => anchorApiHandler(ctx.req),
 );
 app = app.get(
   "/api/checkins/:did/:rkey/comments",
-  (ctx) => anchorApiHandler(ctx.req),
-);
-app = app.post(
-  "/api/checkins/:did/:rkey/comments",
-  (ctx) => anchorApiHandler(ctx.req),
-);
-app = app.delete(
-  "/api/checkins/:did/:rkey/comments",
-  (ctx) => anchorApiHandler(ctx.req),
-);
-
-// Checkin migration endpoint
-app = app.post(
-  "/api/migrate-checkins",
   (ctx) => anchorApiHandler(ctx.req),
 );
 
@@ -150,8 +157,8 @@ app = app.get("/api/places/categories", (ctx) => anchorApiHandler(ctx.req));
 // Legacy /api/checkin/* endpoint for backward compatibility
 app = app.get("/api/checkin/:path*", (ctx) => anchorApiHandler(ctx.req));
 
-// Serve static files (must be after API routes to prevent 405 on POST/PUT/DELETE)
-app.use(staticFiles());
+// Serve static files
+app = app.use(staticFiles());
 
 // Frontend routes LAST (contains catch-all route)
 app = registerFrontendRoutes(app, import.meta.url);
