@@ -51,22 +51,22 @@ Local database (Turso/libSQL) only stores:
 
 ### Key Backend Modules
 
-| Module | Purpose |
-| --- | --- |
-| `backend/routes/oauth.ts` | OAuth init (lazy, derives BASE_URL from first request) |
-| `backend/routes/auth.ts` | Login, session, logout endpoints |
-| `backend/routes/frontend.ts` | HTML shell serving with SSR |
-| `backend/api/anchor-api.ts` | Main API router — dispatches by URL pattern |
-| `backend/api/checkins.ts` | Checkin creation (embedded address/geo format) |
-| `backend/api/user-checkins.ts` | Read checkins from PDS |
-| `backend/api/likes.ts` | Like endpoints with local index |
-| `backend/api/comments.ts` | Comment endpoints with local index |
-| `backend/api/places.ts` | Place search via Overpass/Nominatim |
-| `backend/database/db.ts` | Drizzle ORM adapter |
-| `backend/database/schema.ts` | SQLite schema |
-| `backend/database/migrations.ts` | Table creation (runs on startup) |
-| `backend/services/image-service.ts` | Image validation, EXIF stripping |
-| `backend/utils/auth-helpers.ts` | Auth extraction from cookies/Bearer tokens |
+| Module                              | Purpose                                                |
+| ----------------------------------- | ------------------------------------------------------ |
+| `backend/routes/oauth.ts`           | OAuth init (lazy, derives BASE_URL from first request) |
+| `backend/routes/auth.ts`            | Login, session, logout endpoints                       |
+| `backend/routes/frontend.ts`        | HTML shell serving with SSR                            |
+| `backend/api/anchor-api.ts`         | Main API router — dispatches by URL pattern            |
+| `backend/api/checkins.ts`           | Checkin creation (embedded address/geo format)         |
+| `backend/api/user-checkins.ts`      | Read checkins from PDS                                 |
+| `backend/api/likes.ts`              | Like endpoints with local index                        |
+| `backend/api/comments.ts`           | Comment endpoints with local index                     |
+| `backend/api/places.ts`             | Place search via Overpass/Nominatim                    |
+| `backend/database/db.ts`            | Drizzle ORM adapter                                    |
+| `backend/database/schema.ts`        | SQLite schema                                          |
+| `backend/database/migrations.ts`    | Table creation (runs on startup)                       |
+| `backend/services/image-service.ts` | Image validation, EXIF stripping                       |
+| `backend/utils/auth-helpers.ts`     | Auth extraction from cookies/Bearer tokens             |
 
 ### Request Flow
 
@@ -167,12 +167,12 @@ security advisories.
 
 ## Further Documentation
 
-| Topic | Doc |
-| --- | --- |
-| API endpoints, request/response formats, data model | [docs/api-documentation.md](docs/api-documentation.md) |
-| OAuth setup, auth methods, mobile auth flow | [docs/authentication.md](docs/authentication.md) |
-| Deployment, env vars, monitoring | [docs/deployment-guide.md](docs/deployment-guide.md) |
-| Lexicon publishing and DNS resolution | [docs/lexicon-publishing.md](docs/lexicon-publishing.md) |
+| Topic                                               | Doc                                                      |
+| --------------------------------------------------- | -------------------------------------------------------- |
+| API endpoints, request/response formats, data model | [docs/api-documentation.md](docs/api-documentation.md)   |
+| OAuth setup, auth methods, mobile auth flow         | [docs/authentication.md](docs/authentication.md)         |
+| Deployment, env vars, monitoring                    | [docs/deployment-guide.md](docs/deployment-guide.md)     |
+| Lexicon publishing and DNS resolution               | [docs/lexicon-publishing.md](docs/lexicon-publishing.md) |
 
 ## Adding New Database Tables
 
