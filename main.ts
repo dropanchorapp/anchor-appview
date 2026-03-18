@@ -35,11 +35,27 @@ let app = new App();
 // Middleware
 // ============================================================================
 
+// Reject malformed URIs early — invalid percent-encoding (e.g. /%c0) causes
+// decodeURI to throw inside Fresh's router before middleware can handle it.
+app = app.use(async (ctx) => {
+  try {
+    decodeURI(new URL(ctx.req.url).pathname);
+  } catch {
+    return new Response("Bad Request", { status: 400 });
+  }
+  return await ctx.next();
+});
+
 // Error handling middleware — report to Sentry
 app = app.use(async (ctx) => {
   try {
     return await ctx.next();
   } catch (err) {
+    // Malformed percent-encoding (e.g. /%c0) causes decodeURI to throw
+    // inside Fresh's router. Return 400 instead of crashing. See: Sentry #102617952.
+    if (err instanceof URIError) {
+      return new Response("Bad Request", { status: 400 });
+    }
     Sentry.captureException(err);
     console.error("Unhandled error:", err);
     throw err;
@@ -124,7 +140,12 @@ app = app.use(async (ctx) => {
     return anchorApiHandler(ctx.req);
   }
 
-  return await ctx.next();
+  // Unhandled POST/DELETE to /api/* — return 404 instead of falling through
+  // to the catch-all GET * route which would return 405
+  return new Response(JSON.stringify({ error: "Not found" }), {
+    status: 404,
+    headers: { "Content-Type": "application/json" },
+  });
 });
 
 // API read routes (GET) — method-specific routing works fine with catch-all GET *
