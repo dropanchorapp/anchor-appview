@@ -46,11 +46,17 @@ let app = new App();
 // Middleware
 // ============================================================================
 
-// Error handling middleware — report to Sentry
+// Error handling middleware — report to Sentry (filter out bot noise)
 app = app.use(async (ctx) => {
   try {
     return await ctx.next();
   } catch (err) {
+    // Fresh throws HttpError(405) when bots POST/PUT/DELETE to GET-only routes
+    // (e.g. the catch-all GET * frontend route). Return a clean 405 without
+    // reporting to Sentry. See: Sentry #96584021.
+    if (err instanceof Error && "status" in err && err.status === 405) {
+      return new Response("Method Not Allowed", { status: 405 });
+    }
     Sentry.captureException(err);
     console.error("Unhandled error:", err);
     throw err;
