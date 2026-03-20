@@ -163,8 +163,16 @@ export function PrivacyPolicy() {
               Encrypted authentication tokens to keep you logged in
             </li>
             <li className={listItemStyle}>
-              <strong>Error logs:</strong>{" "}
-              Technical logs for debugging (no personal location data)
+              <strong>Interaction indexes:</strong>{" "}
+              Counts and references for likes and comments on check-ins,
+              enabling efficient discovery. The actual like and comment records
+              live on users' PDS.
+            </li>
+            <li className={listItemStyle}>
+              <strong>Error tracking:</strong>{" "}
+              We use Sentry to monitor application errors. Error reports may
+              include technical context (browser, URL, stack trace) but never
+              include your location data or check-in content.
             </li>
           </ul>
 
@@ -234,10 +242,62 @@ export function PrivacyPolicy() {
               For venue search and location enrichment
             </li>
             <li className={listItemStyle}>
-              <strong>Val Town:</strong>{" "}
+              <strong>Sentry:</strong>{" "}
+              For error tracking and application monitoring
+            </li>
+            <li className={listItemStyle}>
+              <strong>Deno Deploy:</strong>{" "}
               Our hosting platform for the web service
             </li>
           </ul>
+        </section>
+
+        <section className={sectionStyle}>
+          <h2 className={sectionTitleStyle}>Analytics</h2>
+          <p className={paragraphStyle}>
+            Anchor uses a self-hosted, privacy-friendly analytics service
+            (counter.dev) to understand how the site is used. This service:
+          </p>
+          <ul className={listStyle}>
+            <li className={listItemStyle}>
+              Does <strong>not</strong>{" "}
+              use cookies or local storage for tracking
+            </li>
+            <li className={listItemStyle}>
+              Does <strong>not</strong> collect or store IP addresses
+            </li>
+            <li className={listItemStyle}>
+              Does <strong>not</strong> fingerprint browsers or devices
+            </li>
+            <li className={listItemStyle}>
+              Does <strong>not</strong> track individual users across sessions
+            </li>
+          </ul>
+          <p className={paragraphStyle}>
+            On each page visit, the following anonymous data is sent to our
+            self-hosted analytics server:
+          </p>
+          <ul className={listStyle}>
+            <li className={listItemStyle}>
+              <strong>Referrer URL:</strong>{" "}
+              The page that linked you to Anchor (if any)
+            </li>
+            <li className={listItemStyle}>
+              <strong>Screen resolution:</strong>{" "}
+              Your screen width and height (e.g. "1920x1080")
+            </li>
+            <li className={listItemStyle}>
+              <strong>UTC offset:</strong>{" "}
+              Your timezone offset from UTC (e.g. "+2" for Central European
+              Summer Time)
+            </li>
+          </ul>
+          <p className={paragraphStyle}>
+            This data is aggregated into daily visitor counts and cannot be used
+            to identify individual users. The analytics server is self-hosted
+            and operated by us — no data is shared with third-party analytics
+            providers. Only one page view per browser session is counted.
+          </p>
         </section>
 
         <section className={sectionStyle}>
