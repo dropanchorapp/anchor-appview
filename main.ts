@@ -15,6 +15,17 @@ Sentry.init({
   environment: Deno.env.get("DENO_DEPLOYMENT_ID")
     ? "production"
     : "development",
+  beforeSend(event) {
+    // Drop URIError from malformed URLs (e.g. /%c0). These are caused by bots
+    // and scanners sending invalid percent-encoding. Fresh's router calls
+    // decodeURI() during route matching before middleware can intercept.
+    // See: Sentry #102617952.
+    const exception = event.exception?.values?.[0];
+    if (exception?.type === "URIError") {
+      return null;
+    }
+    return event;
+  },
 });
 
 import { App, staticFiles } from "@fresh/core";
@@ -35,27 +46,11 @@ let app = new App();
 // Middleware
 // ============================================================================
 
-// Reject malformed URIs early — invalid percent-encoding (e.g. /%c0) causes
-// decodeURI to throw inside Fresh's router before middleware can handle it.
-app = app.use(async (ctx) => {
-  try {
-    decodeURI(new URL(ctx.req.url).pathname);
-  } catch {
-    return new Response("Bad Request", { status: 400 });
-  }
-  return await ctx.next();
-});
-
 // Error handling middleware — report to Sentry
 app = app.use(async (ctx) => {
   try {
     return await ctx.next();
   } catch (err) {
-    // Malformed percent-encoding (e.g. /%c0) causes decodeURI to throw
-    // inside Fresh's router. Return 400 instead of crashing. See: Sentry #102617952.
-    if (err instanceof URIError) {
-      return new Response("Bad Request", { status: 400 });
-    }
     Sentry.captureException(err);
     console.error("Unhandled error:", err);
     throw err;
