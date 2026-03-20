@@ -396,6 +396,8 @@ async function renderCheckinPage(
 
         <!-- Load React app -->
         <script type="module" src="${bundleSrc}"></script>
+        <!-- Counter.dev analytics -->
+        <script>if(!sessionStorage.getItem("_swa")&&document.referrer.indexOf(location.protocol+"//"+location.host)!== 0){fetch("https://counter-tijs.zocomputer.io/track?"+new URLSearchParams({site:"tijs",utcoffset:"1",referrer:document.referrer,screen:screen.width+"x"+screen.height}))};sessionStorage.setItem("_swa","1");</script>
       </body>
       </html>`,
     {

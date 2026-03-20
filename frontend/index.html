@@ -47,5 +47,25 @@
       src="https://esm.sh/jsr/@tijs/actor-typeahead@0.2.1"
     ></script>
     <script type="module" src="/static/bundle.js"></script>
+    <!-- Counter.dev analytics -->
+    <script>
+      if (
+        !sessionStorage.getItem("_swa") &&
+        document.referrer.indexOf(
+            location.protocol + "//" + location.host,
+          ) !== 0
+      ) {
+        fetch(
+          "https://counter-tijs.zocomputer.io/track?" +
+            new URLSearchParams({
+              site: "tijs",
+              utcoffset: "1",
+              referrer: document.referrer,
+              screen: screen.width + "x" + screen.height,
+            }),
+        );
+      }
+      sessionStorage.setItem("_swa", "1");
+    </script>
   </body>
 </html>
