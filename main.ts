@@ -21,7 +21,10 @@ Sentry.init({
     // decodeURI() during route matching before middleware can intercept.
     // See: Sentry #102617952.
     const exception = event.exception?.values?.[0];
-    if (exception?.type === "URIError") {
+    if (
+      exception?.type === "URIError" &&
+      exception?.value?.includes("URI malformed")
+    ) {
       return null;
     }
     return event;
