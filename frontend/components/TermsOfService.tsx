@@ -335,7 +335,19 @@ export function TermsOfService() {
             <li className={listItemStyle}>
               <strong>Your PDS provider:</strong> For data storage and retrieval
             </li>
+            <li className={listItemStyle}>
+              <strong>Sentry:</strong> For error tracking and monitoring
+            </li>
           </ul>
+          <p className={paragraphStyle}>
+            Anchor also uses self-hosted, cookie-free analytics to count page
+            visits. No personal data or location information is collected by the
+            analytics service. See our{" "}
+            <a href="/privacy-policy" className={linkStyle}>
+              Privacy Policy
+            </a>{" "}
+            for details.
+          </p>
           <p className={paragraphStyle}>
             We are not responsible for the availability, accuracy, or policies
             of these third-party services.
