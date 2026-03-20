@@ -63,7 +63,7 @@
               referrer: document.referrer,
               screen: screen.width + "x" + screen.height,
             }),
-        );
+        ).catch(() => {});
       }
       sessionStorage.setItem("_swa", "1");
     </script>
