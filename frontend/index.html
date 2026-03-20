@@ -59,7 +59,7 @@
           "https://counter.tijs.org/track?" +
             new URLSearchParams({
               site: "tijs",
-              utcoffset: "1",
+              utcoffset: String(-(new Date().getTimezoneOffset() / 60)),
               referrer: document.referrer,
               screen: screen.width + "x" + screen.height,
             }),
