@@ -1,5 +1,7 @@
 # Anchor AppView
 
+> **Anchor is closing down.** Read the announcement on Bluesky: [dropanchor.app/post/3mj3beavwhs2c](https://bsky.app/profile/dropanchor.app/post/3mj3beavwhs2c)
+
 [![ko-fi](https://ko-fi.com/img/githubbutton_sm.svg)](https://ko-fi.com/tijsteulings)
 
 A personal location journal built on the AT Protocol. Log your visits and
