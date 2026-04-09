@@ -15,7 +15,7 @@ import { AuthState, CheckinData } from "../types/index.ts";
 import { apiFetch } from "../utils/api.ts";
 import { checkinCache } from "../utils/checkin-cache.ts";
 import { injectGlobalStyles } from "../styles/globalStyles.ts";
-import { alertError } from "../styles/components.ts";
+import { alertError, closingNotice } from "../styles/components.ts";
 
 export function App() {
   // Parse route first, before any hooks
@@ -314,6 +314,16 @@ export function App() {
 
   return (
     <>
+      <div className={closingNotice}>
+        Anchor is closing down.{" "}
+        <a
+          href="https://bsky.app/profile/dropanchor.app/post/3mj3beavwhs2c"
+          target="_blank"
+          rel="noopener noreferrer"
+        >
+          Read more
+        </a>
+      </div>
       <Layout
         auth={auth}
         onLogin={handleLogin}

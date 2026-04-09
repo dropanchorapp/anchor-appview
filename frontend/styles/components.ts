@@ -597,6 +597,27 @@ export const locationBadge = css`
   width: fit-content;
 `;
 
+// ============ CLOSING NOTICE ============
+
+export const closingNotice = css`
+  background: ${colors.text};
+  color: white;
+  text-align: center;
+  padding: ${spacing.md} ${spacing.xl};
+  font-size: ${typography.sizes.md};
+  line-height: ${typography.lineHeights.relaxed};
+
+  a {
+    color: white;
+    text-decoration: underline;
+    font-weight: ${typography.weights.semibold};
+
+    &:hover {
+      opacity: 0.85;
+    }
+  }
+`;
+
 // ============ EMPTY STATE ============
 
 export const emptyState = css`
